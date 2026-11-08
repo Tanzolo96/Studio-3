@@ -1,0 +1,87 @@
+@import 'tailwindcss';
+@import './tokens.css';
+
+@theme inline {
+  --color-surface: var(--surface);
+  --color-raised: var(--surface-raised);
+  --color-sunken: var(--surface-sunken);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-muted: var(--ink-muted);
+  --color-neutral: var(--neutral-state);
+  --color-brand: var(--brand);
+  --color-brand-soft: var(--brand-soft);
+  --color-on-brand: var(--on-brand);
+  --color-critical: var(--critical);
+  --color-critical-soft: var(--critical-soft);
+  --color-on-critical: var(--on-critical);
+  --color-major: var(--major);
+  --color-major-fill: var(--major-fill);
+  --color-major-soft: var(--major-soft);
+  --color-minor: var(--minor);
+  --color-minor-soft: var(--minor-soft);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-held: var(--held);
+  --color-held-soft: var(--held-soft);
+  --color-ai: var(--ai);
+  --color-ai-soft: var(--ai-soft);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-lg: 8px;
+  --shadow-raised: var(--shadow-raised);
+  --shadow-sheet: var(--shadow-sheet);
+}
+
+/* Type scale from Figma text styles */
+@utility t-page { font-size: 28px; line-height: 34px; font-weight: 600; letter-spacing: -0.005em; }
+@utility t-alert { font-size: 24px; line-height: 30px; font-weight: 700; }
+@utility t-section { font-size: 18px; line-height: 24px; font-weight: 600; }
+@utility t-body { font-size: 15px; line-height: 22px; font-weight: 400; }
+@utility t-body-strong { font-size: 15px; line-height: 22px; font-weight: 600; }
+@utility t-small { font-size: 13px; line-height: 18px; font-weight: 400; }
+@utility t-small-strong { font-size: 13px; line-height: 18px; font-weight: 600; }
+@utility t-label { font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+@utility t-reading { font-family: var(--font-mono); font-size: 32px; line-height: 36px; font-weight: 600; font-variant-numeric: tabular-nums; }
+@utility t-stat { font-family: var(--font-mono); font-size: 26px; line-height: 32px; font-weight: 600; font-variant-numeric: tabular-nums; }
+@utility t-data { font-family: var(--font-mono); font-size: 14px; line-height: 20px; font-weight: 500; font-variant-numeric: tabular-nums; }
+
+@layer base {
+html, body, #root { height: 100%; }
+body {
+  margin: 0;
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 22px;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; touch-action: manipulation; }
+button:disabled { cursor: not-allowed; }
+:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+h1, h2, h3 { text-wrap: balance; margin: 0; }
+p { margin: 0; text-wrap: pretty; }
+
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+}
+
+@keyframes rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes pulse-ring { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--critical) 55%, transparent); } 100% { box-shadow: 0 0 0 14px transparent; } }
+@keyframes slide-in { from { transform: translateX(16px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+.anim-rise { animation: rise 320ms var(--ease-out) both; }
+.anim-fade { animation: fade 200ms var(--ease-out) both; }
+.anim-slide { animation: slide-in 260ms var(--ease-out) both; }
+.pulse-critical { animation: pulse-ring 1.4s var(--ease-out) infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; }
+}
