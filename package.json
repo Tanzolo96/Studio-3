@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "typecheck": "tsc -b"
+    "typecheck": "tsc -b",
+    "build:standalone": "vite build --mode standalone && node scripts/artifact.mjs"
   },
   "dependencies": {
     "@carbon/icons-react": "^11.53.0",
@@ -27,6 +28,7 @@
     "tailwindcss": "4.1.11",
     "typescript": "^5.6.3",
     "vite": "^5.4.11",
+    "vite-plugin-singlefile": "^2.0.3",
     "vitest": "^2.1.5"
   }
 }

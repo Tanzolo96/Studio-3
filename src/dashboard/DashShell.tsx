@@ -20,7 +20,7 @@ const NAV: { to: string; label: string; end?: boolean }[] = [
 ];
 
 export function DashShell() {
-  useTheme('dash');
+  const surfaceTheme = useTheme('dash');
   const s = useMillState();
   const now = useNow();
   const user = useUser('dash');
@@ -31,7 +31,7 @@ export function DashShell() {
   const kg = roundKg(heldKg(s, now));
 
   return (
-    <div className="flex min-h-dvh">
+    <div data-theme={surfaceTheme} className="flex min-h-dvh bg-surface text-ink">
       <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[var(--z-toast)] focus:rounded-[4px] focus:bg-raised focus:p-3">
         Skip to content
       </a>

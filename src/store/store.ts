@@ -101,6 +101,17 @@ interface Session {
   setTheme: (s: Surface, t: 'day' | 'night') => void;
 }
 
+function systemTheme(): 'day' | 'night' {
+  try {
+    const host = document.documentElement.dataset.theme;
+    if (host === 'dark') return 'night';
+    if (host === 'light') return 'day';
+    return matchMedia('(prefers-color-scheme: dark)').matches ? 'night' : 'day';
+  } catch {
+    return 'day';
+  }
+}
+
 const stored = (k: string, fallback: string) => {
   try {
     return localStorage.getItem(k) ?? fallback;
@@ -119,8 +130,8 @@ const store = (k: string, v: string) => {
 export const useSession = create<Session>((set, get) => ({
   userId: { app: stored('qc.app.user', DEFAULT_USER.app), dash: stored('qc.dash.user', DEFAULT_USER.dash) },
   theme: {
-    app: stored('qc.app.theme', 'day') as 'day' | 'night',
-    dash: stored('qc.dash.theme', 'day') as 'day' | 'night',
+    app: stored('qc.app.theme', systemTheme()) as 'day' | 'night',
+    dash: stored('qc.dash.theme', systemTheme()) as 'day' | 'night',
   },
   setUser(s, id) {
     store(`qc.${s}.user`, id);
@@ -138,10 +149,10 @@ export function useUser(surface: Surface): User {
   return users.find((u) => u.id === id) ?? users.find((u) => u.id === DEFAULT_USER[surface])!;
 }
 
+/** Theme lives on each surface's root element, so the dashboard and the phone can differ on one screen. */
 export function useTheme(surface: Surface) {
   const theme = useSession((s) => s.theme[surface]);
   useEffect(() => {
-    document.documentElement.dataset.theme = theme;
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'night' ? '#161616' : '#f4f4f4');
   }, [theme]);
   return theme;

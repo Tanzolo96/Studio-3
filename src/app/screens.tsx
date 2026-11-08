@@ -428,6 +428,7 @@ export function TestEntryScreen() {
   const now = useNow();
   const user = useUser('app');
   const dispatch = useDispatch();
+  const nav = useNavigate();
   const req = s.requests.find((r) => r.id === id);
   const [raw, setRaw] = useState('');
   const [saved, setSaved] = useState<string>();
@@ -470,7 +471,7 @@ export function TestEntryScreen() {
           )}
         </ul>
         <div className="mt-6 flex flex-col gap-2">
-          <Button size="lg" block onClick={() => history.back()}>
+          <Button size="lg" block onClick={() => nav('/app')}>
             Back to test requests
           </Button>
           {!result.pass && !result.sampleError && req.reason !== 'retest' && (

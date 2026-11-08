@@ -10,6 +10,10 @@ A quality alert system for yarn spinning mills. Interaction Design, UID Gandhina
 | Told late | Phone, paper, in person | Full-screen alert on a dedicated app |
 | Nobody owns it | Not tracked | Ticket with owner, timer, escalation, sister-frame check and yarn hold |
 
+## Live prototype
+
+https://claude.ai/artifact/FBhCsz6xKZ9Fjhb5VoenBG (claude.ai artifact; share it from the page's Share menu). Rebuild it with `npm run build:standalone`, which writes one self-contained `dist-standalone/qc-alert.html`.
+
 ## Run it
 
 ```bash

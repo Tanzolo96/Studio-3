@@ -1,17 +1,20 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useMemo, useState } from 'react';
+import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { useMillState, useNow } from '../store/store';
 import { fitterJobs, pendingRequests, takeoversFor } from '../engine/selectors';
 import { cx } from '../ui/primitives';
 import { ROLE_WORD } from '../app/Person';
+import { appRoutes, dashRoutes } from '../routes';
 
 const PEOPLE = ['krish', 'rohan', 'suresh', 'priya', 'mohit'];
 
-/** One screen for the jury: dashboard on the left, a phone on the right. */
+/** One screen for the jury: dashboard on the left, a phone on the right, same live data. */
 export function DemoPage() {
   const s = useMillState();
   const now = useNow();
   const [as, setAs] = useState('rohan');
+  const dash = useMemo(() => createMemoryRouter([dashRoutes], { initialEntries: ['/dashboard'] }), []);
+  const phone = useMemo(() => createMemoryRouter([appRoutes], { initialEntries: [`/app?as=${as}&ready=1`] }), [as]);
   const needs = (id: string) => {
     const u = s.users.find((x) => x.id === id)!;
     if (u.role === 'tester') return pendingRequests(s).length;
@@ -19,10 +22,12 @@ export function DemoPage() {
     return takeoversFor(s, u, now).length;
   };
   return (
-    <div className="flex h-dvh bg-sunken">
-      <iframe title="Dashboard" src="/dashboard" className="h-full min-w-0 flex-1 border-0 bg-surface" />
-      <div className="flex w-[420px] shrink-0 flex-col items-center gap-3 border-l border-line px-4 py-4">
-        <div role="tablist" aria-label="Phone belongs to" className="flex w-full gap-1 rounded-[4px] bg-surface p-1">
+    <div className="flex h-dvh bg-sunken text-ink">
+      <div className="h-full min-w-0 flex-1 overflow-auto">
+        <RouterProvider router={dash} />
+      </div>
+      <div className="flex h-full w-[430px] shrink-0 flex-col border-l border-line">
+        <div role="tablist" aria-label="Phone belongs to" className="mx-3 mt-3 flex gap-1 rounded-[4px] bg-surface p-1">
           {PEOPLE.map((id) => {
             const u = s.users.find((x) => x.id === id)!;
             const n = needs(id);
@@ -41,12 +46,9 @@ export function DemoPage() {
             );
           })}
         </div>
-        <div className="relative min-h-0 w-[390px] flex-1 overflow-hidden rounded-[40px] border-[10px] border-[#161616] bg-surface shadow-sheet">
-          <iframe key={as} title={`Phone: ${as}`} src={`/app?as=${as}&ready=1`} className="size-full border-0" />
+        <div className="demo-phone min-h-0 flex-1 overflow-hidden [&>div]:min-h-full [&>div]:bg-sunken">
+          <RouterProvider key={as} router={phone} />
         </div>
-        <p className="t-small text-muted">
-          Same data, live. Open <Link to="/app" className="text-brand underline">/app</Link> on a phone to follow along.
-        </p>
       </div>
     </div>
   );
