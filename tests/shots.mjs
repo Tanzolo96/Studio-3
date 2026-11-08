@@ -126,7 +126,7 @@ await shot(dash, '20-dash-ticket-detail-night', true);
 await theme(dash, 'dash', 'day');
 
 await phone.goto(`${BASE}/app/previous?as=krish`);
-await shot(phone, '21-app-previous');
+await shot(phone, '21-app-history');
 await phone.goto(`${BASE}/app/raise?as=krish`);
 await shot(phone, '22-app-raise', true);
 await dash.goto(`${BASE}/kit`);

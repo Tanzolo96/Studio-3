@@ -2,7 +2,8 @@ import { Link, Navigate, type RouteObject } from 'react-router-dom';
 import { AppShell } from './app/AppShell';
 import { AlertsScreen, PreviousScreen, RaiseScreen, TestEntryScreen, TicketScreen } from './app/screens';
 import { DashShell } from './dashboard/DashShell';
-import { HeldYarn, Later, MachinesGrid, Overview, TicketDetailPage, Tickets } from './dashboard/pages';
+import { HeldYarn, Later, MachinesGrid, TicketDetailPage, Tickets } from './dashboard/pages';
+import { Overview } from './dashboard/Overview';
 import { Kit } from './demo/Kit';
 
 /** True when built as one self-contained page (claude.ai artifact): no server, memory routing. */

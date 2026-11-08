@@ -34,6 +34,14 @@
   --scrim: rgba(22, 22, 22, 0.56);
   --shadow-raised: 0 1px 2px rgba(0, 0, 0, 0.12);
   --shadow-sheet: 0 12px 32px rgba(16, 24, 40, 0.18);
+  /* charts (validated with the dataviz palette checker: red/amber pass CVD) */
+  --data: #4f6a9a;
+  --data-soft: rgba(79, 106, 154, 0.12);
+  --chart-critical: #da1e28;
+  --chart-major: #eda100;
+  --chart-minor: #c6c6c6;
+  --grid: #e8e8e8;
+  --panel-radius: 8px;
 }
 
 [data-theme='night'] {
@@ -68,6 +76,12 @@
   --scrim: rgba(0, 0, 0, 0.64);
   --shadow-raised: 0 1px 2px rgba(0, 0, 0, 0.5);
   --shadow-sheet: 0 12px 32px rgba(0, 0, 0, 0.56);
+  --data: #8aa4d6;
+  --data-soft: rgba(138, 164, 214, 0.14);
+  --chart-critical: #e5484d;
+  --chart-major: #e0a800;
+  --chart-minor: #6f6f6f;
+  --grid: #333333;
 }
 
 :root {

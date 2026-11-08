@@ -3,13 +3,12 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Checkmark } from '@carbon/icons-react';
 import type { Hold, MillState, Severity, ShiftId, Ticket, User } from '../engine/types';
 import { useDispatch, useMillState, useNow, useUser } from '../store/store';
-import { bySeverityThenAge, escalation, heldKg, holdNeedsApproval, isEscalated, openHolds, todayStats } from '../engine/selectors';
+import { bySeverityThenAge, escalation, heldKg, holdNeedsApproval, isEscalated, openHolds } from '../engine/selectors';
 import { frameWord, holdKg, lotOf, roundKg, ruleFor, userName } from '../engine/reducer';
-import { insights } from '../engine/insights';
 import { OUTCOME_WORD, SEVERITY, STATUS_WORD, TEST } from '../engine/vocab';
-import { dateTime, dayMonth, hhmm, hmm, shiftAt, timer } from '../engine/time';
+import { dateTime, dayMonth, hhmm, hmm } from '../engine/time';
 import { Button, Choice, cx, Empty, SeverityBadge, StatusChip } from '../ui/primitives';
-import { FrameTile, InsightCard, ReadingGauge, ResponseTimer, StatTile, readingLine, ticketChip, ticketMeta } from '../ui/cards';
+import { FrameTile, ReadingGauge, ResponseTimer, readingLine, ticketChip, ticketMeta } from '../ui/cards';
 import { Timeline } from '../ui/timeline';
 import { PageHead } from './DashShell';
 
@@ -22,136 +21,6 @@ function Section({ title, children, aside, className }: { title: string; childre
       </div>
       {children}
     </section>
-  );
-}
-
-// ================= Overview =================
-export function Overview() {
-  const s = useMillState();
-  const now = useNow();
-  const nav = useNavigate();
-  const [dismissed, setDismissed] = useState<string[]>([]);
-  const live = s.tickets.filter((t) => t.status !== 'closed' && t.status !== 'fixed').sort(bySeverityThenAge);
-  const alerts = live.filter((t) => t.severity !== 'minor');
-  const stats = todayStats(s, now);
-  const kg = roundKg(heldKg(s, now));
-  const holds = openHolds(s);
-  const insight = insights(s, now).filter((i) => !dismissed.includes(i.id))[0];
-  const seenNow = stats.medianSeenToday ?? stats.medianSeenMonth;
-  const delta = seenNow && stats.medianSeenPrev ? Math.round((stats.medianSeenPrev - seenNow) / 1000) : undefined;
-  const deltaText = (sec: number) => (Math.abs(sec) >= 90 ? `${Math.round(Math.abs(sec) / 60)} min` : `${Math.abs(sec)} s`);
-
-  return (
-    <div className="max-w-[1180px]">
-      <PageHead title="Overview" sub={`Right now · ${shiftAt(now)} shift · ${dateTime(now)}`} />
-
-      {alerts.length > 0 && (
-        <Section title="Live alerts" className="mb-8" aside={<span className="t-small text-muted">{alerts.length} {alerts.length === 1 ? 'needs' : 'need'} someone on the floor</span>}>
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(340px,1fr))] gap-3">
-            {alerts.map((t) => (
-              <LiveAlert key={t.id} s={s} t={t} now={now} onOpen={() => nav(`/dashboard/tickets/${t.id}`)} />
-            ))}
-          </div>
-        </Section>
-      )}
-
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <Section title="Today">
-          <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-4">
-            <StatTile
-              label={stats.medianSeenToday ? 'Median time to Seen, today' : 'Median time to Seen, this month'}
-              value={seenNow ? timer(seenNow) : '–'}
-              delta={delta !== undefined ? `${deltaText(delta)} ${delta >= 0 ? 'faster' : 'slower'} than Oct` : undefined}
-              trend={delta === undefined ? 'neutral' : delta >= 0 ? 'good' : 'bad'}
-            />
-            <Link to="/dashboard/held" className="rounded-[4px] focus-visible:outline-2">
-              <StatTile label="Yarn on hold" value={kg} unit="kg" delta={`${holds.length} lot${holds.length === 1 ? '' : 's'} waiting`} trend={holds.length ? 'bad' : 'neutral'} />
-            </Link>
-            <StatTile label="Alerts this month" value={stats.alertsMonth} delta={`${stats.escalatedMonth} escalated`} />
-          </div>
-          {alerts.length === 0 && (
-            <p className="t-small mt-4 flex items-center gap-2 text-muted">
-              <Checkmark size={16} className="text-ok" /> No live alerts. Every frame passed its last test.
-            </p>
-          )}
-        </Section>
-        <Section title="AI insights" aside={<Link to="/dashboard/insights" className="t-small-strong text-brand hover:underline">All insights</Link>}>
-          {insight ? (
-            <InsightCard insight={{ ...insight, onAction: () => nav(insight.target) }} onDismiss={() => setDismissed((d) => [...d, insight.id])} />
-          ) : (
-            <Empty title="No new insights" body="Insights appear when the data shows a pattern worth a look." />
-          )}
-        </Section>
-      </div>
-
-      <Section title="Ring frames · floor order" className="mt-8" aside={<FrameLegend />}>
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(124px,1fr))] gap-3 2xl:grid-cols-8">
-          {s.frames.map((f) => (
-            <FrameTile key={f.id} s={s} frameId={f.id} now={now} compact onOpen={() => nav(`/dashboard/machines/${f.id}`)} />
-          ))}
-        </div>
-      </Section>
-
-      <Section title="Open tickets" className="mt-8">
-        <TicketTable s={s} tickets={live} now={now} empty="No open tickets." />
-      </Section>
-    </div>
-  );
-}
-
-function FrameLegend() {
-  const item = (c: string, w: string) => (
-    <span className="flex items-center gap-1.5">
-      <span className="size-2 rounded-full" style={{ background: c }} />
-      {w}
-    </span>
-  );
-  return (
-    <span className="t-small flex gap-4 text-muted">
-      {item('var(--neutral-state)', 'Running')}
-      {item('var(--major-fill)', 'Warning')}
-      {item('var(--critical)', 'Failed')}
-      {item('var(--held)', 'Yarn on hold')}
-    </span>
-  );
-}
-
-function LiveAlert({ s, t, now, onOpen }: { s: MillState; t: Ticket; now: number; onOpen: () => void }) {
-  const esc = escalation(t, now);
-  const hold = t.holdId ? s.holds.find((h) => h.id === t.holdId) : undefined;
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className={cx(
-        'anim-rise flex flex-col gap-3 rounded-[4px] border p-4 text-left shadow-raised',
-        t.severity === 'critical' ? 'border-critical bg-critical-soft' : 'border-major-fill bg-raised',
-      )}
-    >
-      <div className="flex items-center justify-between gap-2">
-        <SeverityBadge level={t.severity} className={t.severity === 'critical' ? 'bg-raised' : ''} />
-        <StatusChip kind={ticketChip(t, now)} />
-      </div>
-      <div>
-        <p className="t-body-strong">
-          {t.frameId} · {t.title}
-        </p>
-        <p className="t-data mt-1">{readingLine(s, t)}</p>
-      </div>
-      {t.status === 'open' ? (
-        <ResponseTimer elapsed={esc.elapsed} limitMins={t.seenMins} state={esc.timer} level={esc.level} />
-      ) : (
-        <p className="t-small text-muted">
-          {STATUS_WORD[t.status]} · {userName(s, t.seenBy)} · seen in {timer(esc.elapsed)}
-        </p>
-      )}
-      {(hold || t.sisterFrames.length > 0) && (
-        <p className="t-small flex flex-wrap gap-x-3 text-ink">
-          {hold && <span className="font-semibold text-held">{roundKg(holdKg(hold, now))} kg on hold</span>}
-          {t.sisterFrames.length > 0 && <span>Sisters flagged: {t.sisterFrames.join(', ')}</span>}
-        </p>
-      )}
-    </button>
   );
 }
 

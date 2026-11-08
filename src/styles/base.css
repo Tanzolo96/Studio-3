@@ -34,6 +34,9 @@
   --radius-lg: 8px;
   --shadow-raised: var(--shadow-raised);
   --shadow-sheet: var(--shadow-sheet);
+  --color-data: var(--data);
+  --color-data-soft: var(--data-soft);
+  --color-grid: var(--grid);
 }
 
 /* Type scale from Figma text styles */

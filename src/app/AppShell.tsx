@@ -69,7 +69,7 @@ export function AppShell() {
         <nav aria-label="App" className="grid h-16 shrink-0 grid-cols-3 border-t border-line bg-raised pb-[env(safe-area-inset-bottom)]">
           <Tab to="/app" end icon={<Notification size={20} />} label="Alerts" badge={count} />
           <Tab to="/app/raise" icon={<Add size={20} />} label="Raise ticket" />
-          <Tab to="/app/previous" icon={<RecentlyViewed size={20} />} label="Previous" />
+          <Tab to="/app/previous" icon={<RecentlyViewed size={20} />} label="History" />
         </nav>
         {ready && <TakeoverLayer s={s} user={user} now={now} />}
         {person && <PersonSheet onClose={() => setPerson(false)} />}

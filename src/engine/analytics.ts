@@ -1,0 +1,79 @@
+// Numbers behind the dashboard charts. Pure functions over the mill state.
+
+import type { MillState, Severity, ShiftId, Ticket } from './types';
+import { DAY, mill, millDayKey, shiftAt } from './time';
+import { frameView, median, type FrameStateKind } from './selectors';
+import { holdKg } from './reducer';
+
+/** Before QC Alert: about 250 kg of bad yarn per frame per incident (plant head, validated). */
+export const BASELINE_KG = 250;
+
+const dayStart = (t: number) => mill(millDayKey(t));
+
+export interface DayBucket {
+  day: number; // mill-day start
+  critical: number;
+  major: number;
+  minor: number;
+}
+
+export function dailyAlerts(s: MillState, now: number, days = 30): DayBucket[] {
+  const first = dayStart(now) - (days - 1) * DAY;
+  const out: DayBucket[] = Array.from({ length: days }, (_, i) => ({ day: first + i * DAY, critical: 0, major: 0, minor: 0 }));
+  for (const t of s.tickets) {
+    if (t.createdAt > now || t.createdAt < first) continue;
+    const i = Math.floor((dayStart(t.createdAt) - first) / DAY);
+    if (out[i]) out[i][t.severity] += 1;
+  }
+  return out;
+}
+
+/** Rolling median minutes to Seen, one point per day (null until there is data). */
+export function seenTrend(s: MillState, now: number, days = 30, window = 7): { day: number; mins: number | null }[] {
+  const first = dayStart(now) - (days - 1) * DAY;
+  const seen = s.tickets.filter((t) => t.severity !== 'minor' && t.seenAt && t.seenAt <= now);
+  return Array.from({ length: days }, (_, i) => {
+    const day = first + i * DAY;
+    const from = day - (window - 1) * DAY;
+    const xs = seen.filter((t) => t.alertAt >= from && t.alertAt < day + DAY).map((t) => (t.seenAt! - t.alertAt) / 60000);
+    const m = median(xs);
+    return { day, mins: m === undefined ? null : m };
+  });
+}
+
+export function topCauses(tickets: Ticket[]) {
+  const counts = new Map<string, number>();
+  for (const t of tickets) {
+    const c = t.closeReason === 'sample_error' ? 'False alarm (sample error)' : t.closeReason === 'checked_ok' ? 'Checked, OK (early warning)' : t.cause;
+    if (c) counts.set(c, (counts.get(c) ?? 0) + 1);
+  }
+  return [...counts.entries()].map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
+}
+
+export function shiftResponse(tickets: Ticket[]): { shift: ShiftId; mins: number | null; n: number }[] {
+  return (['A', 'B', 'C'] as ShiftId[]).map((shift) => {
+    const xs = tickets.filter((t) => t.severity !== 'minor' && t.seenAt && shiftAt(t.alertAt) === shift).map((t) => (t.seenAt! - t.alertAt) / 60000);
+    const m = median(xs);
+    return { shift, mins: m === undefined ? null : m, n: xs.length };
+  });
+}
+
+export function frameStateCounts(s: MillState, now: number): Record<FrameStateKind, number> {
+  const c: Record<FrameStateKind, number> = { running: 0, warning: 0, fault: 0, held: 0, stopped: 0 };
+  for (const f of s.frames) c[frameView(s, f.id, now).kind] += 1;
+  return c;
+}
+
+/** Yarn held per critical incident vs the old ~250 kg. */
+export function yarnSaved(s: MillState, now: number, since: number) {
+  const holds = s.holds.filter((h) => h.from >= since - DAY && s.tickets.find((t) => t.id === h.ticketId)!.createdAt >= since && h.from <= now);
+  const held = holds.map((h) => holdKg(h, now));
+  const saved = held.reduce((sum, kg) => sum + Math.max(0, BASELINE_KG - kg), 0);
+  return { incidents: holds.length, saved, avgHeld: held.length ? held.reduce((a, b) => a + b, 0) / held.length : 0 };
+}
+
+export function ticketsSince(s: MillState, since: number, now: number) {
+  return s.tickets.filter((t) => t.createdAt >= since && t.createdAt <= now);
+}
+
+export const sevOrder: Severity[] = ['critical', 'major', 'minor'];

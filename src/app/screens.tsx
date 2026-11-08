@@ -3,12 +3,12 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Camera, Checkmark, ChevronRight } from '@carbon/icons-react';
 import type { MillState, Severity, Ticket, User } from '../engine/types';
 import { useDispatch, useMill, useMillState, useNow, useUser } from '../store/store';
-import { escalation, fitterJobs, median, myTickets, pendingRequests, seenTimes } from '../engine/selectors';
-import { frameWord, holdKg, lotOf, productOfFrame, roundKg, ruleFor, userName, withinRule, withUnit } from '../engine/reducer';
+import { escalation, fitterJobs, median, myTickets, pendingRequests, seenTimes, timeline } from '../engine/selectors';
+import { failWord, frameWord, holdKg, lotOf, productOfFrame, roundKg, ruleFor, userName, withinRule, withUnit } from '../engine/reducer';
 import { CAUSES, RAISE_PROBLEMS, TEST } from '../engine/vocab';
 import { ago, dayMonth, hhmm, monthName, shiftAt, timer } from '../engine/time';
-import { Button, Choice, cx, Empty, Field, SeverityBadge, SeverityShape, StatusChip, TextField } from '../ui/primitives';
-import { ReadingGauge, ResponseTimer, TicketCard, ticketChip, ticketMeta } from '../ui/cards';
+import { Button, Choice, cx, Empty, Field, SeverityBadge, SeverityShape, TextField } from '../ui/primitives';
+import { ReadingGauge, ResponseTimer, TicketCard, ticketMeta } from '../ui/cards';
 import { Timeline } from '../ui/timeline';
 import { readPhoto, Sheet } from './Sheet';
 
@@ -41,29 +41,33 @@ function MyTickets({ user }: { user: User }) {
   const s = useMillState();
   const now = useNow();
   const nav = useNavigate();
-  const list = myTickets(s, user, now);
-  const live = list.filter((t) => t.status !== 'fixed');
-  const waiting = list.filter((t) => t.status === 'fixed');
+  const live = myTickets(s, user, now).filter((t) => t.status !== 'fixed');
   const onShift = user.shift === 'G' || user.shift === shiftAt(now);
   const sub =
     user.role === 'supervisor'
-      ? `${user.shift} shift · ${first(user)} · ${live.length} open${onShift ? '' : ' · off shift'}`
+      ? `${user.shift} shift · ${first(user)}${onShift ? '' : ' · off shift'}`
       : `${first(user)} · ${user.role === 'qc' ? 'escalations and held yarn' : 'escalations only'}`;
   return (
-    <Page title="My tickets" sub={sub}>
-      {list.length === 0 ? (
-        <Empty
-          icon={<Checkmark size={32} />}
-          title="No open tickets"
-          body={user.role === 'supervisor' ? 'All frames are running normally. New faults will ring this phone.' : 'Nothing has been escalated to you.'}
-        />
+    <Page title="Active issues" sub={sub}>
+      {live.length === 0 ? (
+        <div className="flex flex-col items-center gap-3 rounded-[8px] bg-raised px-6 py-12 text-center shadow-raised">
+          <span className="grid size-16 place-items-center rounded-full bg-ok-soft text-ok">
+            <Checkmark size={32} />
+          </span>
+          <p className="t-section">All clear</p>
+          <p className="t-small max-w-[30ch] text-muted">
+            {user.role === 'supervisor' ? 'No active issues. Every frame is running normally. A new fault will ring this phone.' : 'Nothing has been escalated to you.'}
+          </p>
+          <Link to="/app/previous" className="t-small-strong mt-1 inline-flex h-12 items-center rounded-[4px] px-3 text-brand hover:bg-brand-soft">
+            See resolved issues in History
+          </Link>
+        </div>
       ) : (
         <div className="flex flex-col gap-3">
+          <p className="t-small-strong text-muted">
+            {live.length} need{live.length === 1 ? 's' : ''} attention
+          </p>
           {live.map((t) => (
-            <TicketCard key={t.id} s={s} t={t} now={now} onOpen={() => nav(`/app/ticket/${t.id}`)} />
-          ))}
-          {waiting.length > 0 && <p className="t-small-strong mt-3 text-muted">Fixed, yarn waiting for QC decision</p>}
-          {waiting.map((t) => (
             <TicketCard key={t.id} s={s} t={t} now={now} onOpen={() => nav(`/app/ticket/${t.id}`)} />
           ))}
         </div>
@@ -220,57 +224,155 @@ function TicketDetail({ s, t, now, user }: { s: MillState; t: Ticket; now: numbe
       </div>
     );
 
+  const resolved = t.status === 'fixed' || t.status === 'closed';
+  const product = s.products.find((p) => p.id === t.productId)!;
+  const issue =
+    t.kind === 'drift'
+      ? 'Winding sensor drift, lab test asked'
+      : t.kind === 'manual'
+        ? t.title
+        : reading
+          ? `${failWord(rule, reading.test, reading.value)}: ${withUnit(reading.test, reading.value)}`
+          : t.title;
+  const outcome =
+    t.closeReason === 'sample_error'
+      ? 'False alarm. The lab sample was bad.'
+      : t.closeReason === 'checked_ok'
+        ? 'Checked, OK. The lab test passed.'
+        : t.cause
+          ? `Cause: ${t.cause.toLowerCase()}`
+          : '';
+  const nowLine =
+    t.status === 'open'
+      ? esc.level > 0
+        ? `Nobody has said Seen for ${Math.floor(esc.elapsed / 60000)} min. ${esc.level === 2 ? 'Plant head told.' : 'QC manager told.'}`
+        : 'Waiting for someone to say Seen'
+      : t.status === 'seen'
+        ? `${userName(s, t.seenBy).split(' ')[0]} is on it`
+        : t.status === 'working'
+          ? t.fitterId && !t.repairDoneAt
+            ? `${fitter?.split(' ')[0]} is repairing the frame`
+            : t.repairDoneAt
+              ? 'Repair done. Check the frame and mark it fixed.'
+              : `${userName(s, t.seenBy).split(' ')[0]} is working on it`
+          : '';
+  const steps = [
+    { word: 'Alert', at: t.alertAt },
+    { word: 'Seen', at: t.seenAt },
+    { word: 'Working', at: t.workingAt },
+    { word: 'Fixed', at: t.fixedAt ?? (t.status === 'closed' ? t.closedAt : undefined) },
+  ];
+  const tone = resolved ? 'ok' : t.severity;
+  const sisters = t.sisterFrames.map((f) => {
+    const r = s.requests.find((q) => q.ticketId === t.id && q.frameId === f && q.reason === 'sister');
+    const res = r?.resultId ? s.results.find((x) => x.id === r.resultId) : undefined;
+    return { f, state: res ? (res.pass ? 'ok' : 'bad') : r?.status === 'cancelled' ? 'skip' : 'wait' };
+  });
+
   return (
-    <Page title={t.title} back="/app">
-      <div className="-mt-1 flex flex-wrap items-center gap-2">
-        <SeverityBadge level={t.severity} />
-        <StatusChip kind={ticketChip(t, now)} />
-        <span className="t-data text-[13px] text-muted">{t.id}</span>
-      </div>
-      <p className="t-small mt-2 text-muted">
-        {frameWord(t.frameId)} · Lot {t.lotId} · {s.products.find((p) => p.id === t.productId)!.name}
+    <Page title={frameWord(t.frameId)} back="/app">
+      <p className="t-body -mt-3 text-ink">{issue}</p>
+      <p className="t-small mt-1 text-muted">
+        Lot {t.lotId} · {product.name} · {t.id}
       </p>
 
-      {reading && (
-        <section className="mt-4 rounded-[4px] border border-line bg-raised p-4">
-          <ReadingGauge test={reading.test} value={reading.value} min={rule?.min} max={t.kind === 'test_fail' ? rule?.max : reading.max} drift={t.kind !== 'test_fail' && reading.test === 'cv'} />
-          {t.readings.length > 1 && <p className="t-small mt-3 text-muted">{t.readings.length} readings grouped on this ticket</p>}
-        </section>
-      )}
+      <section
+        aria-label="Is it resolved?"
+        className={cx(
+          'mt-4 flex items-center gap-4 rounded-[8px] p-4',
+          tone === 'ok' ? 'bg-ok-soft' : tone === 'critical' ? 'bg-critical-soft' : tone === 'major' ? 'bg-major-soft' : 'bg-sunken',
+        )}
+      >
+        <span className={cx('grid size-12 shrink-0 place-items-center rounded-full', resolved ? 'bg-ok text-[var(--surface-raised)]' : 'bg-raised')}>
+          {resolved ? <Checkmark size={28} /> : <SeverityShape level={t.severity} size={22} />}
+        </span>
+        <div className="min-w-0">
+          <p className={cx('t-alert', resolved ? 'text-ok' : t.severity === 'critical' ? 'text-critical' : t.severity === 'major' ? 'text-major' : 'text-ink')}>
+            {resolved ? 'Resolved' : 'Not resolved yet'}
+          </p>
+          <p className="t-small text-ink">
+            {resolved ? `${t.fixedAt ? `Fixed at ${hhmm(t.fixedAt)}${t.fixedBy ? ` by ${userName(s, t.fixedBy).split(' ')[0]}` : ''}. ` : `Closed at ${hhmm(t.closedAt!)}. `}${outcome}` : nowLine}
+          </p>
+        </div>
+      </section>
 
-      {(t.status === 'open' || (t.seenAt && t.severity !== 'minor')) && t.status !== 'closed' && (
+      <ol className="mt-4 grid grid-cols-4" aria-label="Progress">
+        {steps.map((st, i) => {
+          const done = !!st.at;
+          const next = !done && (i === 0 || !!steps[i - 1].at);
+          return (
+            <li key={st.word} className="relative flex flex-col items-center gap-1 text-center">
+              {i > 0 && <span className={cx('absolute top-[11px] right-1/2 left-[-50%] h-0.5', done ? 'bg-ok' : 'bg-[var(--grid)]')} aria-hidden />}
+              <span
+                className={cx(
+                  'relative z-[1] grid size-6 place-items-center rounded-full border-2',
+                  done ? 'border-ok bg-ok text-[var(--surface-raised)]' : next ? 'border-line-strong bg-raised' : 'border-[var(--grid)] bg-raised',
+                )}
+              >
+                {done && <Checkmark size={14} />}
+              </span>
+              <span className={cx('t-small', done ? 'font-semibold text-ink' : 'text-muted')}>{st.word}</span>
+              <span className="t-data text-[12px] text-muted">{st.at ? hhmm(st.at) : next ? 'next' : ''}</span>
+            </li>
+          );
+        })}
+      </ol>
+
+      {!resolved && t.status === 'open' && t.severity !== 'minor' && (
         <section className="mt-4">
-          <ResponseTimer elapsed={esc.elapsed} limitMins={t.seenMins} state={esc.timer} level={esc.level} frozen={!!t.seenAt} />
-        </section>
-      )}
-
-      {hold && (
-        <section className="mt-4 flex items-center justify-between rounded-[4px] bg-held-soft px-4 py-3">
-          <div>
-            <p className="t-small-strong text-held">Yarn on hold since {hhmm(hold.from)}</p>
-            <p className="t-small text-ink">{hold.status === 'on_hold' ? (hold.to ? 'Waiting for the QC manager' : 'Grows until the frame is fixed') : `Decided: ${hold.status}`}</p>
-          </div>
-          <span className="t-stat text-held">
-            {roundKg(holdKg(hold, now))}
-            <span className="t-small ml-1">kg</span>
-          </span>
+          <ResponseTimer elapsed={esc.elapsed} limitMins={t.seenMins} state={esc.timer} level={esc.level} />
         </section>
       )}
 
       {action && <div className="mt-5">{action}</div>}
 
-      {t.status === 'fixed' && (
-        <p className="t-small mt-5 rounded-[4px] bg-ok-soft px-3 py-2.5 text-ink">
-          Fixed: {t.cause?.toLowerCase()}. The QC manager decides on the held yarn, then this ticket closes.
-        </p>
-      )}
+      <div className="mt-6 grid grid-cols-2 gap-3">
+        {reading && (
+          <section className="col-span-2 rounded-[8px] border border-line bg-raised p-4">
+            <ReadingGauge test={reading.test} value={reading.value} min={rule?.min} max={t.kind === 'test_fail' ? rule?.max : reading.max} drift={t.kind !== 'test_fail' && reading.test === 'cv'} />
+            {t.readings.length > 1 && <p className="t-small mt-3 text-muted">{t.readings.length} readings on this issue</p>}
+          </section>
+        )}
+        {hold && (
+          <section className="rounded-[8px] bg-held-soft p-4">
+            <p className="t-small text-held">Yarn held</p>
+            <p className="t-stat text-held">
+              {roundKg(holdKg(hold, now))}
+              <span className="t-small ml-1">kg</span>
+            </p>
+            <p className="t-small mt-1 text-ink">{hold.status === 'on_hold' ? (hold.to ? 'QC manager decides' : `Since ${hhmm(hold.from)}, still growing`) : hold.status === 'released' ? 'Released' : hold.status === 'reprocess' ? 'Sent to reprocess' : 'Sold as lower grade'}</p>
+          </section>
+        )}
+        {sisters.length > 0 && (
+          <section className="rounded-[8px] border border-line bg-raised p-4">
+            <p className="t-small text-muted">Sister frames</p>
+            <ul className="mt-2 flex flex-col gap-1.5">
+              {sisters.map((x) => (
+                <li key={x.f} className="flex items-center justify-between">
+                  <span className="t-data">{x.f}</span>
+                  <span className={cx('t-small-strong', x.state === 'ok' ? 'text-ok' : x.state === 'bad' ? 'text-critical' : 'text-muted')}>
+                    {x.state === 'ok' ? 'Passed' : x.state === 'bad' ? 'Failed' : x.state === 'skip' ? 'Not needed' : 'Testing'}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+      </div>
 
-      <h2 className="t-section mt-7 mb-3">What happened</h2>
-      <Timeline s={s} t={t} now={now} />
+      {t.photo && <img src={t.photo} alt={`Photo added when ${frameWord(t.frameId)} was fixed`} className="mt-4 w-full rounded-[8px] border border-line" />}
 
-      {t.photo && <img src={t.photo} alt={`Photo added when ${frameWord(t.frameId)} was fixed`} className="mt-2 w-full rounded-[4px] border border-line" />}
+      <details className="group mt-6 rounded-[8px] border border-line bg-raised">
+        <summary className="t-small-strong flex h-12 cursor-pointer list-none items-center justify-between px-4 text-ink">
+          Full history · {timeline(t, now).length} updates
+          <ChevronRight size={20} className="text-muted transition-transform group-open:rotate-90" />
+        </summary>
+        <div className="border-t border-line px-4 pt-4">
+          <Timeline s={s} t={t} now={now} dense />
+        </div>
+      </details>
 
-      {canAct && t.status !== 'closed' && t.status !== 'fixed' && (
+      {canAct && !resolved && (
         <Button variant="ghost" block className="mt-4" onClick={() => setSheet('handover')}>
           Hand over to next shift
         </Button>
@@ -627,48 +729,46 @@ export function RaiseScreen() {
 }
 const shiftAtNow = () => shiftAt(useMill.getState().now);
 
-// ================= Previous =================
+// ================= History =================
 export function PreviousScreen() {
   const s = useMillState();
   const now = useNow();
   const user = useUser('app');
   const nav = useNavigate();
-  const [status, setStatus] = useState<'all' | 'closed' | 'open'>('all');
   const [cause, setCause] = useState<string>('all');
   const [frame, setFrame] = useState<string>('all');
-  const month = useMemo(
-    () => s.tickets.filter((t) => t.createdAt <= now && now - t.createdAt < 31 * 86_400_000).sort((a, b) => b.createdAt - a.createdAt),
+  const past = useMemo(
+    () =>
+      s.tickets
+        .filter((t) => (t.status === 'closed' || t.status === 'fixed') && t.createdAt <= now && now - t.createdAt < 31 * 86_400_000)
+        .sort((a, b) => b.createdAt - a.createdAt),
     [s.tickets, now],
   );
-  const mine = month.filter((t) => t.seenBy === user.id);
+  const mine = past.filter((t) => t.seenBy === user.id);
   const myMedian = median(seenTimes(mine));
-  const list = month.filter(
-    (t) =>
-      (status === 'all' || (status === 'closed' ? t.status === 'closed' : t.status !== 'closed')) &&
-      (cause === 'all' || t.cause === cause) &&
-      (frame === 'all' || t.frameId === frame),
-  );
+  const list = past.filter((t) => (cause === 'all' || t.cause === cause) && (frame === 'all' || t.frameId === frame));
+  const groups: { day: string; items: Ticket[] }[] = [];
+  for (const t of list) {
+    const d = dayMonth(t.createdAt);
+    if (groups.at(-1)?.day !== d) groups.push({ day: d, items: [] });
+    groups.at(-1)!.items.push(t);
+  }
   const select = 'h-12 rounded-[4px] border border-line-strong bg-raised px-2 t-small';
   return (
-    <Page title="Previous" sub={`Last 31 days · ${monthName(now)}`}>
+    <Page title="History" sub={`Resolved issues, last 31 days · ${monthName(now)}`}>
       {user.role === 'supervisor' && (
         <div className="mb-4 grid grid-cols-2 gap-2">
-          <div className="rounded-[4px] border border-line bg-raised p-3">
+          <div className="rounded-[8px] bg-raised p-3 shadow-raised">
             <p className="t-small text-muted">Your median to Seen</p>
             <p className="t-stat">{myMedian ? timer(myMedian) : '–'}</p>
           </div>
-          <div className="rounded-[4px] border border-line bg-raised p-3">
-            <p className="t-small text-muted">Tickets you saw</p>
+          <div className="rounded-[8px] bg-raised p-3 shadow-raised">
+            <p className="t-small text-muted">Issues you handled</p>
             <p className="t-stat">{mine.length}</p>
           </div>
         </div>
       )}
-      <div className="grid grid-cols-3 gap-2">
-        <select aria-label="Status" className={select} value={status} onChange={(e) => setStatus(e.target.value as never)}>
-          <option value="all">Any status</option>
-          <option value="open">Open</option>
-          <option value="closed">Closed</option>
-        </select>
+      <div className="grid grid-cols-2 gap-2">
         <select aria-label="Frame" className={select} value={frame} onChange={(e) => setFrame(e.target.value)}>
           <option value="all">All frames</option>
           {s.frames.map((f) => (
@@ -686,26 +786,32 @@ export function PreviousScreen() {
           ))}
         </select>
       </div>
-      <ul className="mt-4 divide-y divide-[var(--line)] rounded-[4px] border border-line bg-raised">
-        {list.length === 0 && <li className="t-small p-4 text-muted">No tickets match these filters.</li>}
-        {list.slice(0, 60).map((t) => (
-          <li key={t.id}>
-            <button type="button" onClick={() => nav(`/app/ticket/${t.id}`)} className="flex min-h-14 w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-sunken">
-              <SeverityShape level={t.severity} size={12} />
-              <span className="min-w-0 flex-1">
-                <span className="t-small-strong block truncate">
-                  {t.frameId} · {t.title}
-                </span>
-                <span className="t-small block truncate text-muted">
-                  {dayMonth(t.createdAt)} · {t.closeReason === 'sample_error' ? 'False alarm' : t.closeReason === 'checked_ok' ? 'Checked, OK' : t.cause ?? 'No cause yet'}
-                </span>
-              </span>
-              <StatusChip kind={ticketChip(t, now)} />
-            </button>
-          </li>
-        ))}
-      </ul>
+      {groups.length === 0 && <p className="t-small mt-6 text-center text-muted">Nothing resolved matches these filters.</p>}
+      {groups.map((g) => (
+        <section key={g.day} className="mt-5">
+          <h2 className="t-small-strong mb-2 text-muted">{g.day}</h2>
+          <ul className="overflow-hidden rounded-[8px] bg-raised shadow-raised">
+            {g.items.map((t, i) => (
+              <li key={t.id} className={cx(i > 0 && 'border-t border-line')}>
+                <button type="button" onClick={() => nav(`/app/ticket/${t.id}`)} className="flex min-h-16 w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-sunken">
+                  <span className={cx('grid size-8 shrink-0 place-items-center rounded-full', t.status === 'fixed' ? 'bg-held-soft text-held' : 'bg-ok-soft text-ok')}>
+                    {t.status === 'fixed' ? <SeverityShape level={t.severity} /> : <Checkmark size={16} />}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="t-small-strong block truncate">
+                      {frameWord(t.frameId)} · {t.kind === 'drift' ? 'Winding drift' : t.title}
+                    </span>
+                    <span className="t-small block truncate text-muted">
+                      {t.status === 'fixed' ? 'Fixed, yarn waiting for QC' : t.closeReason === 'sample_error' ? 'False alarm' : t.closeReason === 'checked_ok' ? 'Checked, OK' : t.cause ?? 'Resolved'}
+                    </span>
+                  </span>
+                  <span className="t-data text-[13px] text-muted">{hhmm(t.createdAt)}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
     </Page>
   );
 }
-
