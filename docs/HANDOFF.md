@@ -13,7 +13,7 @@ The prototype is judged on UX quality, clarity and craft, not backend scale.
 | What | Where |
 | --- | --- |
 | Code | https://github.com/Tanzolo96/Studio-3 |
-| Working branch | `claude/gifted-knuth-l407vq` (`main` holds only the first commit; merge when the team agrees) |
+| Branches | `main` is the shared, up-to-date branch. Work on your own branch and open a pull request into `main` |
 | Live prototype | https://claude.ai/artifact/FBhCsz6xKZ9Fjhb5VoenBG (private until shared from its Share menu) |
 | Figma (source of truth for the design system) | https://www.figma.com/design/qDZNbHwEKUBhFapp3osR8I |
 | IA map (FigJam) | https://www.figma.com/board/mYtDukXXBa4H6pnzcpQq6Y |
