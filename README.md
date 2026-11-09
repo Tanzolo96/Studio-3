@@ -29,6 +29,8 @@ npm test           # engine tests (rules, containment, escalation, holds)
 | `/app` | Alert app: Alerts, Raise ticket, Previous, plus the full-screen takeover |
 | `/kit` | Every component in Day and Night, to check against Figma |
 
+Team handoff, decisions and milestones: [`docs/HANDOFF.md`](docs/HANDOFF.md).
+
 Open several tabs (or `/demo`): they share one live event log in the browser. The **Simulator** (dashboard sidebar) stands in for the lab and the winding sensors, and controls the mill clock (pause, 1×, 10×, 60×, skip).
 
 ## Jury script (about 3 minutes)
