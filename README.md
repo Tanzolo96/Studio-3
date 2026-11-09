@@ -1,5 +1,7 @@
 # QC Alert
 
+> **New here? Read [`docs/HANDOFF.md`](docs/HANDOFF.md) first.** It has every decision, how the system works, the jury demo script and the milestone checklist with owners. Pick a milestone there before you start coding.
+
 A quality alert system for yarn spinning mills. Interaction Design, UID Gandhinagar, Team 11 (Entrepreneurs Products).
 
 **HMW** help a spinning mill catch a yarn fault sooner, and make sure the right person fixes it before more bad yarn is made?
@@ -28,8 +30,6 @@ npm test           # engine tests (rules, containment, escalation, holds)
 | `/dashboard` | Control side: Overview, Tickets, Held yarn, Machines (Insights, Report, Rules, Account next) |
 | `/app` | Alert app: Alerts, Raise ticket, Previous, plus the full-screen takeover |
 | `/kit` | Every component in Day and Night, to check against Figma |
-
-Team handoff, decisions and milestones: [`docs/HANDOFF.md`](docs/HANDOFF.md).
 
 Open several tabs (or `/demo`): they share one live event log in the browser. The **Simulator** (dashboard sidebar) stands in for the lab and the winding sensors, and controls the mill clock (pause, 1×, 10×, 60×, skip).
 
