@@ -3,7 +3,7 @@ import { AppShell } from './app/AppShell';
 import { AlertsScreen, PreviousScreen, RaiseScreen, TestEntryScreen, TicketScreen } from './app/screens';
 import { DashShell } from './dashboard/DashShell';
 import { HeldYarn, Later, MachinesGrid, TicketDetailPage, Tickets } from './dashboard/pages';
-import { Overview } from './dashboard/Overview';
+import { InsightsPage, Overview, Report } from './dashboard/Overview';
 import { Kit } from './demo/Kit';
 
 /** True when built as one self-contained page (claude.ai artifact): no server, memory routing. */
@@ -63,8 +63,8 @@ export const dashRoutes: RouteObject = {
     { path: 'held', element: <HeldYarn /> },
     { path: 'machines', element: <MachinesGrid /> },
     { path: 'machines/:id', element: <MachinesGrid /> },
-    { path: 'insights', element: <Later title="AI insights" what="Repeat fault patterns, likely causes, frames to test sooner and suggested rule changes, each with confidence and evidence." /> },
-    { path: 'report', element: <Later title="Monthly report" what="Alerts, kg held and saved, response times by shift, top causes, worst frames, and PDF export." /> },
+    { path: 'insights', element: <InsightsPage /> },
+    { path: 'report', element: <Report /> },
     { path: 'rules', element: <Later title="Rules" what="The six-step rule editor with a preview of last month’s impact. Only the QC manager can save." /> },
     { path: 'account', element: <Later title="Account" what="Profile, people and roles, shifts and roster, notifications." /> },
   ],

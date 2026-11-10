@@ -11,6 +11,7 @@ import { DAY, dayMonth, hhmm, mill, millDayKey, millHour, shiftAt, timer } from 
 import { cx, Empty, SeverityBadge, SeverityShape, StatusChip } from '../ui/primitives';
 import { InsightCard, readingLine, ticketChip } from '../ui/cards';
 import { BarList, CategoryBar, Ring, SeverityLegend, ShiftBars, Sparkline, StackedColumns, TrendArea } from '../ui/charts';
+import { PageHead } from './DashShell';
 
 export function Panel({ title, sub, aside, children, className }: { title: string; sub?: string; aside?: ReactNode; children: ReactNode; className?: string }) {
   return (
@@ -34,7 +35,6 @@ export function Overview() {
   const now = useNow();
   const user = useUser('dash');
   const nav = useNavigate();
-  const [dismissed, setDismissed] = useState<string[]>([]);
 
   const live = s.tickets.filter((t) => t.status !== 'closed' && t.status !== 'fixed').sort(bySeverityThenAge);
   const incidents = live.filter((t) => t.severity !== 'minor');
@@ -59,7 +59,6 @@ export function Overview() {
   const alerts30 = a.daily.reduce((n, d) => n + d.critical + d.major, 0);
   const escalated30 = a.month.filter((t) => t.severity !== 'minor' && escalation(t, now).level > 0).length;
   const seenNow = [...a.trend].reverse().find((p) => p.mins !== null)?.mins ?? null;
-  const insight = insights(s, now).filter((i) => !dismissed.includes(i.id))[0];
   const h = millHour(now);
   const greet = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
   const weekday = WEEKDAY[new Date(now + 5.5 * 3600000).getUTCDay()];
@@ -127,10 +126,8 @@ export function Overview() {
         />
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-3">
-        <Panel
-          className="xl:col-span-2"
-          title="Ring frames, floor order"
+      <Panel
+                    title="Ring frames, floor order"
           sub={`${states.running} of ${s.frames.length} running normally${states.stopped ? `, ${states.stopped} stopped for doffing` : ''}`}
           aside={<Link to="/dashboard/machines" className="t-small-strong flex items-center gap-1 text-brand hover:underline">Machines <ArrowRight size={14} /></Link>}
         >
@@ -148,48 +145,6 @@ export function Overview() {
             />
           </div>
         </Panel>
-        <div className="flex flex-col gap-2">
-          <div className="flex items-baseline justify-between px-1">
-            <h2 className="t-body-strong">AI insight</h2>
-            <Link to="/dashboard/insights" className="t-small-strong text-brand hover:underline">
-              All insights
-            </Link>
-          </div>
-          {insight ? (
-            <InsightCard insight={{ ...insight, onAction: () => nav(insight.target) }} onDismiss={() => setDismissed((d) => [...d, insight.id])} />
-          ) : (
-            <Empty title="No new insights" body="Insights appear when the data shows a pattern worth a look." />
-          )}
-        </div>
-      </div>
-
-      <div className="grid gap-4 xl:grid-cols-3">
-        <Panel className="xl:col-span-2" title="Alerts per day" sub="Last 30 days, by severity" aside={<SeverityLegend />}>
-          <StackedColumns data={a.daily} dayLabel={dayMonth} label="Alerts per day for the last 30 days, by severity" />
-        </Panel>
-        <Panel title="Top causes" sub="What fixed frames had in common, last 30 days">
-          {a.causes.length ? <BarList items={a.causes} /> : <p className="t-small text-muted">No fixed tickets yet.</p>}
-        </Panel>
-      </div>
-
-      <div className="grid gap-4 xl:grid-cols-3">
-        <Panel className="xl:col-span-2" title="How fast alerts are seen" sub="Median minutes from alert to Seen, rolling 7 days">
-          <TrendArea
-            points={a.trend}
-            limit={5}
-            limitLabel="5 min limit"
-            format={(v) => `${v.toFixed(1)} min to Seen`}
-            dayLabel={dayMonth}
-            label="Median minutes to Seen over the last 30 days, against the 5 minute limit"
-          />
-        </Panel>
-        <Panel title="By shift" sub="Median minutes to Seen, last 30 days">
-          <div className="pt-6">
-            <ShiftBars rows={a.shifts} limit={5} label="Median minutes to Seen for shifts A, B and C" />
-          </div>
-          <p className="t-small mt-4 text-muted">A 00–08 · B 08–16 · C 16–24</p>
-        </Panel>
-      </div>
 
       {live.length > 0 && (
         <Panel title="Open tickets" sub={`${live.length} not closed yet`} aside={<Link to="/dashboard/tickets" className="t-small-strong flex items-center gap-1 text-brand hover:underline">All tickets <ArrowRight size={14} /></Link>}>
@@ -412,5 +367,72 @@ function IncidentCard({ s, t, now, onOpen }: { s: MillState; t: Ticket; now: num
         </div>
       </div>
     </button>
+  );
+}
+
+export function Report() {
+  const s = useMillState();
+  const now = useNow();
+  const nowMin = Math.floor(now / 60000);
+  const a = useMemo(() => {
+    const since30 = mill(millDayKey(now)) - 29 * DAY;
+    const month = ticketsSince(s, since30, now);
+    return { daily: dailyAlerts(s, now, 30), trend: seenTrend(s, now, 30), causes: topCauses(month).slice(0, 6), shifts: shiftResponse(month) };
+    // recompute once a mill minute
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [s, nowMin]);
+  return (
+    <div className="mx-auto flex max-w-[1240px] flex-col gap-6">
+      <PageHead title="Monthly report" sub="Last 30 days" />
+      <div className="grid gap-4 xl:grid-cols-3">
+        <Panel className="xl:col-span-2" title="Alerts per day" sub="Last 30 days, by severity" aside={<SeverityLegend />}>
+          <StackedColumns data={a.daily} dayLabel={dayMonth} label="Alerts per day for the last 30 days, by severity" />
+        </Panel>
+        <Panel title="Top causes" sub="What fixed frames had in common, last 30 days">
+          {a.causes.length ? <BarList items={a.causes} /> : <p className="t-small text-muted">No fixed tickets yet.</p>}
+        </Panel>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-3">
+        <Panel className="xl:col-span-2" title="How fast alerts are seen" sub="Median minutes from alert to Seen, rolling 7 days">
+          <TrendArea
+            points={a.trend}
+            limit={5}
+            limitLabel="5 min limit"
+            format={(v) => `${v.toFixed(1)} min to Seen`}
+            dayLabel={dayMonth}
+            label="Median minutes to Seen over the last 30 days, against the 5 minute limit"
+          />
+        </Panel>
+        <Panel title="By shift" sub="Median minutes to Seen, last 30 days">
+          <div className="pt-6">
+            <ShiftBars rows={a.shifts} limit={5} label="Median minutes to Seen for shifts A, B and C" />
+          </div>
+          <p className="t-small mt-4 text-muted">A 00–08 · B 08–16 · C 16–24</p>
+        </Panel>
+      </div>
+    </div>
+  );
+}
+
+export function InsightsPage() {
+  const s = useMillState();
+  const now = useNow();
+  const nav = useNavigate();
+  const [dismissed, setDismissed] = useState<string[]>([]);
+  const list = insights(s, now).filter((i) => !dismissed.includes(i.id));
+  return (
+    <div className="mx-auto flex max-w-[1240px] flex-col gap-6">
+      <PageHead title="AI insights" sub="Patterns the data shows, each with its evidence" />
+      {list.length ? (
+        <div className="grid gap-4 md:grid-cols-2">
+          {list.map((i) => (
+            <InsightCard key={i.id} insight={{ ...i, onAction: () => nav(i.target) }} onDismiss={() => setDismissed((d) => [...d, i.id])} />
+          ))}
+        </div>
+      ) : (
+        <Empty title="No new insights" body="Insights appear when the data shows a pattern worth a look." />
+      )}
+    </div>
   );
 }
