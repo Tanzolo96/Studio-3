@@ -14,7 +14,7 @@ import { BarList, CategoryBar, Ring, SeverityLegend, ShiftBars, Sparkline, Stack
 
 export function Panel({ title, sub, aside, children, className }: { title: string; sub?: string; aside?: ReactNode; children: ReactNode; className?: string }) {
   return (
-    <section className={cx('flex min-w-0 flex-col rounded-[8px] border border-line bg-raised p-5 shadow-raised', className)}>
+    <section className={cx('flex min-w-0 flex-col rounded-[16px] border border-line bg-raised p-5 shadow-raised', className)}>
       <header className="mb-4 flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 className="t-body-strong">{title}</h2>
@@ -89,6 +89,7 @@ export function Overview() {
 
       <div className="grid grid-cols-[repeat(auto-fit,minmax(230px,1fr))] gap-4">
         <Kpi
+          dark
           label="Time to Seen"
           value={seenNow !== null ? timer(seenNow * 60000) : '–'}
           note={seenNow !== null ? (seenNow <= 5 ? 'Median, last 7 days · inside the 5 min limit' : 'Median, last 7 days · over the 5 min limit') : 'No alerts yet'}
@@ -239,7 +240,9 @@ function Kpi({
   tone,
   chart,
   to,
+  dark,
 }: {
+  dark?: boolean;
   label: string;
   value: ReactNode;
   unit?: string;
@@ -259,19 +262,19 @@ function Kpi({
       <p className={cx('t-small mt-3', tone === 'good' ? 'text-ok' : tone === 'bad' ? 'text-critical' : 'text-muted')}>{note}</p>
     </>
   );
-  const cls = 'flex min-w-0 flex-col rounded-[8px] border border-line bg-raised p-5 shadow-raised';
+  const cls = cx('flex min-w-0 flex-col rounded-[16px] border p-5', dark ? 'border-transparent bg-surface text-ink' : 'border-line bg-raised shadow-raised');
   return to ? (
-    <Link to={to} className={cx(cls, 'transition-colors hover:border-line-strong')}>
+    <Link to={to} data-theme={dark ? 'night' : undefined} className={cx(cls, 'transition-colors hover:border-line-strong')}>
       {body}
     </Link>
   ) : (
-    <div className={cls}>{body}</div>
+    <div data-theme={dark ? 'night' : undefined} className={cls}>{body}</div>
   );
 }
 
 function HoldStrip({ holds }: { holds: { id: string; frame: string; kg: number }[] }) {
   const total = holds.reduce((a, h) => a + h.kg, 0);
-  if (!total) return <div className="h-9 rounded-[4px] border border-dashed border-line" aria-hidden />;
+  if (!total) return <div className="h-9 rounded-[10px] border border-dashed border-line" aria-hidden />;
   return (
     <div className="flex h-9 flex-col justify-center gap-1.5">
       <div className="flex h-3 gap-[2px] overflow-hidden rounded-full" role="img" aria-label={holds.map((h) => `${h.frame} ${Math.round(h.kg)} kg`).join(', ')}>
@@ -292,7 +295,7 @@ const TILE: Record<FrameStateKind, string> = {
   held: 'bg-held-soft text-held border-held',
   stopped: 'bg-transparent text-muted border-dashed border-line-strong',
 };
-const WORD: Record<FrameStateKind, string> = { running: 'Running', warning: 'Warning', fault: 'Failed', held: 'Yarn on hold', stopped: 'Stopped' };
+const SHORT: Record<FrameStateKind, string> = { running: 'Run', warning: 'Warn', fault: 'Fail', held: 'Hold', stopped: 'Stop' };
 
 function FloorMap({ s, now, onOpen }: { s: MillState; now: number; onOpen: (id: string) => void }) {
   const rows = [s.frames.slice(0, 8), s.frames.slice(8, 16), s.frames.slice(16, 24)];
@@ -316,10 +319,10 @@ function FloorMap({ s, now, onOpen }: { s: MillState; now: number; onOpen: (id: 
                 onFocus={() => setHover(f.id)}
                 onMouseLeave={() => setHover(null)}
                 aria-label={`${f.id}: ${v.label}. ${v.line}`}
-                className={cx('flex h-14 flex-col items-center justify-center rounded-[6px] border-2 transition-transform hover:-translate-y-0.5', TILE[v.kind])}
+                className={cx('flex h-14 min-w-0 flex-col items-center justify-center overflow-hidden whitespace-nowrap rounded-[10px] border-2 transition-transform hover:-translate-y-0.5', TILE[v.kind])}
               >
                 <span className="font-mono text-[15px] font-semibold leading-5 tabular-nums">{f.num}</span>
-                <span className="text-[11px] leading-4 opacity-80">{v.kind === 'running' ? f.lotId : WORD[v.kind]}</span>
+                <span className="text-[11px] leading-4 opacity-80">{v.kind === 'running' ? f.lotId : SHORT[v.kind]}</span>
               </button>
             );
           })}
@@ -356,7 +359,7 @@ function IncidentCard({ s, t, now, onOpen }: { s: MillState; t: Ticket; now: num
       type="button"
       onClick={onOpen}
       className={cx(
-        'anim-rise grid w-full items-center gap-6 rounded-[8px] border p-5 text-left shadow-raised md:grid-cols-[minmax(0,1.1fr)_minmax(0,1.4fr)_auto]',
+        'anim-rise grid w-full items-center gap-6 rounded-[16px] border p-5 text-left shadow-raised md:grid-cols-[minmax(0,1.1fr)_minmax(0,1.4fr)_auto]',
         critical ? 'border-critical bg-critical-soft' : 'border-major-fill bg-major-soft',
       )}
     >

@@ -34,7 +34,7 @@ export function TicketCard({ s, t, now, onOpen }: { s: MillState; t: Ticket; now
       type="button"
       onClick={onOpen}
       className={cx(
-        'block w-full rounded-[4px] border bg-raised p-4 text-left shadow-raised transition-colors hover:bg-[color-mix(in_srgb,var(--surface-raised)_92%,var(--ink))]',
+        'block w-full rounded-[10px] border bg-raised p-4 text-left shadow-raised transition-colors hover:bg-[color-mix(in_srgb,var(--surface-raised)_92%,var(--ink))]',
         live && t.severity === 'critical' ? 'border-critical' : 'border-line',
       )}
     >
@@ -73,7 +73,7 @@ export function FrameTile({ s, frameId, now, compact, onOpen }: { s: MillState; 
       onClick={onOpen}
       aria-label={`${frameId}, ${product.short}, lot ${frame.lotId}: ${full.label}. ${full.line}`}
       className={cx(
-        'flex flex-col rounded-[4px] border bg-raised text-left shadow-raised transition-colors hover:bg-[color-mix(in_srgb,var(--surface-raised)_92%,var(--ink))]',
+        'flex flex-col rounded-[10px] border bg-raised text-left shadow-raised transition-colors hover:bg-[color-mix(in_srgb,var(--surface-raised)_92%,var(--ink))]',
         st.border,
         v.kind === 'fault' && 'pulse-critical',
         compact ? 'gap-0.5 p-3' : 'gap-1 p-3.5',
@@ -108,7 +108,7 @@ export function StatTile({
   trend?: 'good' | 'bad' | 'neutral';
 }) {
   return (
-    <div className="flex min-h-[110px] flex-col rounded-[4px] border border-line bg-raised p-4 shadow-raised">
+    <div className="flex min-h-[110px] flex-col rounded-[10px] border border-line bg-raised p-4 shadow-raised">
       <span className="t-small text-muted">{label}</span>
       <span className="mt-1.5 flex items-baseline gap-1.5">
         <span className="t-stat">{value}</span>
@@ -139,15 +139,15 @@ export interface Insight {
 
 export function InsightCard({ insight, onDismiss }: { insight: Insight; onDismiss?: () => void }) {
   return (
-    <article className="flex flex-col rounded-[4px] border border-line bg-raised p-4 shadow-raised">
-      <div className="flex items-center justify-between gap-2">
+    <article className="flex flex-col rounded-[10px] border border-line bg-raised p-4 shadow-raised">
+      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5">
         <AiTag kind={insight.kind} />
-        <span className="t-data text-[13px] text-muted">{insight.confidence}% confidence</span>
+        <span className="t-data whitespace-nowrap text-[12px] text-muted">{insight.confidence}% confidence</span>
       </div>
       <h3 className="t-body-strong mt-3">{insight.title}</h3>
       <p className="t-small mt-1.5 text-ink">{insight.body}</p>
       <p className="t-small mt-2 text-muted">Based on: {insight.basis}</p>
-      <div className="mt-4 flex items-center gap-2">
+      <div className="mt-4 flex flex-wrap items-center gap-2 [&>button]:whitespace-nowrap">
         <Button variant="secondary" onClick={insight.onAction}>
           {insight.action}
         </Button>

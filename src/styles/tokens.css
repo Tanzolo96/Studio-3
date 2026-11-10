@@ -7,7 +7,7 @@
   --surface: #f5f6f8;
   --surface-raised: #fafafc;
   --surface-sunken: #eceef1;
-  --line: #e1e4e8;
+  --line: #eceef1;
   --line-strong: #9aa0a8;
   --ink: #0e0f11;
   --ink-muted: #5f656d;
@@ -32,7 +32,7 @@
   --ai: #0e6b6b;
   --ai-soft: #dff5f4;
   --scrim: rgba(22, 22, 22, 0.56);
-  --shadow-raised: 0 1px 2px rgba(0, 0, 0, 0.12);
+  --shadow-raised: 0 1px 2px rgba(14, 15, 17, 0.04), 0 4px 16px rgba(14, 15, 17, 0.04);
   --shadow-sheet: 0 12px 32px rgba(16, 24, 40, 0.18);
   /* charts (validated with the dataviz palette checker: red/amber pass CVD) */
   --data: #5b6573;

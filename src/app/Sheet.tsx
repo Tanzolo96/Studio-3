@@ -27,7 +27,7 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
       >
         <div className="sticky top-0 z-[1] flex items-center justify-between border-b border-line bg-surface px-4 py-3">
           <h2 className="t-section">{title}</h2>
-          <button type="button" onClick={onClose} aria-label="Close" className="-mr-2 grid size-12 place-items-center rounded-[4px] text-muted hover:bg-sunken">
+          <button type="button" onClick={onClose} aria-label="Close" className="-mr-2 grid size-12 place-items-center rounded-[10px] text-muted hover:bg-sunken">
             <Close size={24} />
           </button>
         </div>

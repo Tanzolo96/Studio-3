@@ -48,8 +48,8 @@
 @utility t-small { font-size: 13px; line-height: 18px; font-weight: 400; }
 @utility t-small-strong { font-size: 13px; line-height: 18px; font-weight: 600; }
 @utility t-label { font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; }
-@utility t-reading { font-family: var(--font-mono); font-size: 32px; line-height: 36px; font-weight: 600; font-variant-numeric: tabular-nums; }
-@utility t-stat { font-family: var(--font-mono); font-size: 26px; line-height: 32px; font-weight: 600; font-variant-numeric: tabular-nums; }
+@utility t-reading { font-family: var(--font-sans); letter-spacing: -0.03em; font-size: 36px; line-height: 36px; font-weight: 600; font-variant-numeric: tabular-nums; }
+@utility t-stat { font-family: var(--font-sans); letter-spacing: -0.03em; font-size: 34px; line-height: 38px; font-weight: 600; font-variant-numeric: tabular-nums; }
 @utility t-data { font-family: var(--font-mono); font-size: 14px; line-height: 20px; font-weight: 500; font-variant-numeric: tabular-nums; }
 
 @layer base {
