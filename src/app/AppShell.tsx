@@ -47,7 +47,7 @@ export function AppShell() {
 
   return (
     <div data-theme={theme} className="grid min-h-dvh place-items-center bg-surface text-ink sm:bg-[var(--surface-sunken)] sm:py-6">
-      <div className="phone relative flex h-dvh w-full flex-col overflow-hidden bg-surface sm:h-[844px] sm:max-h-[calc(100dvh-48px)] sm:w-[390px] sm:rounded-[40px] sm:border-[10px] sm:border-[#161616] sm:shadow-sheet">
+      <div className="phone relative flex h-dvh w-full flex-col overflow-hidden bg-surface sm:h-[844px] sm:max-h-[calc(100dvh-48px)] sm:w-[390px] sm:rounded-[40px] sm:border-[10px] sm:border-[#0e0f11] sm:shadow-sheet">
         <div className="flex h-9 shrink-0 items-center justify-between px-5 pt-1 text-[13px] font-semibold tabular-nums">
           <span className="font-mono">{hhmm(now)}</span>
           <button type="button" onClick={() => setPerson(true)} className="t-small-strong -mr-2 flex h-9 items-center gap-2 rounded-full px-2 hover:bg-sunken" aria-label={`Signed in as ${user.name}. Switch person or theme`}>

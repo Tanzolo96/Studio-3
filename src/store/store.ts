@@ -153,7 +153,7 @@ export function useUser(surface: Surface): User {
 export function useTheme(surface: Surface) {
   const theme = useSession((s) => s.theme[surface]);
   useEffect(() => {
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'night' ? '#161616' : '#f4f4f4');
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'night' ? '#0e0f11' : '#f5f6f8');
   }, [theme]);
   return theme;
 }
