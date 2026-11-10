@@ -164,13 +164,13 @@ scripts/       artifact.mjs (turns the single-file build into the hosted page)
 
 ## 8. Design system notes
 
-Source: Figma file above. Direction: ISA-101 "gray is good" on an IBM Carbon base, Carbon status pattern (never colour alone), Siemens iX for industrial UI.
+Colour palette (since Nov 2026): IT HEAVY moodboard, orange `#FF5A1F` accent on cool near-white/near-black greys. Earlier direction: ISA-101 "gray is good" on an IBM Carbon base, Carbon status pattern (never colour alone), Siemens iX for industrial UI.
 
 Tokens live in `src/styles/tokens.css` and match the Figma variables 1:1, plus these additions:
 
 | Addition | Value (Day / Night) | Why |
 | --- | --- | --- |
-| `--data` | `#4f6a9a` / `#8aa4d6` | Chart ink for normal data, not brand blue (blue is actions) |
+| `--data` | `#5b6573` / `#9aa6b8` | Chart ink for normal data, a cool slate, not the orange brand (orange is actions) |
 | `--chart-critical`, `--chart-major`, `--chart-minor` | red / amber / gray | In charts, Major is **amber**, not the UI orange: red vs orange failed the colour-blind check; red vs amber passes |
 | `--grid` | `#e8e8e8` / `#333` | Hairline chart grid |
 | Panel radius 8 px on the dashboard | | Friendlier, per user feedback (Figma cards use 4 px) |
