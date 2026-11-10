@@ -14,7 +14,7 @@ import { BarList, CategoryBar, Ring, SeverityLegend, ShiftBars, Sparkline, Stack
 
 export function Panel({ title, sub, aside, children, className }: { title: string; sub?: string; aside?: ReactNode; children: ReactNode; className?: string }) {
   return (
-    <section className={cx('flex min-w-0 flex-col rounded-[16px] border border-line bg-raised p-5 shadow-raised', className)}>
+    <section className={cx('flex min-w-0 flex-col rounded-[16px] bg-surface p-5', className)}>
       <header className="mb-4 flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 className="t-body-strong">{title}</h2>
@@ -217,7 +217,7 @@ export function Overview() {
 function FloorStatus({ incidents, critical }: { incidents: number; critical: number }) {
   if (!incidents)
     return (
-      <p className="t-small-strong flex items-center gap-2 rounded-full border border-line bg-raised px-4 py-2 shadow-raised">
+      <p className="t-small-strong flex items-center gap-2 rounded-full bg-surface px-4 py-2 shadow-raised">
         <span className="grid size-5 place-items-center rounded-full bg-ok-soft text-ok">
           <Checkmark size={14} />
         </span>
@@ -262,9 +262,9 @@ function Kpi({
       <p className={cx('t-small mt-3', tone === 'good' ? 'text-ok' : tone === 'bad' ? 'text-critical' : 'text-muted')}>{note}</p>
     </>
   );
-  const cls = cx('flex min-w-0 flex-col rounded-[16px] border p-5', dark ? 'border-transparent bg-surface text-ink' : 'border-line bg-raised shadow-raised');
+  const cls = cx('flex min-w-0 flex-col rounded-[16px] border p-5', dark ? 'border-transparent bg-surface text-ink' : 'border-transparent bg-surface');
   return to ? (
-    <Link to={to} data-theme={dark ? 'night' : undefined} className={cx(cls, 'transition-colors hover:border-line-strong')}>
+    <Link to={to} data-theme={dark ? 'night' : undefined} className={cx(cls, 'transition-colors hover:brightness-[0.98]')}>
       {body}
     </Link>
   ) : (

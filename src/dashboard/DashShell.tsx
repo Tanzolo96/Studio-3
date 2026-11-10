@@ -8,15 +8,25 @@ import { cx } from '../ui/primitives';
 import { ROLE_WORD } from '../app/Person';
 import { SimulatorDock } from '../demo/Simulator';
 
-const NAV: { to: string; label: string; end?: boolean }[] = [
-  { to: '/dashboard', label: 'Overview', end: true },
-  { to: '/dashboard/tickets', label: 'Tickets' },
-  { to: '/dashboard/held', label: 'Held yarn' },
-  { to: '/dashboard/machines', label: 'Machines' },
-  { to: '/dashboard/insights', label: 'AI insights' },
-  { to: '/dashboard/report', label: 'Monthly report' },
-  { to: '/dashboard/rules', label: 'Rules' },
-  { to: '/dashboard/account', label: 'Account' },
+const NAV: { group: string; items: { to: string; label: string; end?: boolean }[] }[] = [
+  {
+    group: 'Operations',
+    items: [
+      { to: '/dashboard', label: 'Overview', end: true },
+      { to: '/dashboard/tickets', label: 'Tickets' },
+      { to: '/dashboard/held', label: 'Held yarn' },
+      { to: '/dashboard/machines', label: 'Machines' },
+    ],
+  },
+  {
+    group: 'Insight',
+    items: [
+      { to: '/dashboard/insights', label: 'AI insights' },
+      { to: '/dashboard/report', label: 'Monthly report' },
+      { to: '/dashboard/rules', label: 'Rules' },
+      { to: '/dashboard/account', label: 'Account' },
+    ],
+  },
 ];
 
 export function DashShell() {
@@ -31,12 +41,12 @@ export function DashShell() {
   const kg = roundKg(heldKg(s, now));
 
   return (
-    <div data-theme={surfaceTheme} className="flex min-h-dvh bg-surface text-ink">
+    <div data-theme={surfaceTheme} className="flex min-h-dvh gap-3 bg-sunken p-3 text-ink">
       <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[var(--z-toast)] focus:rounded-[10px] focus:bg-raised focus:p-3">
         Skip to content
       </a>
-      <aside className="w-[232px] shrink-0 border-r border-line bg-sunken">
-        <div className="sticky top-0 z-[var(--z-dock)] flex h-dvh flex-col">
+      <aside className="w-[220px] shrink-0">
+        <div className="sticky top-3 z-[var(--z-dock)] flex h-[calc(100dvh-24px)] flex-col">
         <div className="flex h-[60px] items-center gap-2 px-4">
           <svg width="22" height="22" viewBox="0 0 64 64" aria-hidden>
             <rect width="64" height="64" rx="12" fill="var(--ink)" />
@@ -44,8 +54,11 @@ export function DashShell() {
           </svg>
           <span className="t-section">QC Alert</span>
         </div>
-        <nav aria-label="Dashboard" className="flex flex-col">
-          {NAV.map((n) => (
+        <nav aria-label="Dashboard" className="flex flex-col gap-5 pt-2">
+          {NAV.map((g) => (
+            <div key={g.group} className="flex flex-col gap-1">
+              <p className="t-label px-5 pb-1 text-[11px] text-neutral">{g.group}</p>
+              {g.items.map((n) => (
             <NavItem key={n.to} {...n}>
               {n.label === 'Tickets' && live.length > 0 && (
                 <span className={cx('t-data grid h-6 min-w-6 place-items-center rounded-[6px] px-1.5 text-[13px]', urgent ? 'bg-critical-soft text-critical' : 'bg-minor-soft text-minor')}>
@@ -54,9 +67,11 @@ export function DashShell() {
               )}
               {n.label === 'Held yarn' && kg > 0 && <span className="t-data rounded-[6px] bg-held-soft px-1.5 text-[13px] text-held">{kg} kg</span>}
             </NavItem>
+              ))}
+            </div>
           ))}
         </nav>
-        <div className="mt-auto border-t border-line p-3">
+        <div className="mt-auto p-1">
           <SimulatorDock />
           <div className="mb-2 grid grid-cols-2 gap-1" role="radiogroup" aria-label="Theme">
             {(['day', 'night'] as const).map((t) => (
@@ -102,7 +117,7 @@ export function DashShell() {
         </div>
         </div>
       </aside>
-      <main id="main" className="min-w-0 flex-1 px-8 pt-8 pb-24">
+      <main id="main" className="min-w-0 flex-1 rounded-[28px] bg-raised px-8 pt-8 pb-24 shadow-raised">
         <Outlet />
       </main>
     </div>
