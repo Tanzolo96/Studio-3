@@ -1,28 +1,25 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowRight, Checkmark, ChevronLeft, ChevronRight, Chip, Fire, Locked, Recycle, Report as ReportIcon, Task, Time, Timer } from '@carbon/icons-react';
-import type { MillState, ShiftId, Ticket } from '../engine/types';
+import { ArrowRight, Checkmark, ChevronLeft, ChevronRight, Recycle, Timer, Locked, WarningAlt } from '@carbon/icons-react';
+import type { MillState, Ticket } from '../engine/types';
 import { useMillState, useNow, useUser } from '../store/store';
 import { bySeverityThenAge, escalation, frameView, heldKg, holdNeedsApproval, openHolds, type FrameStateKind } from '../engine/selectors';
 import { frameWord, holdKg, roundKg, userName } from '../engine/reducer';
 import { insights } from '../engine/insights';
 import { BASELINE_KG, alertHeat, dailyAlerts, frameStateCounts, seenTrend, shiftResponse, ticketsSince, topCauses, yarnSaved } from '../engine/analytics';
-import { DAY, dayMonth, hhmm, mill, millDayKey, shiftAt, timer } from '../engine/time';
+import { DAY, dayMonth, hhmm, mill, millDayKey, millHour, shiftAt, timer } from '../engine/time';
 import { cx, Empty, SeverityBadge, SeverityShape, StatusChip } from '../ui/primitives';
 import { InsightCard, readingLine, ticketChip } from '../ui/cards';
-import { BarList, Ring, SeverityLegend, ShiftBars, StackedColumns, TrendArea } from '../ui/charts';
+import { BarList, CategoryBar, Ring, SeverityLegend, ShiftBars, StackedColumns, TrendArea } from '../ui/charts';
 import { PageHead } from './DashShell';
 
-export function Panel({ title, sub, aside, icon, children, className }: { title: string; sub?: string; aside?: ReactNode; icon?: ReactNode; children: ReactNode; className?: string }) {
+export function Panel({ title, sub, aside, children, className }: { title: string; sub?: string; aside?: ReactNode; children: ReactNode; className?: string }) {
   return (
-    <section className={cx('flex min-w-0 flex-col rounded-[24px] bg-raised p-6 shadow-raised', className)}>
+    <section className={cx('flex min-w-0 flex-col rounded-[16px] border border-line bg-raised p-5 shadow-raised', className)}>
       <header className="mb-4 flex items-start justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-3">
-          {icon && <span className="grid size-9 shrink-0 place-items-center rounded-full bg-brand-soft text-brand">{icon}</span>}
-          <div className="min-w-0">
-            <h2 className="t-body-strong">{title}</h2>
-            {sub && <p className="t-small mt-0.5 text-muted">{sub}</p>}
-          </div>
+        <div className="min-w-0">
+          <h2 className="t-body-strong">{title}</h2>
+          {sub && <p className="t-small mt-0.5 text-muted">{sub}</p>}
         </div>
         {aside}
       </header>
@@ -31,57 +28,69 @@ export function Panel({ title, sub, aside, icon, children, className }: { title:
   );
 }
 
+const WEEKDAY = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
 export function Overview() {
   const s = useMillState();
   const now = useNow();
   const user = useUser('dash');
   const nav = useNavigate();
+  const [range, setRange] = useState<1 | 7 | 30>(30);
 
   const live = s.tickets.filter((t) => t.status !== 'closed' && t.status !== 'fixed').sort(bySeverityThenAge);
   const incidents = live.filter((t) => t.severity !== 'minor');
   const nowMin = Math.floor(now / 60000);
   const a = useMemo(() => {
-    const since30 = mill(millDayKey(now)) - 29 * DAY;
+    const since30 = mill(millDayKey(now)) - (range - 1) * DAY;
     const month = ticketsSince(s, since30, now);
     return {
       daily: dailyAlerts(s, now, 30),
       heat: alertHeat(s, now, 30),
+      prev: dailyAlerts(s, now, 60),
       trend: seenTrend(s, now, 30),
-      causes: topCauses(month).slice(0, 5),
+      causes: topCauses(month).slice(0, 6),
+      shifts: shiftResponse(month),
       saved: yarnSaved(s, now, since30),
+      month,
     };
     // recompute once a mill minute
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [s, nowMin]);
+  }, [s, nowMin, range]);
   const states = frameStateCounts(s, now);
   const holds = openHolds(s);
   const kg = roundKg(heldKg(s, now));
+  const alerts30 = a.daily.slice(-range).reduce((n, d) => n + d.critical + d.major, 0);
+  const escalated30 = a.month.filter((t) => t.severity !== 'minor' && escalation(t, now).level > 0).length;
+  const prevSeen = a.trend.length > 7 ? a.trend[a.trend.length - 8].mins : null;
+  const alertsPrev = a.prev.slice(-2 * range, -range).reduce((n, d) => n + d.critical + d.major, 0);
+  const alertsDelta = alerts30 - alertsPrev;
   const seenNow = [...a.trend].reverse().find((p) => p.mins !== null)?.mins ?? null;
+  const seenDelta = seenNow !== null && prevSeen !== null ? seenNow - prevSeen : null;
+  const h = millHour(now);
+  const greet = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+  const weekday = WEEKDAY[new Date(now + 5.5 * 3600000).getUTCDay()];
   const crit = incidents.filter((t) => t.severity === 'critical').length;
   const isPlant = user.role === 'plant';
   const waiting = s.holds.filter((h) => h.status === 'on_hold' && holdNeedsApproval(h));
 
-  // days without a critical alert, counted back from today
-  const calm = a.daily.map((d) => d.critical === 0);
-  let streak = 0;
-  for (let i = calm.length - 1; i >= 0 && calm[i]; i--) streak++;
-  let best = 0;
-  let run = 0;
-  for (const c of calm) {
-    run = c ? run + 1 : 0;
-    best = Math.max(best, run);
-  }
-
-  const here = shiftAt(now);
-  const order: ShiftId[] = ['A', 'B', 'C'];
-  const todayKey = millDayKey(now);
-  const limitPct = seenNow !== null ? Math.min(100, Math.round((seenNow / 5) * 100)) : 0;
-  const headline = incidents.length
-    ? `${crit ? 'Act now' : 'Stay alert'} – ${incidents.length} alert${incidents.length > 1 ? 's' : ''} need${incidents.length > 1 ? '' : 's'} your attention`
-    : `Stay ahead of faults – ${states.running} of ${s.frames.length} frames running smoothly`;
-
   return (
-    <div className="mx-auto flex max-w-[1240px] flex-col gap-5">
+    <div className="mx-auto flex max-w-[1240px] flex-col gap-6">
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="t-small-strong text-brand">Dashboard / Overview</p>
+          <h1 className="t-page mt-1">
+            {greet}, {user.name.split(' ')[0]}
+          </h1>
+          <p className="t-small mt-1 text-muted">
+            {weekday} {dayMonth(now)} · {shiftAt(now)} shift · {hhmm(now)}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <FloorStatus incidents={incidents.length} critical={crit} />
+          <RangeToggle value={range} onChange={setRange} />
+        </div>
+      </header>
+
       {incidents.length > 0 && (
         <section aria-label="Live alerts" className="flex flex-col gap-3">
           {incidents.map((t) => (
@@ -90,52 +99,46 @@ export function Overview() {
         </section>
       )}
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
-        <section className="relative flex min-w-0 flex-col justify-between gap-6 overflow-hidden rounded-[28px] bg-raised p-8 shadow-raised sm:flex-row sm:items-center">
-          <div className="max-w-[460px]">
-            <span className="t-small-strong inline-flex items-center gap-2 rounded-full bg-brand-soft px-3 py-1 !text-[12px] text-brand">
-              <span className="size-1.5 rounded-full bg-brand" />
-              {shiftAt(now)} shift · {SHIFT_HOURS[here]} · {hhmm(now)}
-            </span>
-            <h1 className="t-hero mt-4">{headline}</h1>
-            <p className="t-body mt-3 text-muted">
-              {seenNow !== null ? `Median time to Seen is ${timer(seenNow * 60000)}, against a 5 min limit.` : 'No alerts yet this month.'} {kg > 0 ? `${kg} kg of yarn is on hold.` : 'No yarn is on hold.'}
-            </p>
-            <div className="mt-6 flex flex-wrap gap-3">
-              <Link to="/dashboard/tickets" className="t-body-strong inline-flex h-11 items-center gap-2 rounded-[14px] bg-brand px-5 text-on-brand hover:bg-[var(--brand-hover)]">
-                Open tickets
-              </Link>
-              <Link to="/dashboard/held" className="t-body-strong inline-flex h-11 items-center gap-2 rounded-[14px] border border-line bg-raised px-5 hover:bg-sunken">
-                Held yarn
-              </Link>
-            </div>
-          </div>
-          <HeroArt states={states} />
-        </section>
-
-        <div className="flex min-w-0 flex-col gap-5">
-          <section className="rounded-[24px] bg-raised p-5 shadow-raised">
-            <div className="flex items-center gap-3">
-              <span className="grid size-9 shrink-0 place-items-center rounded-full bg-brand-soft text-brand">
-                <Timer size={18} />
-              </span>
-              <p className="t-small-strong flex-1">Time to Seen target</p>
-              <p className="t-data text-[13px]">
-                {seenNow !== null ? seenNow.toFixed(1) : '–'} <span className="text-muted">/ 5.0 min</span>
-              </p>
-            </div>
-            <div className="mt-4 h-2 overflow-hidden rounded-full bg-sunken" role="img" aria-label={`Median time to Seen is ${limitPct}% of the 5 minute limit`}>
-              <div className={cx('h-full rounded-full', limitPct >= 100 ? 'bg-critical' : 'bg-brand')} style={{ width: `${limitPct}%` }} />
-            </div>
-            <p className="t-small mt-2 text-muted">{limitPct >= 100 ? 'Over the limit' : `${limitPct}% of the limit used`}</p>
-          </section>
-          <CalendarPanel s={s} now={now} onOpen={(id) => nav(`/dashboard/tickets/${id}`)} />
-        </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          icon={<Timer size={20} />}
+          label="Time to Seen"
+          value={seenNow !== null ? timer(seenNow * 60000) : '–'}
+          pill={seenDelta === null ? 'No alerts yet' : `${seenDelta <= 0 ? '' : '+'}${seenDelta.toFixed(1)} min vs last week`}
+          tone={seenDelta === null ? 'neutral' : seenDelta <= 0 ? 'good' : 'bad'}
+          note={seenNow !== null && seenNow <= 5 ? 'Inside the 5 min limit' : 'Over the 5 min limit'}
+        />
+        <StatCard
+          icon={<Locked size={20} />}
+          label="Yarn on hold"
+          value={`${kg}`}
+          unit="kg"
+          pill={holds.length ? `${holds.length} lot${holds.length > 1 ? 's' : ''} waiting` : 'Nothing waiting'}
+          tone={holds.length ? 'bad' : 'neutral'}
+          note="Waiting for a decision"
+          to="/dashboard/held"
+        />
+        <StatCard
+          icon={<WarningAlt size={20} />}
+          label={`Alerts, ${RANGE_WORD[range]}`}
+          value={`${alerts30}`}
+          pill={alertsDelta === 0 ? 'Same as before' : `${alertsDelta < 0 ? '' : '+'}${alertsDelta} vs previous`}
+          tone={alertsDelta <= 0 ? 'good' : 'bad'}
+          note={`${escalated30} escalated`}
+        />
+        <StatCard
+          icon={<Recycle size={20} />}
+          label={`Yarn saved, ${RANGE_WORD[range]}`}
+          value={roundKg(a.saved.saved).toLocaleString('en-IN')}
+          unit="kg"
+          pill={`${Math.round(100 - (a.saved.avgHeld / BASELINE_KG) * 100)}% less lost per incident`}
+          tone="good"
+          note={`${a.saved.incidents} holds, about ${Math.round(a.saved.avgHeld)} kg each`}
+        />
       </div>
 
       {isPlant && (
         <Panel
-          icon={<Locked size={18} />}
           title="Waiting for your approval"
           sub={waiting.length ? `${waiting.length} decision${waiting.length > 1 ? 's' : ''} need the plant head` : 'Nothing waiting'}
           aside={
@@ -150,9 +153,7 @@ export function Overview() {
                 <li key={h.id}>
                   <Link to="/dashboard/held" className="flex items-center gap-4 py-3 hover:bg-sunken">
                     <span className="t-data">{h.frameId}</span>
-                    <span className="t-small flex-1 text-muted">
-                      Lot {h.lotId} · {roundKg(holdKg(h, now))} kg held
-                    </span>
+                    <span className="t-small flex-1 text-muted">Lot {h.lotId} · {roundKg(holdKg(h, now))} kg held</span>
                     <span className="t-small-strong text-brand">Review</span>
                   </Link>
                 </li>
@@ -164,160 +165,84 @@ export function Overview() {
         </Panel>
       )}
 
-      <div className="grid gap-5 lg:grid-cols-3">
-        <Panel icon={<Fire size={18} />} title="Calm streak" sub="Days without a critical alert">
-          <p className="flex items-baseline gap-2">
-            <span className="t-hero !text-[44px] !leading-[48px]">{streak}</span>
-            <span className="t-body-strong text-brand">{streak === 1 ? 'Day' : 'Days'}</span>
-          </p>
-          <p className="t-small mt-1 text-muted">Best in 30 days: {best}</p>
-          <div className="mt-4 rounded-[16px] bg-surface p-3">
-            <div className="flex items-center justify-between">
-              <span className="t-small text-muted">Last 7 days</span>
-              <span className="t-small-strong text-ok">{calm.slice(-7).filter(Boolean).length} calm</span>
-            </div>
-            <div className="mt-2 grid grid-cols-7 gap-1.5" role="img" aria-label="Last 7 days, green is calm, red had a critical alert">
-              {calm.slice(-7).map((c, i) => (
-                <span key={i} className={cx('h-6 rounded-[8px]', c ? 'bg-ok' : 'bg-critical')} />
-              ))}
-            </div>
+      <div className={cx('grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]', isPlant && 'hidden')}>
+        <Panel title="How fast alerts are seen" sub="Median minutes from alert to Seen, rolling 7 days">
+          <TrendArea
+            points={a.trend}
+            limit={5}
+            limitLabel="5 min limit"
+            format={(v) => `${v.toFixed(1)} min to Seen`}
+            dayLabel={dayMonth}
+            label="Median minutes to Seen over the last 30 days, against the 5 minute limit"
+          />
+        </Panel>
+        <CalendarPanel s={s} now={now} onOpen={(id) => nav(`/dashboard/tickets/${id}`)} />
+      </div>
+
+      <Panel
+                    className={isPlant ? "hidden" : undefined}
+                    title="Ring frames, floor order"
+          sub={`${states.running} of ${s.frames.length} running normally${states.stopped ? `, ${states.stopped} stopped for doffing` : ''}`}
+          aside={<Link to="/dashboard/machines" className="t-small-strong flex items-center gap-1 text-brand hover:underline">Machines <ArrowRight size={14} /></Link>}
+        >
+          <FloorMap s={s} now={now} onOpen={(id) => nav(`/dashboard/machines/${id}`)} />
+          <div className="mt-5">
+            <CategoryBar
+              label="Frames by state"
+              parts={[
+                { key: 'running', value: states.running, color: 'var(--neutral-state)', word: 'Running' },
+                { key: 'warning', value: states.warning, color: 'var(--major-fill)', word: 'Warning' },
+                { key: 'fault', value: states.fault, color: 'var(--critical)', word: 'Failed' },
+                { key: 'held', value: states.held, color: 'var(--held)', word: 'Yarn on hold' },
+                { key: 'stopped', value: states.stopped, color: 'var(--line-strong)', word: 'Stopped' },
+              ]}
+            />
           </div>
         </Panel>
 
-        <Panel
-          icon={<Task size={18} />}
-          title="Needs attention"
-          sub={live.length ? `${live.length} open ticket${live.length > 1 ? 's' : ''}` : 'Nothing open'}
-          aside={
-            <Link to="/dashboard/tickets" className="t-small-strong flex items-center gap-1 text-brand hover:underline">
-              All <ArrowRight size={14} />
-            </Link>
-          }
-        >
-          {live.length ? (
-            <ul className="flex flex-col gap-2">
-              {live.slice(0, 3).map((t) => (
-                <li key={t.id}>
-                  <button type="button" onClick={() => nav(`/dashboard/tickets/${t.id}`)} className="flex w-full items-center gap-3 rounded-[16px] bg-surface px-3 py-2.5 text-left hover:bg-sunken">
-                    <SeverityShape level={t.severity} />
-                    <span className="min-w-0 flex-1">
-                      <span className="t-small-strong block truncate">
-                        {t.frameId} · {t.title}
-                      </span>
-                      <span className="t-small block truncate text-muted">
-                        Opened {hhmm(t.createdAt)} · {readingLine(s, t)}
-                      </span>
-                    </span>
-                    <StatusChip kind={ticketChip(t, now)} />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <Empty title="All clear" body="No open tickets. Every frame is running normally." />
-          )}
-        </Panel>
-
-        <Panel icon={<Time size={18} />} title="Shifts today" sub="Who is on, and what they handled">
-          <ul className="flex flex-col gap-2">
-            {order.map((sh) => {
-              const sup = s.users.find((u) => u.role === 'supervisor' && u.shift === sh);
-              const n = s.tickets.filter((t) => t.shift === sh && t.severity !== 'minor' && t.createdAt <= now && millDayKey(t.createdAt) === todayKey).length;
-              const state = sh === here ? 'now' : order.indexOf(sh) < order.indexOf(here) ? 'done' : 'next';
-              return (
-                <li key={sh} className={cx('rounded-[16px] px-3 py-2.5', state === 'now' ? 'bg-ok-soft' : 'bg-surface')}>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="t-label text-[11px] text-muted">
-                      {sh} shift · {SHIFT_HOURS[sh]}
-                    </span>
-                    <span className={cx('t-small-strong rounded-full px-2 !text-[11px]', state === 'now' ? 'bg-raised text-ok' : 'text-muted')}>
-                      {state === 'now' ? 'On now' : state === 'done' ? 'Completed' : 'Next'}
-                    </span>
-                  </div>
-                  <p className="t-small-strong mt-1">
-                    {sup?.name ?? 'Unassigned'} <span className="font-normal text-muted">· {n} alert{n === 1 ? '' : 's'}</span>
-                  </p>
-                </li>
-              );
-            })}
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,420px)]">
+        <Panel title="Open tickets" sub={`${live.length} not closed yet`} aside={<Link to="/dashboard/tickets" className="t-small-strong flex items-center gap-1 text-brand hover:underline">All tickets <ArrowRight size={14} /></Link>}>
+          <ul className="divide-y divide-[var(--line)]">
+            {live.map((t) => (
+              <li key={t.id}>
+                <button type="button" onClick={() => nav(`/dashboard/tickets/${t.id}`)} className="grid w-full grid-cols-[110px_80px_1fr_auto_80px] items-center gap-3 py-2.5 text-left hover:bg-sunken">
+                  <SeverityBadge level={t.severity} />
+                  <span className="t-data">{t.frameId}</span>
+                  <span className="t-small min-w-0 truncate">
+                    {t.title} · <span className="t-data text-[13px]">{readingLine(s, t)}</span>
+                  </span>
+                  <StatusChip kind={ticketChip(t, now)} />
+                  <span className="t-data text-right text-[13px] text-muted">{hhmm(t.createdAt)}</span>
+                </button>
+              </li>
+            ))}
           </ul>
         </Panel>
-      </div>
-
-      <div className={cx('grid gap-5 lg:grid-cols-3', isPlant && 'hidden')}>
-        <Panel
-          className="lg:col-span-2"
-          icon={<Chip size={18} />}
-          title="Ring frames, floor order"
-          sub={`${states.running} of ${s.frames.length} running normally${states.stopped ? `, ${states.stopped} stopped for doffing` : ''}`}
-          aside={
-            <Link to="/dashboard/machines" className="t-small-strong flex items-center gap-1 text-brand hover:underline">
-              Machines <ArrowRight size={14} />
-            </Link>
-          }
-        >
-          <FloorMap s={s} now={now} onOpen={(id) => nav(`/dashboard/machines/${id}`)} />
-        </Panel>
-        <div className="flex min-w-0 flex-col gap-5">
-          <Panel icon={<Locked size={18} />} title="Yarn on hold" sub={holds.length ? `${holds.length} lot${holds.length > 1 ? 's' : ''} waiting for a decision` : 'Nothing waiting'}>
-            <p className="flex items-baseline gap-2">
-              <span className="t-hero !text-[40px] !leading-[44px]">{kg}</span>
-              <span className="t-body text-muted">kg</span>
-            </p>
-            <Link to="/dashboard/held" className="t-body-strong mt-4 inline-flex h-10 items-center justify-center rounded-[14px] border border-line bg-raised px-4 hover:bg-sunken">
-              Review held yarn
-            </Link>
-          </Panel>
-          <Panel icon={<Recycle size={18} />} title="Yarn saved" sub="Last 30 days, estimate">
-            <p className="flex items-baseline gap-2">
-              <span className="t-hero !text-[40px] !leading-[44px]">{roundKg(a.saved.saved).toLocaleString('en-IN')}</span>
-              <span className="t-body text-muted">kg</span>
-            </p>
-            <p className="t-small mt-2 text-muted">
-              {a.saved.incidents} holds averaged {Math.round(a.saved.avgHeld)} kg, against about {BASELINE_KG} kg before.
-            </p>
-          </Panel>
-        </div>
-      </div>
-
-      <div className={cx('grid gap-5 lg:grid-cols-2', isPlant && 'hidden')}>
-        <Panel icon={<ReportIcon size={18} />} title="Top causes" sub="What fixed frames had in common, last 30 days">
-          {a.causes.length ? <BarList items={a.causes} /> : <p className="t-small text-muted">No fixed tickets yet.</p>}
-        </Panel>
-        <AlertHeat grid={a.heat} />
+        {!isPlant && <AlertHeat grid={a.heat} />}
       </div>
     </div>
   );
 }
 
-const SHIFT_HOURS: Record<ShiftId, string> = { A: '00–08', B: '08–16', C: '16–24' };
-
-function HeroArt({ states }: { states: Record<string, number> }) {
-  const cells = ['bg-sunken', 'bg-brand', 'bg-sunken', 'bg-sunken', 'bg-ok', 'bg-sunken', 'bg-brand', 'bg-sunken', 'bg-sunken'];
-  return (
-    <div aria-hidden className="relative hidden h-[170px] w-[230px] shrink-0 sm:block">
-      <div className="absolute inset-x-3 top-4 rounded-[20px] bg-brand-soft p-3">
-        <div className="mb-2 flex gap-1">
-          <span className="size-1.5 rounded-full bg-brand" />
-          <span className="size-1.5 rounded-full bg-brand opacity-60" />
-          <span className="size-1.5 rounded-full bg-brand opacity-30" />
-        </div>
-        <div className="grid grid-cols-3 gap-2 rounded-[14px] bg-raised p-2.5">
-          {cells.map((c, i) => (
-            <span key={i} className={cx('h-7 rounded-[8px]', c)} />
-          ))}
-        </div>
-      </div>
-      <div className="absolute right-0 bottom-0 flex items-center gap-2 rounded-full bg-raised px-3 py-2 shadow-sheet">
-        <span className="grid size-6 place-items-center rounded-full bg-ok text-on-brand">
+function FloorStatus({ incidents, critical }: { incidents: number; critical: number }) {
+  if (!incidents)
+    return (
+      <p className="t-small-strong flex items-center gap-2 rounded-full border border-line bg-raised px-4 py-2 shadow-raised">
+        <span className="grid size-5 place-items-center rounded-full bg-ok-soft text-ok">
           <Checkmark size={14} />
         </span>
-        <span className="t-small-strong">{states.running} running</span>
-      </div>
-    </div>
+        Floor is calm. No live alerts.
+      </p>
+    );
+  return (
+    <p className={cx('t-small-strong flex items-center gap-2 rounded-full px-4 py-2', critical ? 'bg-critical text-on-critical' : 'bg-major-soft text-major')}>
+      <SeverityShape level={critical ? 'critical' : 'major'} className={critical ? '[&_path]:fill-[var(--on-critical)]' : ''} />
+      {incidents} live alert{incidents > 1 ? 's' : ''} need{incidents > 1 ? '' : 's'} someone on the floor
+    </p>
   );
 }
 
+// ---------- the floor, drawn as the mill floor ----------
 const TILE: Record<FrameStateKind, string> = {
   running: 'bg-sunken text-ink border-transparent',
   warning: 'bg-major-soft text-major border-major-fill',
@@ -512,6 +437,28 @@ export function InsightsPage() {
   );
 }
 
+const RANGE_WORD = { 1: 'today', 7: 'last 7 days', 30: 'last 30 days' } as const;
+
+function RangeToggle({ value, onChange }: { value: 1 | 7 | 30; onChange: (v: 1 | 7 | 30) => void }) {
+  const opts: [1 | 7 | 30, string][] = [[1, 'Today'], [7, 'Week'], [30, 'Month']];
+  return (
+    <div role="radiogroup" aria-label="Time range" className="flex rounded-full border border-line bg-raised p-1">
+      {opts.map(([v, label]) => (
+        <button
+          key={v}
+          type="button"
+          role="radio"
+          aria-checked={value === v}
+          onClick={() => onChange(v)}
+          className={cx('t-small h-8 rounded-full px-4', value === v ? 'bg-ink font-semibold text-surface' : 'text-muted hover:text-ink')}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 const HOURS = ['00', '03', '06', '09', '12', '15', '18', '21'];
 const DAYS7 = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -541,6 +488,51 @@ function AlertHeat({ grid }: { grid: number[][] }) {
         ))}
       </div>
     </Panel>
+  );
+}
+
+function StatCard({
+  icon,
+  label,
+  value,
+  unit,
+  pill,
+  tone,
+  note,
+  to,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+  unit?: string;
+  pill: string;
+  tone: 'good' | 'bad' | 'neutral';
+  note: string;
+  to?: string;
+}) {
+  const body = (
+    <>
+      <div className="flex items-center gap-3">
+        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-brand-soft text-brand">{icon}</span>
+        <p className="t-small-strong text-muted">{label}</p>
+      </div>
+      <p className="mt-4 flex items-baseline gap-1.5">
+        <span className="t-stat">{value}</span>
+        {unit && <span className="t-body text-muted">{unit}</span>}
+      </p>
+      <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span className={cx('t-small-strong rounded-full px-2.5 py-0.5 !text-[12px]', tone === 'good' ? 'bg-ok-soft text-ok' : tone === 'bad' ? 'bg-critical-soft text-critical' : 'bg-minor-soft text-minor')}>{pill}</span>
+        <span className="t-small text-muted">{note}</span>
+      </div>
+    </>
+  );
+  const cls = 'flex min-w-0 flex-col rounded-[16px] border border-line bg-raised p-5 shadow-raised';
+  return to ? (
+    <Link to={to} className={cx(cls, 'transition-shadow hover:shadow-sheet')}>
+      {body}
+    </Link>
+  ) : (
+    <div className={cls}>{body}</div>
   );
 }
 

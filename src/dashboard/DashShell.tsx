@@ -67,10 +67,7 @@ export function DashShell() {
             <rect width="64" height="64" rx="12" fill="var(--ink)" />
             <path d="M32 13 54 51H10Z" fill="var(--critical)" />
           </svg>
-          <span className="flex flex-col leading-tight">
-            <span className="t-section">QC Alert</span>
-            <span className="t-label text-[9px] text-neutral">Quality alert system</span>
-          </span>
+          <span className="t-section">QC Alert</span>
         </div>
         <nav aria-label="Dashboard" className="flex flex-col gap-5 pt-2">
           {NAV.map((g) => (
@@ -187,7 +184,6 @@ const TITLES: [string, string][] = [
 
 function TopBar({ live, urgent }: { live: number; urgent: boolean }) {
   const nav = useNavigate();
-  const user = useUser('dash');
   const { pathname } = useLocation();
   const [q, setQ] = useState('');
   const title = TITLES.find(([p]) => pathname.startsWith(p))?.[1] ?? 'Overview';
@@ -217,21 +213,10 @@ function TopBar({ live, urgent }: { live: number; urgent: boolean }) {
           className="t-small h-full w-full rounded-full bg-raised pr-4 pl-10 outline-none placeholder:text-[var(--neutral-state)] focus-visible:outline-2 focus-visible:outline-[var(--brand)]"
         />
       </label>
-      <span className={cx('t-small-strong hidden h-10 items-center gap-2 rounded-full px-4 lg:flex', urgent ? 'bg-critical-soft text-critical' : 'bg-ok-soft text-ok')}>
-        <span className={cx('size-2 rounded-full', urgent ? 'bg-critical' : 'bg-ok')} />
-        {urgent ? 'Alerts need attention' : 'Floor is calm'}
-      </span>
       <NavLink to="/dashboard/tickets" aria-label={`${live} open tickets`} className={cx(iconBtn, 'relative bg-raised')}>
         <Notification size={18} />
         {live > 0 && <span className={cx('absolute top-1.5 right-1.5 size-2.5 rounded-full', urgent ? 'bg-critical' : 'bg-brand')} />}
       </NavLink>
-      <div className="flex h-10 items-center gap-2 rounded-full bg-raised py-1 pr-4 pl-1">
-        <span className="grid size-8 place-items-center rounded-full bg-brand-soft text-[12px] font-semibold text-brand">{user.name.split(' ').map((p) => p[0]).join('')}</span>
-        <span className="hidden leading-tight sm:block">
-          <span className="t-small-strong block">{user.name.split(' ')[0]}</span>
-          <span className="t-small block !text-[11px] text-muted">{ROLE_WORD[user.role]}</span>
-        </span>
-      </div>
     </div>
   );
 }

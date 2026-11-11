@@ -41,7 +41,6 @@
 
 /* Type scale from Figma text styles */
 @utility t-page { font-size: 28px; line-height: 34px; font-weight: 600; letter-spacing: -0.02em; }
-@utility t-hero { font-size: 32px; line-height: 38px; font-weight: 700; letter-spacing: -0.025em; }
 @utility t-alert { font-size: 24px; line-height: 30px; font-weight: 700; letter-spacing: -0.015em; }
 @utility t-section { font-size: 18px; line-height: 24px; font-weight: 600; letter-spacing: -0.01em; }
 @utility t-body { font-size: 15px; line-height: 22px; font-weight: 400; }
