@@ -42,6 +42,7 @@ export function AppShell() {
     return () => window.removeEventListener('pointerdown', on);
   }, [sound]);
 
+  const canRaise = user.role === 'supervisor' || user.role === 'qc';
   const count =
     user.role === 'tester' ? pendingRequests(s).length : user.role === 'fitter' ? fitterJobs(s, user.id).length : myTickets(s, user, now).filter((t) => t.status !== 'fixed').length;
 
@@ -66,9 +67,9 @@ export function AppShell() {
         <main className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain">
           <Outlet />
         </main>
-        <nav aria-label="App" className="grid h-16 shrink-0 grid-cols-3 border-t border-line bg-raised pb-[env(safe-area-inset-bottom)]">
+        <nav aria-label="App" className={cx('grid h-16 shrink-0 border-t border-line bg-raised pb-[env(safe-area-inset-bottom)]', canRaise ? 'grid-cols-3' : 'grid-cols-2')}>
           <Tab to="/app" end icon={<Notification size={20} />} label="Alerts" badge={count} />
-          <Tab to="/app/raise" icon={<Add size={20} />} label="Raise ticket" />
+          {canRaise && <Tab to="/app/raise" icon={<Add size={20} />} label="Raise ticket" />}
           <Tab to="/app/previous" icon={<RecentlyViewed size={20} />} label="History" />
         </nav>
         {ready && <TakeoverLayer s={s} user={user} now={now} />}

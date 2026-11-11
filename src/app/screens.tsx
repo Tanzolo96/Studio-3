@@ -183,7 +183,10 @@ function TicketDetail({ s, t, now, user }: { s: MillState; t: Ticket; now: numbe
   const reading = t.readings.at(-1);
   const rule = reading && t.kind === 'test_fail' ? ruleFor(s, t.productId, reading.test) : undefined;
   const hold = t.holdId ? s.holds.find((h) => h.id === t.holdId) : undefined;
-  const canAct = user.role === 'supervisor' || user.role === 'qc';
+  const canAct = user.role === 'supervisor' || user.role === 'qc' || user.role === 'plant';
+  const canAsk = user.role === 'supervisor' || user.role === 'qc';
+  const askTest = reading && reading.test !== 'cv' ? reading.test : 'count';
+  const pendingAsk = s.requests.find((r) => r.ticketId === t.id && r.status === 'pending');
   const fitter = t.fitterId ? userName(s, t.fitterId) : undefined;
 
   let action: ReactNode = null;
@@ -371,6 +374,24 @@ function TicketDetail({ s, t, now, user }: { s: MillState; t: Ticket; now: numbe
           <Timeline s={s} t={t} now={now} dense />
         </div>
       </details>
+
+      {canAsk && !resolved && (
+        <div className="mt-4 flex flex-col gap-2">
+          {pendingAsk ? (
+            user.role === 'qc' ? (
+              <Link to={`/app/test/${pendingAsk.id}`} className="t-body-strong flex h-12 items-center justify-center rounded-[10px] border border-line bg-raised text-brand">
+                Enter the lab result
+              </Link>
+            ) : (
+              <p className="t-small rounded-[10px] bg-sunken px-3 py-2.5 text-center text-muted">Lab test asked, due {hhmm(pendingAsk.dueAt)}</p>
+            )
+          ) : (
+            <Button variant="secondary" block onClick={() => dispatch({ type: 'test/ask', ticketId: t.id, test: askTest, by: user.id } as never)}>
+              Ask the lab to test now
+            </Button>
+          )}
+        </div>
+      )}
 
       {canAct && !resolved && (
         <Button variant="ghost" block className="mt-4" onClick={() => setSheet('handover')}>
@@ -598,7 +619,7 @@ export function TestEntryScreen() {
         className="flex flex-col gap-5"
         onSubmit={(e) => {
           e.preventDefault();
-          if (value === undefined || invalid || user.role !== 'tester') return;
+          if (value === undefined || invalid || (user.role !== 'tester' && user.role !== 'qc')) return;
           const ev = dispatch({ type: 'result/enter', frameId: req.frameId, test: req.test, value, requestId: req.id, by: user.id });
           const r = useMillStateSnapshot().results.findLast((x) => x.requestId === req.id && x.at === ev.at);
           setSaved(r?.id);
@@ -622,10 +643,10 @@ export function TestEntryScreen() {
             <p className="t-small mt-3 text-critical">Saving this alerts the supervisor{rule?.severity === 'critical' ? ' and holds the yarn' : ''}.</p>
           )}
         </div>
-        <Button size="lg" block type="submit" disabled={value === undefined || invalid || user.role !== 'tester'}>
+        <Button size="lg" block type="submit" disabled={value === undefined || invalid || (user.role !== 'tester' && user.role !== 'qc')}>
           Save result
         </Button>
-        {user.role !== 'tester' && <p className="t-small text-center text-muted">Only the lab tester enters results.</p>}
+        {user.role !== 'tester' && user.role !== 'qc' && <p className="t-small text-center text-muted">Only the lab tester and the QC manager enter results.</p>}
       </form>
     </Page>
   );
@@ -741,8 +762,13 @@ export function PreviousScreen() {
     () =>
       s.tickets
         .filter((t) => (t.status === 'closed' || t.status === 'fixed') && t.createdAt <= now && now - t.createdAt < 31 * 86_400_000)
+        .filter((t) => {
+          if (user.role === 'fitter') return t.fitterId === user.id;
+          if (user.role === 'tester') return s.requests.some((r) => r.ticketId === t.id && s.results.some((x) => x.id === r.resultId && x.by === user.id));
+          return true;
+        })
         .sort((a, b) => b.createdAt - a.createdAt),
-    [s.tickets, now],
+    [s.tickets, s.requests, s.results, now, user.id, user.role],
   );
   const mine = past.filter((t) => t.seenBy === user.id);
   const myMedian = median(seenTimes(mine));
@@ -755,7 +781,7 @@ export function PreviousScreen() {
   }
   const select = 'h-12 rounded-[10px] border border-line-strong bg-raised px-2 t-small';
   return (
-    <Page title="History" sub={`Resolved issues, last 31 days · ${monthName(now)}`}>
+    <Page title="History" sub={`${user.role === 'fitter' ? 'Frames you repaired' : user.role === 'tester' ? 'Issues you tested' : 'Resolved issues'}, last 31 days · ${monthName(now)}`}>
       {user.role === 'supervisor' && (
         <div className="mb-4 grid grid-cols-2 gap-2">
           <div className="rounded-[16px] bg-raised p-3 shadow-raised">

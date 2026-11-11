@@ -217,6 +217,7 @@ export type MillEvent = Base &
     | { type: 'ticket/fixed'; ticketId: string; cause: string; note?: string; photo?: string }
     | { type: 'ticket/raise'; frameId: string; problem: string; severity: Severity; note?: string; photo?: string }
     | { type: 'ticket/handover'; ticketId: string; note: string }
+    | { type: 'test/ask'; ticketId: string; test: TestKind }
     | { type: 'hold/retest'; holdId: string }
     | { type: 'hold/decide'; holdId: string; outcome: Exclude<HoldOutcome, 'retest'>; reason: string }
     | { type: 'hold/approve'; holdId: string }

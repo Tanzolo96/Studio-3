@@ -5,6 +5,7 @@ import { fitterJobs, pendingRequests, takeoversFor } from '../engine/selectors';
 import { cx } from '../ui/primitives';
 import { ROLE_WORD } from '../app/Person';
 import { appRoutes, dashRoutes } from '../routes';
+import { InDemo } from '../dashboard/DashShell';
 
 const PEOPLE = ['krish', 'rohan', 'suresh', 'priya', 'mohit'];
 
@@ -24,7 +25,9 @@ export function DemoPage() {
   return (
     <div className="flex h-dvh bg-sunken text-ink">
       <div className="h-full min-w-0 flex-1 overflow-auto">
-        <RouterProvider router={dash} />
+        <InDemo.Provider value>
+          <RouterProvider router={dash} />
+        </InDemo.Provider>
       </div>
       <div className="flex h-full w-[430px] shrink-0 flex-col border-l border-line">
         <div role="tablist" aria-label="Phone belongs to" className="mx-3 mt-3 flex gap-1 rounded-[10px] bg-surface p-1">

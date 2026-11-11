@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { createContext, useContext, useState, type ReactNode } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Asleep, Chip, Dashboard, Idea, Light, Locked, Notification, Report, Rule, Search, Task, UserAvatar } from '@carbon/icons-react';
 import { useMillState, useNow, useSession, useTheme, useUser } from '../store/store';
@@ -40,7 +40,11 @@ const NAV: { group: string; items: { to: string; label: string; end?: boolean }[
   },
 ];
 
+/** True when the dashboard is shown inside the jury demo page. */
+export const InDemo = createContext(false);
+
 export function DashShell() {
+  const inDemo = useContext(InDemo);
   const surfaceTheme = useTheme('dash');
   const s = useMillState();
   const now = useNow();
@@ -83,7 +87,7 @@ export function DashShell() {
           ))}
         </nav>
         <div className="mt-auto p-1">
-          <SimulatorDock />
+          {inDemo && <SimulatorDock />}
           <div className="mb-2 grid grid-cols-2 gap-1" role="radiogroup" aria-label="Theme">
             {(['day', 'night'] as const).map((t) => (
               <button

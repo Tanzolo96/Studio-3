@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { ArrowRight, Checkmark, ChevronLeft, ChevronRight, Recycle, Timer, Locked, WarningAlt } from '@carbon/icons-react';
 import type { MillState, Ticket } from '../engine/types';
 import { useMillState, useNow, useUser } from '../store/store';
-import { bySeverityThenAge, escalation, frameView, heldKg, openHolds, type FrameStateKind } from '../engine/selectors';
+import { bySeverityThenAge, escalation, frameView, heldKg, holdNeedsApproval, openHolds, type FrameStateKind } from '../engine/selectors';
 import { frameWord, holdKg, roundKg, userName } from '../engine/reducer';
 import { insights } from '../engine/insights';
 import { BASELINE_KG, alertHeat, dailyAlerts, frameStateCounts, seenTrend, shiftResponse, ticketsSince, topCauses, yarnSaved } from '../engine/analytics';
@@ -70,6 +70,8 @@ export function Overview() {
   const greet = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
   const weekday = WEEKDAY[new Date(now + 5.5 * 3600000).getUTCDay()];
   const crit = incidents.filter((t) => t.severity === 'critical').length;
+  const isPlant = user.role === 'plant';
+  const waiting = s.holds.filter((h) => h.status === 'on_hold' && holdNeedsApproval(h));
 
   return (
     <div className="mx-auto flex max-w-[1240px] flex-col gap-6">
@@ -97,7 +99,7 @@ export function Overview() {
         </section>
       )}
 
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(230px,1fr))] gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           icon={<Timer size={20} />}
           label="Time to Seen"
@@ -135,7 +137,35 @@ export function Overview() {
         />
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+      {isPlant && (
+        <Panel
+          title="Waiting for your approval"
+          sub={waiting.length ? `${waiting.length} decision${waiting.length > 1 ? 's' : ''} need the plant head` : 'Nothing waiting'}
+          aside={
+            <Link to="/dashboard/held" className="t-small-strong flex items-center gap-1 text-brand hover:underline">
+              Held yarn <ArrowRight size={14} />
+            </Link>
+          }
+        >
+          {waiting.length ? (
+            <ul className="divide-y divide-[var(--line)]">
+              {waiting.map((h) => (
+                <li key={h.id}>
+                  <Link to="/dashboard/held" className="flex items-center gap-4 py-3 hover:bg-sunken">
+                    <span className="t-data">{h.frameId}</span>
+                    <span className="t-small flex-1 text-muted">Lot {h.lotId} · {roundKg(holdKg(h, now))} kg held</span>
+                    <span className="t-small-strong text-brand">Review</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="t-small text-muted">Big decisions that the QC manager cannot close alone appear here.</p>
+          )}
+        </Panel>
+      )}
+
+      <div className={cx('grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]', isPlant && 'hidden')}>
         <Panel title="How fast alerts are seen" sub="Median minutes from alert to Seen, rolling 7 days">
           <TrendArea
             points={a.trend}
@@ -150,6 +180,7 @@ export function Overview() {
       </div>
 
       <Panel
+                    className={isPlant ? "hidden" : undefined}
                     title="Ring frames, floor order"
           sub={`${states.running} of ${s.frames.length} running normally${states.stopped ? `, ${states.stopped} stopped for doffing` : ''}`}
           aside={<Link to="/dashboard/machines" className="t-small-strong flex items-center gap-1 text-brand hover:underline">Machines <ArrowRight size={14} /></Link>}
@@ -187,7 +218,7 @@ export function Overview() {
             ))}
           </ul>
         </Panel>
-        <AlertHeat grid={a.heat} />
+        {!isPlant && <AlertHeat grid={a.heat} />}
       </div>
     </div>
   );

@@ -130,3 +130,16 @@ describe('alert heat map', () => {
     expect(total).toBeGreaterThan(0);
   });
 });
+
+describe('ask for a test now', () => {
+  it('adds one urgent lab request and does not duplicate it', () => {
+    const s = seedState();
+    run(s, DEMO_START, { type: 'ticket/raise', frameId: 'RF-05', problem: 'Yarn looks uneven', severity: 'major', by: 'krish' });
+    const t = s.tickets.at(-1)!;
+    run(s, DEMO_START + MIN, { type: 'test/ask', ticketId: t.id, test: 'count', by: 'krish' } as never);
+    run(s, DEMO_START + 2 * MIN, { type: 'test/ask', ticketId: t.id, test: 'count', by: 'krish' } as never);
+    const asked = s.requests.filter((r) => r.ticketId === t.id && r.reason === 'manual' && r.status === 'pending');
+    expect(asked).toHaveLength(1);
+    expect(asked[0].urgent).toBe(true);
+  });
+});

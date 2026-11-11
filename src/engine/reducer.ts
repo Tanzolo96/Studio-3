@@ -395,6 +395,15 @@ export function apply(s: MillState, e: MillEvent): void {
       return;
     }
 
+    case 'test/ask': {
+      const t = s.tickets.find((x) => x.id === e.ticketId);
+      if (!t || t.status === 'closed' || t.status === 'fixed') return;
+      if (s.requests.some((r) => r.ticketId === t.id && r.status === 'pending' && r.test === e.test)) return;
+      addRequest(s, { at: e.at, frameId: t.frameId, test: e.test, reason: 'manual', urgent: true, dueAt: e.at + 15 * MIN, ticketId: t.id });
+      log(t, e.at, 'contained', `Urgent ${TEST[e.test].name.toLowerCase()} test asked from the lab`, e.by);
+      return;
+    }
+
     case 'ticket/handover': {
       const t = s.tickets.find((x) => x.id === e.ticketId);
       if (!t || t.status === 'closed') return;
