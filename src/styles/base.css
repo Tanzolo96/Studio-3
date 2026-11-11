@@ -94,6 +94,8 @@ p { margin: 0; text-wrap: pretty; }
 .anim-grow-y { transform-origin: bottom; transform-box: fill-box; animation: grow-y 700ms var(--ease-out) both; animation-delay: calc(var(--i, 0) * 18ms); }
 .anim-pop { animation: pop 420ms var(--ease-out) both; animation-delay: calc(var(--i, 0) * 12ms); }
 .anim-gauge { animation: gauge 1300ms var(--ease-out) both; animation-delay: calc(200ms + var(--i, 0) * 90ms); }
+@keyframes breathe { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.35; transform: scale(0.6); } }
+.breathe { animation: breathe 2.4s ease-in-out infinite; animation-delay: calc(var(--i, 0) * -110ms); }
 .lift { transition: transform 220ms var(--ease-out), box-shadow 220ms var(--ease-out), border-color 220ms var(--ease-out); }
 .lift:hover { transform: translateY(-2px); box-shadow: var(--shadow-sheet); }
 .anim-fade { animation: fade 200ms var(--ease-out) both; }

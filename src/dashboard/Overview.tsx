@@ -1,6 +1,6 @@
 import { useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowRight, ChevronLeft, ChevronRight } from '@carbon/icons-react';
+import { ArrowRight, ChevronLeft, ChevronRight, Locked } from '@carbon/icons-react';
 import type { MillState, Ticket } from '../engine/types';
 import { useMillState, useNow, useUser } from '../store/store';
 import { bySeverityThenAge, escalation, frameView, holdNeedsApproval, type FrameStateKind } from '../engine/selectors';
@@ -219,7 +219,7 @@ export function Overview() {
           }
         >
           <FloorMap s={s} now={now} onOpen={(id) => nav(`/dashboard/machines/${id}`)} />
-          <div className="mt-auto pt-6">
+          <div className="mt-5">
             <CategoryBar
               label="Frames by state"
               parts={[
@@ -324,20 +324,27 @@ function GaugeRow({ i = 0, label, value, goal, pct, invert }: { i?: number; labe
 }
 
 const TILE: Record<FrameStateKind, string> = {
-  running: 'bg-sunken text-ink border-transparent',
+  running: 'bg-raised text-ink border-line hover:border-line-strong',
   warning: 'bg-major-soft text-major border-major-fill',
   fault: 'bg-critical text-on-critical border-critical pulse-critical',
   held: 'bg-held-soft text-held border-held',
   stopped: 'bg-transparent text-muted border-dashed border-line-strong',
 };
 const SHORT: Record<FrameStateKind, string> = { running: 'Run', warning: 'Warn', fault: 'Fail', held: 'Hold', stopped: 'Stop' };
+const DOT: Record<FrameStateKind, string> = { running: 'bg-ok breathe', warning: 'bg-major-fill breathe', fault: 'bg-[var(--on-critical)]', held: '', stopped: '' };
+/** One colour per lot, so sister frames spinning the same lot read as a group. */
+const LOT_COLOR = ['var(--brand)', 'var(--data)', 'var(--major-fill)', 'var(--ok)', 'var(--held)', 'var(--ink)'];
 
 function FloorMap({ s, now, onOpen }: { s: MillState; now: number; onOpen: (id: string) => void }) {
   const rows = [s.frames.slice(0, 8), s.frames.slice(8, 16), s.frames.slice(16, 24)];
   const [hover, setHover] = useState<string | null>(null);
+  const [lotPick, setLotPick] = useState<string | null>(null);
   const hv = hover ? frameView(s, hover, now) : undefined;
   const hf = hover ? s.frames.find((f) => f.id === hover) : undefined;
   const product = hf ? s.products.find((p) => p.id === s.lots.find((l) => l.id === hf.lotId)!.productId) : undefined;
+  const lots = [...new Set(s.frames.map((f) => f.lotId))].sort();
+  const colorOf = (lotId: string) => LOT_COLOR[lots.indexOf(lotId) % LOT_COLOR.length];
+  const focusLot = lotPick ?? hf?.lotId ?? null;
   return (
     <div className="flex flex-col gap-2">
       {rows.map((row, r) => (
@@ -345,6 +352,7 @@ function FloorMap({ s, now, onOpen }: { s: MillState; now: number; onOpen: (id: 
           <span className="t-small text-muted">Row {r + 1}</span>
           {row.map((f, c) => {
             const v = frameView(s, f.id, now);
+            const dim = focusLot !== null && f.lotId !== focusLot;
             return (
               <button
                 key={f.id}
@@ -353,26 +361,58 @@ function FloorMap({ s, now, onOpen }: { s: MillState; now: number; onOpen: (id: 
                 onMouseEnter={() => setHover(f.id)}
                 onFocus={() => setHover(f.id)}
                 onMouseLeave={() => setHover(null)}
-                aria-label={`${f.id}: ${v.label}. ${v.line}`}
+                onBlur={() => setHover(null)}
+                aria-label={`${f.id}: ${v.label}. Lot ${f.lotId}. ${v.line}`}
                 style={{ '--i': r * 8 + c } as CSSProperties}
-                className={cx('flex h-[60px] min-w-0 flex-col items-center justify-center overflow-hidden whitespace-nowrap rounded-[10px] border-2 transition-transform hover:-translate-y-0.5', v.kind !== 'fault' && 'anim-pop', TILE[v.kind])}
+                className={cx(
+                  'relative flex h-[66px] min-w-0 flex-col items-center justify-center overflow-hidden whitespace-nowrap rounded-[10px] border-2 transition-[transform,opacity,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-sheet',
+                  v.kind !== 'fault' && 'anim-pop',
+                  TILE[v.kind],
+                  dim && 'opacity-35',
+                  focusLot !== null && !dim && 'ring-2 ring-[var(--brand)] ring-offset-1 ring-offset-[var(--surface-raised)]',
+                )}
               >
-                <span className="font-mono text-[15px] font-semibold leading-5 tabular-nums">{f.num}</span>
+                {DOT[v.kind] && <span className={cx('absolute top-1.5 right-1.5 size-1.5 rounded-full', DOT[v.kind])} style={{ '--i': r * 8 + c } as CSSProperties} />}
+                {v.kind === 'held' && <Locked size={12} className="absolute top-1.5 right-1.5" />}
+                <span className="font-mono text-[16px] font-semibold leading-5 tabular-nums">{f.num}</span>
                 <span className="text-[11px] leading-4 opacity-80">{v.kind === 'running' ? f.lotId : SHORT[v.kind]}</span>
+                <span className="absolute inset-x-2 bottom-1 h-[3px] rounded-full" style={{ background: colorOf(f.lotId) }} aria-hidden />
               </button>
             );
           })}
         </div>
       ))}
-      <p className="t-small mt-1 h-5 text-muted" aria-live="polite">
+      <p className="t-small mt-1 h-5 truncate text-muted" aria-live="polite">
         {hf && hv ? (
           <>
             <span className="font-semibold text-ink">{hf.id}</span> · {product?.name} · Lot {hf.lotId} · {hv.label} · {hv.line}
           </>
         ) : (
-          'Point at a frame for details. Numbers show the lot each frame is spinning.'
+          'Point at a frame for details. The coloured line under each frame is its lot.'
         )}
       </p>
+      <div className="mt-2 flex flex-wrap gap-2" role="group" aria-label="Lots on the floor">
+        {lots.map((id) => {
+          const lot = s.lots.find((l) => l.id === id);
+          const prod = lot ? s.products.find((p) => p.id === lot.productId) : undefined;
+          const n = s.frames.filter((f) => f.lotId === id).length;
+          const on = lotPick === id;
+          return (
+            <button
+              key={id}
+              type="button"
+              aria-pressed={on}
+              onClick={() => setLotPick(on ? null : id)}
+              className={cx('t-small flex items-center gap-2 rounded-[8px] border px-2.5 py-1.5 transition-colors', on ? 'border-[var(--brand)] bg-brand-soft text-ink' : 'border-line bg-raised text-muted hover:border-line-strong hover:text-ink')}
+            >
+              <span className="h-2.5 w-2.5 rounded-[3px]" style={{ background: colorOf(id) }} />
+              <span className="t-small-strong text-ink">Lot {id}</span>
+              {prod && <span>{prod.short}</span>}
+              <span className="t-data text-[11px]">{n}</span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
