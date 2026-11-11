@@ -1,25 +1,25 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowRight, Checkmark, ChevronLeft, ChevronRight, Recycle, Timer, Locked, WarningAlt } from '@carbon/icons-react';
+import { ArrowRight, ChevronLeft, ChevronRight } from '@carbon/icons-react';
 import type { MillState, Ticket } from '../engine/types';
 import { useMillState, useNow, useUser } from '../store/store';
-import { bySeverityThenAge, escalation, frameView, heldKg, holdNeedsApproval, openHolds, type FrameStateKind } from '../engine/selectors';
+import { bySeverityThenAge, escalation, frameView, holdNeedsApproval, type FrameStateKind } from '../engine/selectors';
 import { frameWord, holdKg, roundKg, userName } from '../engine/reducer';
 import { insights } from '../engine/insights';
 import { BASELINE_KG, alertHeat, dailyAlerts, frameStateCounts, seenTrend, shiftResponse, ticketsSince, topCauses, yarnSaved } from '../engine/analytics';
-import { DAY, dayMonth, hhmm, mill, millDayKey, millHour, shiftAt, timer } from '../engine/time';
-import { cx, Empty, SeverityBadge, SeverityShape, StatusChip } from '../ui/primitives';
+import { DAY, dayMonth, hhmm, mill, millDayKey, shiftAt, timer } from '../engine/time';
+import { cx, Empty, SeverityBadge, StatusChip } from '../ui/primitives';
 import { InsightCard, readingLine, ticketChip } from '../ui/cards';
-import { BarList, CategoryBar, Ring, SeverityLegend, ShiftBars, StackedColumns, TrendArea } from '../ui/charts';
+import { BarList, Ring, SeverityLegend, ShiftBars, StackedColumns, TrendArea } from '../ui/charts';
 import { PageHead } from './DashShell';
 
 export function Panel({ title, sub, aside, children, className }: { title: string; sub?: string; aside?: ReactNode; children: ReactNode; className?: string }) {
   return (
-    <section className={cx('flex min-w-0 flex-col rounded-[16px] border border-line bg-raised p-5 shadow-raised', className)}>
+    <section className={cx('flex min-w-0 flex-col rounded-[12px] border border-line bg-raised p-5', className)}>
       <header className="mb-4 flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="t-body-strong">{title}</h2>
-          {sub && <p className="t-small mt-0.5 text-muted">{sub}</p>}
+          <h2 className="t-label text-muted">{title}</h2>
+          {sub && <p className="t-small mt-1 text-muted">{sub}</p>}
         </div>
         {aside}
       </header>
@@ -28,67 +28,50 @@ export function Panel({ title, sub, aside, children, className }: { title: strin
   );
 }
 
-const WEEKDAY = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-
 export function Overview() {
   const s = useMillState();
   const now = useNow();
   const user = useUser('dash');
   const nav = useNavigate();
-  const [range, setRange] = useState<1 | 7 | 30>(30);
 
   const live = s.tickets.filter((t) => t.status !== 'closed' && t.status !== 'fixed').sort(bySeverityThenAge);
   const incidents = live.filter((t) => t.severity !== 'minor');
   const nowMin = Math.floor(now / 60000);
   const a = useMemo(() => {
-    const since30 = mill(millDayKey(now)) - (range - 1) * DAY;
+    const since30 = mill(millDayKey(now)) - 29 * DAY;
     const month = ticketsSince(s, since30, now);
-    return {
-      daily: dailyAlerts(s, now, 30),
-      heat: alertHeat(s, now, 30),
-      prev: dailyAlerts(s, now, 60),
-      trend: seenTrend(s, now, 30),
-      causes: topCauses(month).slice(0, 6),
-      shifts: shiftResponse(month),
-      saved: yarnSaved(s, now, since30),
-      month,
-    };
+    return { daily: dailyAlerts(s, now, 30), trend: seenTrend(s, now, 30), saved: yarnSaved(s, now, since30), month };
     // recompute once a mill minute
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [s, nowMin, range]);
+  }, [s, nowMin]);
   const states = frameStateCounts(s, now);
-  const holds = openHolds(s);
-  const kg = roundKg(heldKg(s, now));
-  const alerts30 = a.daily.slice(-range).reduce((n, d) => n + d.critical + d.major, 0);
-  const escalated30 = a.month.filter((t) => t.severity !== 'minor' && escalation(t, now).level > 0).length;
-  const prevSeen = a.trend.length > 7 ? a.trend[a.trend.length - 8].mins : null;
-  const alertsPrev = a.prev.slice(-2 * range, -range).reduce((n, d) => n + d.critical + d.major, 0);
-  const alertsDelta = alerts30 - alertsPrev;
-  const seenNow = [...a.trend].reverse().find((p) => p.mins !== null)?.mins ?? null;
-  const seenDelta = seenNow !== null && prevSeen !== null ? seenNow - prevSeen : null;
-  const h = millHour(now);
-  const greet = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
-  const weekday = WEEKDAY[new Date(now + 5.5 * 3600000).getUTCDay()];
-  const crit = incidents.filter((t) => t.severity === 'critical').length;
   const isPlant = user.role === 'plant';
   const waiting = s.holds.filter((h) => h.status === 'on_hold' && holdNeedsApproval(h));
 
+  const seenNow = [...a.trend].reverse().find((p) => p.mins !== null)?.mins ?? null;
+  const serious = a.month.filter((t) => t.severity !== 'minor' && t.seenAt);
+  const inTime = serious.filter((t) => (t.seenAt as number) - t.alertAt <= 5 * 60000).length;
+  const inTimePct = serious.length ? Math.round((inTime / serious.length) * 100) : 100;
+  const calmDays = a.daily.filter((d) => d.critical === 0).length;
+  const saved = a.saved;
+  const lessLost = Math.max(0, Math.round(100 - (saved.avgHeld / BASELINE_KG) * 100));
+  const doneCount = a.month.filter((t) => t.status === 'closed' || t.status === 'fixed').length;
+  const resolvedPct = a.month.length ? Math.round((doneCount / a.month.length) * 100) : 100;
+  const weekday = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][new Date(now + 5.5 * 3600000).getUTCDay()];
+
   return (
-    <div className="mx-auto flex max-w-[1240px] flex-col gap-6">
-      <header className="flex flex-wrap items-end justify-between gap-4">
+    <div className="mx-auto flex max-w-[1240px] flex-col gap-5">
+      <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="t-small-strong text-brand">Dashboard / Overview</p>
-          <h1 className="t-page mt-1">
-            {greet}, {user.name.split(' ')[0]}
-          </h1>
-          <p className="t-small mt-1 text-muted">
+          <h1 className="t-page">Overview</h1>
+          <p className="t-small mt-0.5 text-muted">
             {weekday} {dayMonth(now)} · {shiftAt(now)} shift · {hhmm(now)}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <FloorStatus incidents={incidents.length} critical={crit} />
-          <RangeToggle value={range} onChange={setRange} />
-        </div>
+        <p className="t-small-strong flex items-center gap-2">
+          <span className={cx('size-2 rounded-full', incidents.length ? 'bg-critical' : 'bg-ok')} />
+          {incidents.length ? `${incidents.length} live alert${incidents.length > 1 ? 's' : ''}` : 'No live alerts'}
+        </p>
       </header>
 
       {incidents.length > 0 && (
@@ -99,43 +82,30 @@ export function Overview() {
         </section>
       )}
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard
-          icon={<Timer size={20} />}
+      <section className="grid gap-4 md:grid-cols-3" aria-label="Key numbers">
+        <Goal
           label="Time to Seen"
           value={seenNow !== null ? timer(seenNow * 60000) : '–'}
-          pill={seenDelta === null ? 'No alerts yet' : `${seenDelta <= 0 ? '' : '+'}${seenDelta.toFixed(1)} min vs last week`}
-          tone={seenDelta === null ? 'neutral' : seenDelta <= 0 ? 'good' : 'bad'}
-          note={seenNow !== null && seenNow <= 5 ? 'Inside the 5 min limit' : 'Over the 5 min limit'}
+          goal="5:00"
+          badge={seenNow === null ? undefined : seenNow <= 5 ? { text: 'On target', tone: 'good' } : { text: 'Over limit', tone: 'bad' }}
+          note="Median minutes from alert to Seen, last 7 days"
         />
-        <StatCard
-          icon={<Locked size={20} />}
-          label="Yarn on hold"
-          value={`${kg}`}
+        <Goal
+          label="Seen in time"
+          value={`${inTimePct}%`}
+          goal="90%"
+          badge={inTimePct >= 90 ? { text: 'On target', tone: 'good' } : { text: `${90 - inTimePct}% short`, tone: 'bad' }}
+          note={`${inTime} of ${serious.length} critical and major alerts, last 30 days`}
+        />
+        <Goal
+          label="Yarn held per incident"
+          value={`${Math.round(saved.avgHeld)}`}
           unit="kg"
-          pill={holds.length ? `${holds.length} lot${holds.length > 1 ? 's' : ''} waiting` : 'Nothing waiting'}
-          tone={holds.length ? 'bad' : 'neutral'}
-          note="Waiting for a decision"
-          to="/dashboard/held"
+          goal={`${BASELINE_KG} kg`}
+          badge={{ text: `${lessLost}% less`, tone: 'good' }}
+          note={`${roundKg(saved.saved).toLocaleString('en-IN')} kg saved in 30 days, estimate`}
         />
-        <StatCard
-          icon={<WarningAlt size={20} />}
-          label={`Alerts, ${RANGE_WORD[range]}`}
-          value={`${alerts30}`}
-          pill={alertsDelta === 0 ? 'Same as before' : `${alertsDelta < 0 ? '' : '+'}${alertsDelta} vs previous`}
-          tone={alertsDelta <= 0 ? 'good' : 'bad'}
-          note={`${escalated30} escalated`}
-        />
-        <StatCard
-          icon={<Recycle size={20} />}
-          label={`Yarn saved, ${RANGE_WORD[range]}`}
-          value={roundKg(a.saved.saved).toLocaleString('en-IN')}
-          unit="kg"
-          pill={`${Math.round(100 - (a.saved.avgHeld / BASELINE_KG) * 100)}% less lost per incident`}
-          tone="good"
-          note={`${a.saved.incidents} holds, about ${Math.round(a.saved.avgHeld)} kg each`}
-        />
-      </div>
+      </section>
 
       {isPlant && (
         <Panel
@@ -151,9 +121,11 @@ export function Overview() {
             <ul className="divide-y divide-[var(--line)]">
               {waiting.map((h) => (
                 <li key={h.id}>
-                  <Link to="/dashboard/held" className="flex items-center gap-4 py-3 hover:bg-sunken">
+                  <Link to="/dashboard/held" className="flex items-center gap-4 py-2.5 hover:bg-sunken">
                     <span className="t-data">{h.frameId}</span>
-                    <span className="t-small flex-1 text-muted">Lot {h.lotId} · {roundKg(holdKg(h, now))} kg held</span>
+                    <span className="t-small flex-1 text-muted">
+                      Lot {h.lotId} · {roundKg(holdKg(h, now))} kg held
+                    </span>
                     <span className="t-small-strong text-brand">Review</span>
                   </Link>
                 </li>
@@ -165,84 +137,112 @@ export function Overview() {
         </Panel>
       )}
 
-      <div className={cx('grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]', isPlant && 'hidden')}>
-        <Panel title="How fast alerts are seen" sub="Median minutes from alert to Seen, rolling 7 days">
-          <TrendArea
-            points={a.trend}
-            limit={5}
-            limitLabel="5 min limit"
-            format={(v) => `${v.toFixed(1)} min to Seen`}
-            dayLabel={dayMonth}
-            label="Median minutes to Seen over the last 30 days, against the 5 minute limit"
-          />
-        </Panel>
-        <CalendarPanel s={s} now={now} onOpen={(id) => nav(`/dashboard/tickets/${id}`)} />
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+        <section data-theme="night" className="rounded-[12px] bg-surface p-5 text-ink">
+          <header className="flex items-center justify-between">
+            <h2 className="t-label text-muted">Needs attention</h2>
+            <Link to="/dashboard/tickets" className="t-small-strong flex items-center gap-1 text-brand hover:underline">
+              All tickets <ArrowRight size={14} />
+            </Link>
+          </header>
+          {live.length ? (
+            <ul className="mt-3 flex flex-col divide-y divide-[var(--line)]">
+              {live.slice(0, 4).map((t) => {
+                const mins = (now - t.alertAt) / 60000;
+                const pct = Math.min(100, Math.round((mins / t.escalateQcMins) * 100));
+                return (
+                  <li key={t.id}>
+                    <button type="button" onClick={() => nav(`/dashboard/tickets/${t.id}`)} className="block w-full py-3 text-left hover:opacity-90">
+                      <div className="flex items-center gap-3">
+                        <span className="t-body-strong">{t.frameId}</span>
+                        <span className="t-small min-w-0 flex-1 truncate text-muted">{t.title}</span>
+                        <SeverityBadge level={t.severity} />
+                      </div>
+                      <div className="mt-2.5 flex items-center gap-3">
+                        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-sunken" role="img" aria-label={`${Math.round(mins)} of ${t.escalateQcMins} minutes before escalation`}>
+                          <div className={cx('h-full rounded-full', pct >= 100 ? 'bg-critical' : 'bg-brand')} style={{ width: `${pct}%` }} />
+                        </div>
+                        <span className="t-data whitespace-nowrap text-[12px] text-muted">
+                          {Math.round(mins)} / {t.escalateQcMins} min
+                        </span>
+                      </div>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <p className="t-body mt-6 pb-4 text-muted">Nothing needs attention. Every frame is running normally.</p>
+          )}
+        </section>
+
+        <section className="divide-y divide-[var(--line)] rounded-[12px] border border-line bg-raised" aria-label="Health">
+          <GaugeRow label="Frames running" value={`${states.running}`} goal={`${s.frames.length}`} pct={Math.round((states.running / s.frames.length) * 100)} />
+          <GaugeRow label="Calm days, 30 days" value={`${calmDays}`} goal="30" pct={Math.round((calmDays / 30) * 100)} />
+          <GaugeRow label="Holds decided" value={`${s.holds.filter((h) => h.status !== 'on_hold').length}`} goal={`${s.holds.length}`} pct={s.holds.length ? Math.round((s.holds.filter((h) => h.status !== 'on_hold').length / s.holds.length) * 100) : 100} />
+          <GaugeRow label="Tickets resolved" value={`${doneCount}`} goal={`${a.month.length}`} pct={resolvedPct} />
+        </section>
       </div>
 
-      <Panel
-                    className={isPlant ? "hidden" : undefined}
-                    title="Ring frames, floor order"
+      <div className={cx('grid gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]', isPlant && 'hidden')}>
+        <Panel
+          title="Ring frames, floor order"
           sub={`${states.running} of ${s.frames.length} running normally${states.stopped ? `, ${states.stopped} stopped for doffing` : ''}`}
-          aside={<Link to="/dashboard/machines" className="t-small-strong flex items-center gap-1 text-brand hover:underline">Machines <ArrowRight size={14} /></Link>}
+          aside={
+            <Link to="/dashboard/machines" className="t-small-strong flex items-center gap-1 text-brand hover:underline">
+              Machines <ArrowRight size={14} />
+            </Link>
+          }
         >
           <FloorMap s={s} now={now} onOpen={(id) => nav(`/dashboard/machines/${id}`)} />
-          <div className="mt-5">
-            <CategoryBar
-              label="Frames by state"
-              parts={[
-                { key: 'running', value: states.running, color: 'var(--neutral-state)', word: 'Running' },
-                { key: 'warning', value: states.warning, color: 'var(--major-fill)', word: 'Warning' },
-                { key: 'fault', value: states.fault, color: 'var(--critical)', word: 'Failed' },
-                { key: 'held', value: states.held, color: 'var(--held)', word: 'Yarn on hold' },
-                { key: 'stopped', value: states.stopped, color: 'var(--line-strong)', word: 'Stopped' },
-              ]}
-            />
-          </div>
         </Panel>
-
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,420px)]">
-        <Panel title="Open tickets" sub={`${live.length} not closed yet`} aside={<Link to="/dashboard/tickets" className="t-small-strong flex items-center gap-1 text-brand hover:underline">All tickets <ArrowRight size={14} /></Link>}>
-          <ul className="divide-y divide-[var(--line)]">
-            {live.map((t) => (
-              <li key={t.id}>
-                <button type="button" onClick={() => nav(`/dashboard/tickets/${t.id}`)} className="grid w-full grid-cols-[110px_80px_1fr_auto_80px] items-center gap-3 py-2.5 text-left hover:bg-sunken">
-                  <SeverityBadge level={t.severity} />
-                  <span className="t-data">{t.frameId}</span>
-                  <span className="t-small min-w-0 truncate">
-                    {t.title} · <span className="t-data text-[13px]">{readingLine(s, t)}</span>
-                  </span>
-                  <StatusChip kind={ticketChip(t, now)} />
-                  <span className="t-data text-right text-[13px] text-muted">{hhmm(t.createdAt)}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </Panel>
-        {!isPlant && <AlertHeat grid={a.heat} />}
+        <CalendarPanel s={s} now={now} onOpen={(id) => nav(`/dashboard/tickets/${id}`)} />
       </div>
     </div>
   );
 }
 
-function FloorStatus({ incidents, critical }: { incidents: number; critical: number }) {
-  if (!incidents)
-    return (
-      <p className="t-small-strong flex items-center gap-2 rounded-full border border-line bg-raised px-4 py-2 shadow-raised">
-        <span className="grid size-5 place-items-center rounded-full bg-ok-soft text-ok">
-          <Checkmark size={14} />
-        </span>
-        Floor is calm. No live alerts.
-      </p>
-    );
+function Goal({ label, value, unit, goal, badge, note }: { label: string; value: string; unit?: string; goal: string; badge?: { text: string; tone: 'good' | 'bad' }; note: string }) {
   return (
-    <p className={cx('t-small-strong flex items-center gap-2 rounded-full px-4 py-2', critical ? 'bg-critical text-on-critical' : 'bg-major-soft text-major')}>
-      <SeverityShape level={critical ? 'critical' : 'major'} className={critical ? '[&_path]:fill-[var(--on-critical)]' : ''} />
-      {incidents} live alert{incidents > 1 ? 's' : ''} need{incidents > 1 ? '' : 's'} someone on the floor
-    </p>
+    <div className="rounded-[12px] border border-line bg-raised p-5">
+      <div className="flex items-start justify-between gap-2">
+        <p className="t-label text-muted">{label}</p>
+        {badge && <span className={cx('t-label rounded-[4px] px-1.5 text-[10px]', badge.tone === 'good' ? 'bg-ok text-surface' : 'bg-critical text-on-critical')}>{badge.text}</span>}
+      </div>
+      <p className="mt-3 flex items-baseline gap-1.5">
+        <span className="t-stat !text-[34px] !leading-[38px]">{value}</span>
+        {unit && <span className="t-body text-muted">{unit}</span>}
+        <span className="t-stat !text-[22px] !leading-[28px] !font-normal text-neutral">/ {goal}</span>
+      </p>
+      <p className="t-small mt-2 text-muted">{note}</p>
+    </div>
   );
 }
 
-// ---------- the floor, drawn as the mill floor ----------
+function GaugeRow({ label, value, goal, pct, invert }: { label: string; value: string; goal: string; pct: number; invert?: boolean }) {
+  const p = Math.max(0, Math.min(100, pct));
+  const tone = invert ? 'var(--ink)' : p >= 80 ? 'var(--ok)' : p >= 40 ? 'var(--ink)' : 'var(--critical)';
+  const len = Math.PI * 28;
+  return (
+    <div className="flex items-center justify-between gap-3 px-5 py-3.5">
+      <div className="min-w-0">
+        <p className="t-label text-[10px] text-muted">{label}</p>
+        <p className="mt-1 flex items-baseline gap-1">
+          <span className="t-stat !text-[24px] !leading-[28px]">{value}</span>
+          <span className="t-body text-neutral">/ {goal}</span>
+        </p>
+      </div>
+      <div className="relative h-[38px] w-[64px] shrink-0" role="img" aria-label={`${label}: ${p}%`}>
+        <svg viewBox="0 0 64 36" className="h-full w-full">
+          <path d="M4 32 A28 28 0 0 1 60 32" fill="none" stroke="var(--grid)" strokeWidth="5" strokeLinecap="round" />
+          <path d="M4 32 A28 28 0 0 1 60 32" fill="none" stroke={tone} strokeWidth="5" strokeLinecap="round" strokeDasharray={`${(len * p) / 100} ${len}`} />
+        </svg>
+        <span className="t-data absolute inset-x-0 bottom-0 text-center text-[11px] leading-none">{p}%</span>
+      </div>
+    </div>
+  );
+}
+
 const TILE: Record<FrameStateKind, string> = {
   running: 'bg-sunken text-ink border-transparent',
   warning: 'bg-major-soft text-major border-major-fill',
@@ -384,6 +384,7 @@ export function Report() {
   return (
     <div className="mx-auto flex max-w-[1240px] flex-col gap-6">
       <PageHead title="Monthly report" sub="Last 30 days" />
+      <AlertHeat grid={alertHeat(s, now, 30)} />
       <div className="grid gap-4 xl:grid-cols-3">
         <Panel className="xl:col-span-2" title="Alerts per day" sub="Last 30 days, by severity" aside={<SeverityLegend />}>
           <StackedColumns data={a.daily} dayLabel={dayMonth} label="Alerts per day for the last 30 days, by severity" />
@@ -437,28 +438,6 @@ export function InsightsPage() {
   );
 }
 
-const RANGE_WORD = { 1: 'today', 7: 'last 7 days', 30: 'last 30 days' } as const;
-
-function RangeToggle({ value, onChange }: { value: 1 | 7 | 30; onChange: (v: 1 | 7 | 30) => void }) {
-  const opts: [1 | 7 | 30, string][] = [[1, 'Today'], [7, 'Week'], [30, 'Month']];
-  return (
-    <div role="radiogroup" aria-label="Time range" className="flex rounded-full border border-line bg-raised p-1">
-      {opts.map(([v, label]) => (
-        <button
-          key={v}
-          type="button"
-          role="radio"
-          aria-checked={value === v}
-          onClick={() => onChange(v)}
-          className={cx('t-small h-8 rounded-full px-4', value === v ? 'bg-ink font-semibold text-surface' : 'text-muted hover:text-ink')}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 const HOURS = ['00', '03', '06', '09', '12', '15', '18', '21'];
 const DAYS7 = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -491,51 +470,6 @@ function AlertHeat({ grid }: { grid: number[][] }) {
   );
 }
 
-function StatCard({
-  icon,
-  label,
-  value,
-  unit,
-  pill,
-  tone,
-  note,
-  to,
-}: {
-  icon: ReactNode;
-  label: string;
-  value: string;
-  unit?: string;
-  pill: string;
-  tone: 'good' | 'bad' | 'neutral';
-  note: string;
-  to?: string;
-}) {
-  const body = (
-    <>
-      <div className="flex items-center gap-3">
-        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-brand-soft text-brand">{icon}</span>
-        <p className="t-small-strong text-muted">{label}</p>
-      </div>
-      <p className="mt-4 flex items-baseline gap-1.5">
-        <span className="t-stat">{value}</span>
-        {unit && <span className="t-body text-muted">{unit}</span>}
-      </p>
-      <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1">
-        <span className={cx('t-small-strong rounded-full px-2.5 py-0.5 !text-[12px]', tone === 'good' ? 'bg-ok-soft text-ok' : tone === 'bad' ? 'bg-critical-soft text-critical' : 'bg-minor-soft text-minor')}>{pill}</span>
-        <span className="t-small text-muted">{note}</span>
-      </div>
-    </>
-  );
-  const cls = 'flex min-w-0 flex-col rounded-[16px] border border-line bg-raised p-5 shadow-raised';
-  return to ? (
-    <Link to={to} className={cx(cls, 'transition-shadow hover:shadow-sheet')}>
-      {body}
-    </Link>
-  ) : (
-    <div className={cls}>{body}</div>
-  );
-}
-
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 function CalendarPanel({ s, now, onOpen }: { s: MillState; now: number; onOpen: (id: string) => void }) {
@@ -558,7 +492,7 @@ function CalendarPanel({ s, now, onOpen }: { s: MillState; now: number; onOpen: 
   }, [s.tickets, now]);
   const day = (byDay.get(picked) ?? []).slice().sort((a, b) => a.createdAt - b.createdAt);
   const step = (n: number) => setView((v) => ({ y: v.y + Math.floor((v.m + n) / 12), m: (v.m + n + 12) % 12 }));
-  const btn = 'grid size-8 place-items-center rounded-full text-muted hover:bg-sunken hover:text-ink';
+  const btn = 'grid size-8 place-items-center rounded-[8px] text-muted hover:bg-sunken hover:text-ink';
   return (
     <Panel
       title={`${MONTH_NAMES[view.m]} ${view.y}`}
@@ -598,7 +532,7 @@ function CalendarPanel({ s, now, onOpen }: { s: MillState; now: number; onOpen: 
               aria-pressed={isPicked}
               aria-label={`${d} ${MONTH_NAMES[view.m]}, ${list.length} alert${list.length === 1 ? '' : 's'}`}
               className={cx(
-                't-small mx-auto flex size-9 flex-col items-center justify-center rounded-full',
+                't-small mx-auto flex size-9 flex-col items-center justify-center rounded-[8px]',
                 isPicked ? 'bg-brand font-semibold text-on-brand' : k === todayKey ? 'font-semibold text-brand ring-1 ring-[var(--brand)]' : future ? 'text-[var(--line-strong)]' : 'hover:bg-sunken',
               )}
             >
