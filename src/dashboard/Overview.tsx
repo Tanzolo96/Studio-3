@@ -103,7 +103,7 @@ export function Overview() {
           chart={<TargetBar pct={inTimePct} target={90} />}
           goal="90%"
           badge={inTimePct >= 90 ? { text: 'On target', tone: 'good' } : { text: `${90 - inTimePct}% short`, tone: 'bad' }}
-          note={`${inTime} of ${serious.length} critical and major alerts, last 30 days`}
+          note={`${inTime} of ${serious.length} alerts seen within 5 min, last 30 days`}
         />
         <Goal
           i={3}
@@ -262,14 +262,7 @@ function TargetBar({ pct, target }: { pct: number; target: number }) {
     <div role="img" aria-label={`${pct}% seen in time against a ${target}% target`}>
       <div className="relative h-3 rounded-full bg-sunken">
         <div className={cx('anim-grow-x h-full rounded-full', ok ? 'bg-ok' : 'bg-brand')} style={{ width: `${pct}%` }} />
-        <span className="absolute -top-1 -bottom-1 w-0.5 rounded-full bg-ink" style={{ left: `${target}%` }} />
-      </div>
-      <div className="t-small mt-1.5 flex justify-between text-muted">
-        <span>{pct}% seen within 5 min</span>
-        <span className="flex items-center gap-1.5">
-          <span className="h-3 w-0.5 rounded-full bg-ink" />
-          Target {target}%
-        </span>
+        <span className="absolute -top-1 -bottom-1 w-0.5 rounded-full bg-ink" style={{ left: `${target}%` }} title={`Target ${target}%`} />
       </div>
     </div>
   );
