@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowRight, Checkmark } from '@carbon/icons-react';
+import { ArrowRight, Checkmark, ChevronLeft, ChevronRight, Recycle, Timer, Locked, WarningAlt } from '@carbon/icons-react';
 import type { MillState, Ticket } from '../engine/types';
 import { useMillState, useNow, useUser } from '../store/store';
 import { bySeverityThenAge, escalation, frameView, heldKg, openHolds, type FrameStateKind } from '../engine/selectors';
@@ -10,12 +10,12 @@ import { BASELINE_KG, alertHeat, dailyAlerts, frameStateCounts, seenTrend, shift
 import { DAY, dayMonth, hhmm, mill, millDayKey, millHour, shiftAt, timer } from '../engine/time';
 import { cx, Empty, SeverityBadge, SeverityShape, StatusChip } from '../ui/primitives';
 import { InsightCard, readingLine, ticketChip } from '../ui/cards';
-import { BarList, CategoryBar, Ring, SeverityLegend, ShiftBars, Sparkline, StackedColumns, TrendArea } from '../ui/charts';
+import { BarList, CategoryBar, Ring, SeverityLegend, ShiftBars, StackedColumns, TrendArea } from '../ui/charts';
 import { PageHead } from './DashShell';
 
 export function Panel({ title, sub, aside, children, className }: { title: string; sub?: string; aside?: ReactNode; children: ReactNode; className?: string }) {
   return (
-    <section className={cx('flex min-w-0 flex-col rounded-[16px] bg-surface p-5', className)}>
+    <section className={cx('flex min-w-0 flex-col rounded-[16px] border border-line bg-raised p-5 shadow-raised', className)}>
       <header className="mb-4 flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 className="t-body-strong">{title}</h2>
@@ -46,6 +46,7 @@ export function Overview() {
     return {
       daily: dailyAlerts(s, now, 30),
       heat: alertHeat(s, now, 30),
+      prev: dailyAlerts(s, now, 60),
       trend: seenTrend(s, now, 30),
       causes: topCauses(month).slice(0, 6),
       shifts: shiftResponse(month),
@@ -60,7 +61,11 @@ export function Overview() {
   const kg = roundKg(heldKg(s, now));
   const alerts30 = a.daily.slice(-range).reduce((n, d) => n + d.critical + d.major, 0);
   const escalated30 = a.month.filter((t) => t.severity !== 'minor' && escalation(t, now).level > 0).length;
+  const prevSeen = a.trend.length > 7 ? a.trend[a.trend.length - 8].mins : null;
+  const alertsPrev = a.prev.slice(-2 * range, -range).reduce((n, d) => n + d.critical + d.major, 0);
+  const alertsDelta = alerts30 - alertsPrev;
   const seenNow = [...a.trend].reverse().find((p) => p.mins !== null)?.mins ?? null;
+  const seenDelta = seenNow !== null && prevSeen !== null ? seenNow - prevSeen : null;
   const h = millHour(now);
   const greet = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
   const weekday = WEEKDAY[new Date(now + 5.5 * 3600000).getUTCDay()];
@@ -70,12 +75,13 @@ export function Overview() {
     <div className="mx-auto flex max-w-[1240px] flex-col gap-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="t-small text-muted">
-            {weekday} {dayMonth(now)} · {shiftAt(now)} shift · {hhmm(now)}
-          </p>
+          <p className="t-small-strong text-brand">Dashboard / Overview</p>
           <h1 className="t-page mt-1">
             {greet}, {user.name.split(' ')[0]}
           </h1>
+          <p className="t-small mt-1 text-muted">
+            {weekday} {dayMonth(now)} · {shiftAt(now)} shift · {hhmm(now)}
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <FloorStatus incidents={incidents.length} critical={crit} />
@@ -92,43 +98,55 @@ export function Overview() {
       )}
 
       <div className="grid grid-cols-[repeat(auto-fit,minmax(230px,1fr))] gap-4">
-        <Kpi
-          dark
+        <StatCard
+          icon={<Timer size={20} />}
           label="Time to Seen"
           value={seenNow !== null ? timer(seenNow * 60000) : '–'}
-          note={seenNow !== null ? (seenNow <= 5 ? 'Median, last 7 days · inside the 5 min limit' : 'Median, last 7 days · over the 5 min limit') : 'No alerts yet'}
-          tone={seenNow !== null && seenNow > 5 ? 'bad' : 'good'}
-          chart={<Sparkline values={a.trend.map((p) => p.mins)} label="Median minutes to Seen, last 30 days" />}
+          pill={seenDelta === null ? 'No alerts yet' : `${seenDelta <= 0 ? '' : '+'}${seenDelta.toFixed(1)} min vs last week`}
+          tone={seenDelta === null ? 'neutral' : seenDelta <= 0 ? 'good' : 'bad'}
+          note={seenNow !== null && seenNow <= 5 ? 'Inside the 5 min limit' : 'Over the 5 min limit'}
         />
-        <Kpi
+        <StatCard
+          icon={<Locked size={20} />}
           label="Yarn on hold"
-          value={kg}
+          value={`${kg}`}
           unit="kg"
-          note={holds.length ? `${holds.length} lot${holds.length > 1 ? 's' : ''} waiting for a decision` : 'Nothing waiting'}
-          tone={holds.length ? 'held' : 'neutral'}
+          pill={holds.length ? `${holds.length} lot${holds.length > 1 ? 's' : ''} waiting` : 'Nothing waiting'}
+          tone={holds.length ? 'bad' : 'neutral'}
+          note="Waiting for a decision"
           to="/dashboard/held"
-          chart={<HoldStrip holds={holds.map((h) => ({ id: h.id, frame: h.frameId, kg: holdKg(h, now) }))} />}
         />
-        <Kpi
+        <StatCard
+          icon={<WarningAlt size={20} />}
           label={`Alerts, ${RANGE_WORD[range]}`}
-          value={alerts30}
-          note={`${escalated30} escalated · minor faults not counted`}
-          tone="neutral"
-          chart={<Sparkline values={a.daily.map((d) => d.critical + d.major)} color="var(--neutral-state)" label="Critical and major alerts per day" />}
+          value={`${alerts30}`}
+          pill={alertsDelta === 0 ? 'Same as before' : `${alertsDelta < 0 ? '' : '+'}${alertsDelta} vs previous`}
+          tone={alertsDelta <= 0 ? 'good' : 'bad'}
+          note={`${escalated30} escalated`}
         />
-        <Kpi
+        <StatCard
+          icon={<Recycle size={20} />}
           label={`Yarn saved, ${RANGE_WORD[range]}`}
           value={roundKg(a.saved.saved).toLocaleString('en-IN')}
           unit="kg"
-          note={`Estimate: ${a.saved.incidents} holds averaged ${Math.round(a.saved.avgHeld)} kg, against about ${BASELINE_KG} kg per incident before`}
+          pill={`${Math.round(100 - (a.saved.avgHeld / BASELINE_KG) * 100)}% less lost per incident`}
           tone="good"
-          chart={
-            <div className="flex items-center gap-3">
-              <Ring value={a.saved.avgHeld} max={BASELINE_KG} size={44} label={`Average held ${Math.round(a.saved.avgHeld)} of ${BASELINE_KG} kg`} />
-              <span className="t-small text-muted">{Math.round((a.saved.avgHeld / BASELINE_KG) * 100)}% of the old loss per incident</span>
-            </div>
-          }
+          note={`${a.saved.incidents} holds, about ${Math.round(a.saved.avgHeld)} kg each`}
         />
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <Panel title="How fast alerts are seen" sub="Median minutes from alert to Seen, rolling 7 days">
+          <TrendArea
+            points={a.trend}
+            limit={5}
+            limitLabel="5 min limit"
+            format={(v) => `${v.toFixed(1)} min to Seen`}
+            dayLabel={dayMonth}
+            label="Median minutes to Seen over the last 30 days, against the 5 minute limit"
+          />
+        </Panel>
+        <CalendarPanel s={s} now={now} onOpen={(id) => nav(`/dashboard/tickets/${id}`)} />
       </div>
 
       <Panel
@@ -151,12 +169,7 @@ export function Overview() {
           </div>
         </Panel>
 
-      <div className="grid gap-4 xl:grid-cols-2">
-        <WeekStrip daily={a.daily.slice(-7)} heldKg={kg} />
-        <AlertHeat grid={a.heat} />
-      </div>
-
-      {live.length > 0 && (
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,420px)]">
         <Panel title="Open tickets" sub={`${live.length} not closed yet`} aside={<Link to="/dashboard/tickets" className="t-small-strong flex items-center gap-1 text-brand hover:underline">All tickets <ArrowRight size={14} /></Link>}>
           <ul className="divide-y divide-[var(--line)]">
             {live.map((t) => (
@@ -174,7 +187,8 @@ export function Overview() {
             ))}
           </ul>
         </Panel>
-      )}
+        <AlertHeat grid={a.heat} />
+      </div>
     </div>
   );
 }
@@ -182,7 +196,7 @@ export function Overview() {
 function FloorStatus({ incidents, critical }: { incidents: number; critical: number }) {
   if (!incidents)
     return (
-      <p className="t-small-strong flex items-center gap-2 rounded-full bg-surface px-4 py-2 shadow-raised">
+      <p className="t-small-strong flex items-center gap-2 rounded-full border border-line bg-raised px-4 py-2 shadow-raised">
         <span className="grid size-5 place-items-center rounded-full bg-ok-soft text-ok">
           <Checkmark size={14} />
         </span>
@@ -194,61 +208,6 @@ function FloorStatus({ incidents, critical }: { incidents: number; critical: num
       <SeverityShape level={critical ? 'critical' : 'major'} className={critical ? '[&_path]:fill-[var(--on-critical)]' : ''} />
       {incidents} live alert{incidents > 1 ? 's' : ''} need{incidents > 1 ? '' : 's'} someone on the floor
     </p>
-  );
-}
-
-function Kpi({
-  label,
-  value,
-  unit,
-  note,
-  tone,
-  chart,
-  to,
-  dark,
-}: {
-  dark?: boolean;
-  label: string;
-  value: ReactNode;
-  unit?: string;
-  note: string;
-  tone: 'good' | 'bad' | 'neutral' | 'held';
-  chart: ReactNode;
-  to?: string;
-}) {
-  const body = (
-    <>
-      <p className="t-small text-muted">{label}</p>
-      <p className="mt-1 flex items-baseline gap-1.5">
-        <span className={cx('t-stat', tone === 'held' ? 'text-held' : tone === 'bad' ? 'text-critical' : 'text-ink')}>{value}</span>
-        {unit && <span className="t-small text-muted">{unit}</span>}
-      </p>
-      <div className="mt-3">{chart}</div>
-      <p className={cx('t-small mt-3', tone === 'good' ? 'text-ok' : tone === 'bad' ? 'text-critical' : 'text-muted')}>{note}</p>
-    </>
-  );
-  const cls = cx('flex min-w-0 flex-col rounded-[16px] border p-5', dark ? 'border-transparent bg-surface text-ink' : 'border-transparent bg-surface');
-  return to ? (
-    <Link to={to} data-theme={dark ? 'night' : undefined} className={cx(cls, 'transition-colors hover:brightness-[0.98]')}>
-      {body}
-    </Link>
-  ) : (
-    <div data-theme={dark ? 'night' : undefined} className={cls}>{body}</div>
-  );
-}
-
-function HoldStrip({ holds }: { holds: { id: string; frame: string; kg: number }[] }) {
-  const total = holds.reduce((a, h) => a + h.kg, 0);
-  if (!total) return <div className="h-9 rounded-[10px] border border-dashed border-line" aria-hidden />;
-  return (
-    <div className="flex h-9 flex-col justify-center gap-1.5">
-      <div className="flex h-3 gap-[2px] overflow-hidden rounded-full" role="img" aria-label={holds.map((h) => `${h.frame} ${Math.round(h.kg)} kg`).join(', ')}>
-        {holds.map((h, i) => (
-          <div key={h.id} className="h-full" style={{ width: `${(h.kg / total) * 100}%`, background: 'var(--held)', opacity: 1 - i * 0.22 }} title={`${h.frame}: ${Math.round(h.kg)} kg`} />
-        ))}
-      </div>
-      <p className="t-data truncate text-[12px] text-muted">{holds.map((h) => `${h.frame} ${roundKg(h.kg)}`).join(' · ')}</p>
-    </div>
   );
 }
 
@@ -452,7 +411,7 @@ const RANGE_WORD = { 1: 'today', 7: 'last 7 days', 30: 'last 30 days' } as const
 function RangeToggle({ value, onChange }: { value: 1 | 7 | 30; onChange: (v: 1 | 7 | 30) => void }) {
   const opts: [1 | 7 | 30, string][] = [[1, 'Today'], [7, 'Week'], [30, 'Month']];
   return (
-    <div role="radiogroup" aria-label="Time range" className="flex rounded-full bg-surface p-1">
+    <div role="radiogroup" aria-label="Time range" className="flex rounded-full border border-line bg-raised p-1">
       {opts.map(([v, label]) => (
         <button
           key={v}
@@ -460,50 +419,12 @@ function RangeToggle({ value, onChange }: { value: 1 | 7 | 30; onChange: (v: 1 |
           role="radio"
           aria-checked={value === v}
           onClick={() => onChange(v)}
-          className={cx('t-small h-8 rounded-full px-4', value === v ? 'bg-raised font-semibold text-ink shadow-raised' : 'text-muted hover:text-ink')}
+          className={cx('t-small h-8 rounded-full px-4', value === v ? 'bg-ink font-semibold text-surface' : 'text-muted hover:text-ink')}
         >
           {label}
         </button>
       ))}
     </div>
-  );
-}
-
-const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-function WeekStrip({ daily, heldKg: kg }: { daily: { day: number; critical: number; major: number; minor: number }[]; heldKg: number }) {
-  const crit = daily.reduce((n, d) => n + d.critical, 0);
-  const maj = daily.reduce((n, d) => n + d.major, 0);
-  return (
-    <Panel title="This week" sub="Critical and major alerts per day">
-      <ol className="grid grid-cols-7 gap-2">
-        {daily.map((d, i) => {
-          const today = i === daily.length - 1;
-          const n = d.critical + d.major;
-          return (
-            <li key={d.day} className={cx('flex flex-col items-center gap-1.5 rounded-[14px] px-1 py-3', today ? 'bg-brand text-on-brand' : 'bg-raised')}>
-              <span className={cx('t-small', today ? 'font-semibold' : 'text-muted')}>{DOW[new Date(d.day + 5.5 * 3600000).getUTCDay()]}</span>
-              <span className="t-stat !text-[22px] !leading-7">{n}</span>
-              <span className={cx('t-data text-[11px]', today ? 'opacity-80' : 'text-muted')}>{d.critical ? `${d.critical} crit` : n ? 'major' : 'calm'}</span>
-            </li>
-          );
-        })}
-      </ol>
-      <dl className="mt-4 grid grid-cols-3 gap-2 border-t border-line pt-4">
-        <div>
-          <dt className="t-small text-muted">Critical</dt>
-          <dd className="t-body-strong">{crit}</dd>
-        </div>
-        <div>
-          <dt className="t-small text-muted">Major</dt>
-          <dd className="t-body-strong">{maj}</dd>
-        </div>
-        <div>
-          <dt className="t-small text-muted">On hold now</dt>
-          <dd className="t-body-strong">{kg} kg</dd>
-        </div>
-      </dl>
-    </Panel>
   );
 }
 
@@ -534,6 +455,146 @@ function AlertHeat({ grid }: { grid: number[][] }) {
             {h}
           </span>
         ))}
+      </div>
+    </Panel>
+  );
+}
+
+function StatCard({
+  icon,
+  label,
+  value,
+  unit,
+  pill,
+  tone,
+  note,
+  to,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+  unit?: string;
+  pill: string;
+  tone: 'good' | 'bad' | 'neutral';
+  note: string;
+  to?: string;
+}) {
+  const body = (
+    <>
+      <div className="flex items-center gap-3">
+        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-brand-soft text-brand">{icon}</span>
+        <p className="t-small-strong text-muted">{label}</p>
+      </div>
+      <p className="mt-4 flex items-baseline gap-1.5">
+        <span className="t-stat">{value}</span>
+        {unit && <span className="t-body text-muted">{unit}</span>}
+      </p>
+      <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span className={cx('t-small-strong rounded-full px-2.5 py-0.5 !text-[12px]', tone === 'good' ? 'bg-ok-soft text-ok' : tone === 'bad' ? 'bg-critical-soft text-critical' : 'bg-minor-soft text-minor')}>{pill}</span>
+        <span className="t-small text-muted">{note}</span>
+      </div>
+    </>
+  );
+  const cls = 'flex min-w-0 flex-col rounded-[16px] border border-line bg-raised p-5 shadow-raised';
+  return to ? (
+    <Link to={to} className={cx(cls, 'transition-shadow hover:shadow-sheet')}>
+      {body}
+    </Link>
+  ) : (
+    <div className={cls}>{body}</div>
+  );
+}
+
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+function CalendarPanel({ s, now, onOpen }: { s: MillState; now: number; onOpen: (id: string) => void }) {
+  const ist = new Date(now + 5.5 * 3600000);
+  const [view, setView] = useState({ y: ist.getUTCFullYear(), m: ist.getUTCMonth() });
+  const todayKey = millDayKey(now);
+  const [picked, setPicked] = useState(todayKey);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const key = (d: number) => `${view.y}-${pad(view.m + 1)}-${pad(d)}`;
+  const lead = (new Date(Date.UTC(view.y, view.m, 1)).getUTCDay() + 6) % 7;
+  const dim = new Date(Date.UTC(view.y, view.m + 1, 0)).getUTCDate();
+  const byDay = useMemo(() => {
+    const m = new Map<string, Ticket[]>();
+    for (const t of s.tickets) {
+      if (t.createdAt > now || t.severity === 'minor') continue;
+      const k = millDayKey(t.createdAt);
+      m.set(k, [...(m.get(k) ?? []), t]);
+    }
+    return m;
+  }, [s.tickets, now]);
+  const day = (byDay.get(picked) ?? []).slice().sort((a, b) => a.createdAt - b.createdAt);
+  const step = (n: number) => setView((v) => ({ y: v.y + Math.floor((v.m + n) / 12), m: (v.m + n + 12) % 12 }));
+  const btn = 'grid size-8 place-items-center rounded-full text-muted hover:bg-sunken hover:text-ink';
+  return (
+    <Panel
+      title={`${MONTH_NAMES[view.m]} ${view.y}`}
+      sub="Critical and major alerts"
+      aside={
+        <div className="flex gap-1">
+          <button type="button" aria-label="Previous month" onClick={() => step(-1)} className={btn}>
+            <ChevronLeft size={16} />
+          </button>
+          <button type="button" aria-label="Next month" onClick={() => step(1)} className={btn}>
+            <ChevronRight size={16} />
+          </button>
+        </div>
+      }
+    >
+      <div className="grid grid-cols-7 gap-y-1 text-center">
+        {['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'].map((d) => (
+          <span key={d} className="t-small pb-1 text-neutral">
+            {d}
+          </span>
+        ))}
+        {Array.from({ length: lead }, (_, i) => (
+          <span key={`l${i}`} />
+        ))}
+        {Array.from({ length: dim }, (_, i) => {
+          const d = i + 1;
+          const k = key(d);
+          const list = byDay.get(k) ?? [];
+          const crit = list.some((t) => t.severity === 'critical');
+          const future = k > todayKey;
+          const isPicked = k === picked;
+          return (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setPicked(k)}
+              aria-pressed={isPicked}
+              aria-label={`${d} ${MONTH_NAMES[view.m]}, ${list.length} alert${list.length === 1 ? '' : 's'}`}
+              className={cx(
+                't-small mx-auto flex size-9 flex-col items-center justify-center rounded-full',
+                isPicked ? 'bg-brand font-semibold text-on-brand' : k === todayKey ? 'font-semibold text-brand ring-1 ring-[var(--brand)]' : future ? 'text-[var(--line-strong)]' : 'hover:bg-sunken',
+              )}
+            >
+              {d}
+              <span className={cx('mt-px size-1 rounded-full', list.length ? (isPicked ? 'bg-on-brand' : crit ? 'bg-critical' : 'bg-major-fill') : 'bg-transparent')} />
+            </button>
+          );
+        })}
+      </div>
+      <div className="mt-4 border-t border-line pt-3">
+        <p className="t-small-strong mb-2">{picked === todayKey ? 'Today' : dayMonth(mill(picked))}</p>
+        {day.length ? (
+          <ul className="flex flex-col gap-1">
+            {day.slice(0, 3).map((t) => (
+              <li key={t.id}>
+                <button type="button" onClick={() => onOpen(t.id)} className="flex w-full items-center gap-2 rounded-[10px] px-1 py-1.5 text-left hover:bg-sunken">
+                  <SeverityBadge level={t.severity} />
+                  <span className="t-data">{t.frameId}</span>
+                  <span className="t-data ml-auto text-[13px] text-muted">{hhmm(t.createdAt)}</span>
+                </button>
+              </li>
+            ))}
+            {day.length > 3 && <li className="t-small px-1 text-muted">and {day.length - 3} more</li>}
+          </ul>
+        ) : (
+          <p className="t-small text-muted">No critical or major alerts.</p>
+        )}
       </div>
     </Panel>
   );

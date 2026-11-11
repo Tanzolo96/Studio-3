@@ -52,7 +52,7 @@ export function DashShell() {
   const kg = roundKg(heldKg(s, now));
 
   return (
-    <div data-theme={surfaceTheme} className="flex min-h-dvh gap-3 bg-sunken p-3 text-ink">
+    <div data-theme={surfaceTheme} className="flex min-h-dvh gap-3 bg-surface p-3 text-ink">
       <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[var(--z-toast)] focus:rounded-[10px] focus:bg-raised focus:p-3">
         Skip to content
       </a>
@@ -130,7 +130,7 @@ export function DashShell() {
       </aside>
       <div className="flex min-w-0 flex-1 flex-col gap-3">
         <TopBar live={live.length} urgent={urgent} />
-        <main id="main" className="min-w-0 flex-1 rounded-[28px] bg-raised px-8 pt-8 pb-24 shadow-raised">
+        <main id="main" className="min-w-0 flex-1 px-4 pt-4 pb-24">
           <Outlet />
         </main>
       </div>
@@ -144,7 +144,7 @@ function NavItem({ to, label, end, children }: { to: string; label: string; end?
       to={to}
       end={end}
       className={({ isActive }) =>
-        cx('mx-3 flex h-10 items-center justify-between rounded-[12px] px-3 t-body', isActive ? 'bg-brand font-semibold text-on-brand' : 'text-muted hover:bg-[var(--surface-raised)] hover:text-ink')
+        cx('mx-3 flex h-10 items-center justify-between rounded-[12px] px-3 t-body', isActive ? 'bg-brand-soft font-semibold text-brand' : 'text-muted hover:bg-[var(--surface-raised)] hover:text-ink')
       }
     >
       <span className="flex items-center gap-3">

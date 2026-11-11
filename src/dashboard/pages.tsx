@@ -29,7 +29,7 @@ export function TicketTable({ s, tickets, now, empty }: { s: MillState; tickets:
   const nav = useNavigate();
   if (!tickets.length) return <Empty title={empty} />;
   return (
-    <div className="overflow-hidden rounded-[10px] bg-surface">
+    <div className="overflow-hidden rounded-[14px] border border-line bg-raised shadow-raised">
       <table className="w-full border-collapse text-left">
         <thead>
           <tr className="t-label text-muted">
@@ -98,7 +98,7 @@ export function Tickets() {
         .sort((a, b) => (status === 'live' ? bySeverityThenAge(a, b) : b.createdAt - a.createdAt)),
     [s.tickets, now, shift, frame, sev, status],
   );
-  const select = 't-small h-10 rounded-full bg-surface px-4';
+  const select = 't-small h-10 rounded-full border border-line bg-raised px-4';
   return (
     <div className="max-w-[1180px]">
       <PageHead title="Tickets" sub={`${list.length} shown · ${s.tickets.length} since 01 Oct`} />
@@ -178,7 +178,7 @@ export function TicketDetailPage() {
       />
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="flex flex-col gap-6">
-          <ol className="grid grid-cols-5 overflow-hidden rounded-[10px] bg-surface" aria-label="Progress">
+          <ol className="grid grid-cols-5 overflow-hidden rounded-[14px] border border-line bg-raised shadow-raised" aria-label="Progress">
             {steps.map((st, i) => (
               <li key={st.label} className={cx('border-line p-3', i > 0 && 'border-l', st.at ? '' : 'text-muted')}>
                 <p className="t-small-strong flex items-center gap-1.5">
@@ -191,7 +191,7 @@ export function TicketDetailPage() {
             ))}
           </ol>
           <Section title="Timeline">
-            <div className="rounded-[10px] bg-surface p-4">
+            <div className="rounded-[14px] border border-line bg-raised shadow-raised p-4">
               <Timeline s={s} t={t} now={now} />
             </div>
           </Section>
@@ -199,12 +199,12 @@ export function TicketDetailPage() {
         </div>
         <aside className="flex flex-col gap-4">
           {reading && (
-            <div className="rounded-[10px] bg-surface p-4">
+            <div className="rounded-[14px] border border-line bg-raised shadow-raised p-4">
               <ReadingGauge test={reading.test} value={reading.value} min={rule?.min} max={t.kind === 'test_fail' ? rule?.max : reading.max} drift={t.kind !== 'test_fail' && reading.test === 'cv'} />
             </div>
           )}
           {t.severity !== 'minor' && (
-            <div className="rounded-[10px] bg-surface p-4">
+            <div className="rounded-[14px] border border-line bg-raised shadow-raised p-4">
               <p className="t-small-strong mb-2 text-muted">Response</p>
               <ResponseTimer elapsed={esc.elapsed} limitMins={t.seenMins} state={esc.timer} level={esc.level} frozen={!!t.seenAt || t.status === 'closed'} />
               <p className="t-small mt-3 text-muted">
@@ -214,7 +214,7 @@ export function TicketDetailPage() {
           )}
           {hold && <HoldCard s={s} h={hold} now={now} compact />}
           {t.sisterFrames.length > 0 && (
-            <div className="rounded-[10px] bg-surface p-4">
+            <div className="rounded-[14px] border border-line bg-raised shadow-raised p-4">
               <p className="t-small-strong mb-2 text-muted">Sister frames</p>
               <ul className="flex flex-col gap-1.5">
                 {t.sisterFrames.map((f) => {
@@ -267,7 +267,7 @@ export function HeldYarn() {
         </div>
       )}
       <Section title="Decided" className="mt-10">
-        <div className="overflow-hidden rounded-[10px] bg-surface">
+        <div className="overflow-hidden rounded-[14px] border border-line bg-raised shadow-raised">
           <table className="w-full text-left">
             <thead>
               <tr className="t-label text-muted">
@@ -325,7 +325,7 @@ function HoldCard({ s, h, now, user, compact }: { s: MillState; h: Hold; now: nu
   const lastD = h.decisions.at(-1);
 
   return (
-    <article className="flex flex-col gap-4 rounded-[10px] bg-surface p-5">
+    <article className="flex flex-col gap-4 rounded-[14px] border border-line bg-raised shadow-raised p-5">
       <header className="flex items-start justify-between gap-3">
         <div>
           <p className="t-small-strong flex items-center gap-2 text-held">

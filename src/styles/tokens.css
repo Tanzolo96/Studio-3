@@ -5,7 +5,7 @@
 [data-theme='day'] {
   color-scheme: light;
   --surface: #f5f6f8;
-  --surface-raised: #fafafc;
+  --surface-raised: #ffffff;
   --surface-sunken: #eceef1;
   --line: #eceef1;
   --line-strong: #9aa0a8;
@@ -27,10 +27,10 @@
   --minor-soft: #eceef1;
   --ok: #157f3b;
   --ok-soft: #e3f6e9;
-  --held: #5b4bb7;
-  --held-soft: #f1effc;
-  --ai: #0e6b6b;
-  --ai-soft: #dff5f4;
+  --held: #3b4350;
+  --held-soft: #e8eaee;
+  --ai: #3b4350;
+  --ai-soft: #e8eaee;
   --scrim: rgba(22, 22, 22, 0.56);
   --shadow-raised: 0 1px 2px rgba(14, 15, 17, 0.04), 0 4px 16px rgba(14, 15, 17, 0.04);
   --shadow-sheet: 0 12px 32px rgba(16, 24, 40, 0.18);
@@ -69,10 +69,10 @@
   --minor-soft: #2b2e34;
   --ok: #3ecf6e;
   --ok-soft: #0b2a16;
-  --held: #a99bff;
-  --held-soft: #1d1840;
-  --ai: #3ddbd9;
-  --ai-soft: #06292b;
+  --held: #bcc0c7;
+  --held-soft: #2b2e34;
+  --ai: #bcc0c7;
+  --ai-soft: #2b2e34;
   --scrim: rgba(0, 0, 0, 0.64);
   --shadow-raised: 0 1px 2px rgba(0, 0, 0, 0.5);
   --shadow-sheet: 0 12px 32px rgba(0, 0, 0, 0.56);
