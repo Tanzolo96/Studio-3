@@ -107,13 +107,13 @@ export function Overview() {
         />
         <Goal
           i={3}
-          label="Yarn held per incident"
+          label="Held per incident"
           value={<CountUp value={saved.avgHeld} />}
-          chart={<CompareBars now={saved.avgHeld} before={BASELINE_KG} unit="kg" />}
+          chart={<TargetBar pct={Math.round((saved.avgHeld / BASELINE_KG) * 100)} />}
           unit="kg"
           goal={`${BASELINE_KG} kg`}
           badge={{ text: `${lessLost}% less`, tone: 'good' }}
-          note={`${roundKg(saved.saved).toLocaleString('en-IN')} kg saved in 30 days, estimate`}
+          note={`${roundKg(saved.saved).toLocaleString('en-IN')} kg saved in 30 days against the old ${BASELINE_KG} kg`}
         />
       </section>
 
@@ -242,8 +242,8 @@ function Goal({ i = 0, label, value, unit, goal, badge, note, chart }: { i?: num
   return (
     <div className="anim-in lift flex flex-col rounded-[12px] border border-line bg-raised p-5" style={{ '--i': i } as CSSProperties}>
       <div className="flex items-start justify-between gap-2">
-        <p className="t-label text-muted">{label}</p>
-        {badge && <span className={cx('t-label rounded-[4px] px-1.5 text-[10px]', badge.tone === 'good' ? 'bg-ok text-surface' : 'bg-critical text-on-critical')}>{badge.text}</span>}
+        <p className="t-label min-w-0 truncate text-muted">{label}</p>
+        {badge && <span className={cx('t-label shrink-0 whitespace-nowrap rounded-[4px] px-1.5 text-[10px]', badge.tone === 'good' ? 'bg-ok text-surface' : 'bg-critical text-on-critical')}>{badge.text}</span>}
       </div>
       <p className="mt-3 flex items-baseline gap-1.5">
         <span className="t-stat !text-[34px] !leading-[38px]">{value}</span>
@@ -256,36 +256,14 @@ function Goal({ i = 0, label, value, unit, goal, badge, note, chart }: { i?: num
   );
 }
 
-function TargetBar({ pct, target }: { pct: number; target: number }) {
-  const ok = pct >= target;
+function TargetBar({ pct, target }: { pct: number; target?: number }) {
+  const ok = target !== undefined && pct >= target;
   return (
-    <div role="img" aria-label={`${pct}% seen in time against a ${target}% target`}>
+    <div role="img" aria-label={target !== undefined ? `${pct}% against a ${target}% target` : `${pct}% of the old amount`}>
       <div className="relative h-3 rounded-full bg-sunken">
         <div className={cx('anim-grow-x h-full rounded-full', ok ? 'bg-ok' : 'bg-brand')} style={{ width: `${pct}%` }} />
-        <span className="absolute -top-1 -bottom-1 w-0.5 rounded-full bg-ink" style={{ left: `${target}%` }} title={`Target ${target}%`} />
+        {target !== undefined && <span className="absolute -top-1 -bottom-1 w-0.5 rounded-full bg-ink" style={{ left: `${target}%` }} title={`Target ${target}%`} />}
       </div>
-    </div>
-  );
-}
-
-function CompareBars({ now, before, unit }: { now: number; before: number; unit: string }) {
-  const rows = [
-    { label: 'Now', v: now, cls: 'bg-brand' },
-    { label: 'Before', v: before, cls: 'bg-[var(--line-strong)]' },
-  ];
-  return (
-    <div className="flex flex-col gap-1.5" role="img" aria-label={`About ${Math.round(now)} ${unit} held per incident now, against ${before} ${unit} before`}>
-      {rows.map((r, k) => (
-        <div key={r.label} className="grid grid-cols-[48px_1fr_52px] items-center gap-2">
-          <span className="t-small text-muted">{r.label}</span>
-          <div className="h-3 rounded-full bg-sunken">
-            <div className={cx('anim-grow-x h-full rounded-full', r.cls)} style={{ width: `${Math.min(100, (r.v / before) * 100)}%`, '--i': k } as CSSProperties} />
-          </div>
-          <span className="t-data text-right text-[12px]">
-            {Math.round(r.v)} {unit}
-          </span>
-        </div>
-      ))}
     </div>
   );
 }
