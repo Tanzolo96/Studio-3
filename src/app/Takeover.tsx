@@ -54,7 +54,7 @@ function Takeover({ s, t, user, now, more }: { s: MillState; t: Ticket; user: Us
     >
       <header className={cx('px-5 pt-10 pb-5', critical ? 'bg-critical text-on-critical' : 'bg-major-soft text-ink')}>
         <p className="t-label flex items-center gap-1.5">
-          <span className={cx('grid size-4 place-items-center rounded-[4px]', critical ? 'bg-[var(--on-critical)]' : '')}>
+          <span className={cx('grid size-4 place-items-center rounded-[6px]', critical ? 'bg-[var(--on-critical)]' : '')}>
             <SeverityShape level={t.severity} size={10} />
           </span>
           {escalatedToMe ? `Escalated to you · ${hhmm(t.alertAt + (esc.level >= 2 ? t.escalatePhMins : t.escalateQcMins) * 60_000)}` : `${critical ? 'Critical' : 'Major'} alert · ${hhmm(t.alertAt)}`}

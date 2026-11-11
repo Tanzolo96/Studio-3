@@ -11,7 +11,7 @@ export const STANDALONE = import.meta.env.VITE_STANDALONE === '1';
 export const DEMO_HREF = STANDALONE ? '#demo' : '/demo';
 
 function Home() {
-  const card = 'flex flex-col gap-1 rounded-[6px] border border-line bg-raised p-5 shadow-raised hover:border-line-strong';
+  const card = 'flex flex-col gap-1 rounded-[10px] border border-line bg-raised p-5 shadow-raised hover:border-line-strong';
   return (
     <main className="mx-auto flex min-h-dvh max-w-3xl flex-col justify-center gap-8 bg-surface px-6 py-16 text-ink">
       <div>

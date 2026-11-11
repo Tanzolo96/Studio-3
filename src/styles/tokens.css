@@ -7,7 +7,7 @@
   --surface: #f5f6f8;
   --surface-raised: #ffffff;
   --surface-sunken: #eceef1;
-  --line: #e3e5e9;
+  --line: #eceef1;
   --line-strong: #9aa0a8;
   --ink: #0e0f11;
   --ink-muted: #5f656d;
@@ -32,7 +32,7 @@
   --ai: #3b4350;
   --ai-soft: #e8eaee;
   --scrim: rgba(22, 22, 22, 0.56);
-  --shadow-raised: none;
+  --shadow-raised: 0 1px 2px rgba(14, 15, 17, 0.04), 0 4px 16px rgba(14, 15, 17, 0.04);
   --shadow-sheet: 0 12px 32px rgba(16, 24, 40, 0.18);
   /* charts (validated with the dataviz palette checker: red/amber pass CVD) */
   --data: #5b6573;
@@ -41,7 +41,7 @@
   --chart-major: #f5a524;
   --chart-minor: #bcc0c7;
   --grid: #eceef1;
-  --panel-radius: 10px;
+  --panel-radius: 14px;
 }
 
 [data-theme='night'] {
@@ -74,7 +74,7 @@
   --ai: #bcc0c7;
   --ai-soft: #2b2e34;
   --scrim: rgba(0, 0, 0, 0.64);
-  --shadow-raised: none;
+  --shadow-raised: 0 1px 2px rgba(0, 0, 0, 0.5);
   --shadow-sheet: 0 12px 32px rgba(0, 0, 0, 0.56);
   --data: #9aa6b8;
   --data-soft: rgba(154, 166, 184, 0.16);
@@ -85,7 +85,7 @@
 }
 
 :root {
-  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-sans: 'Plus Jakarta Sans', system-ui, sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
   --nav-width: 232px;
   --touch: 48px;

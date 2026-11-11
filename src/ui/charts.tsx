@@ -21,7 +21,7 @@ function Tip({ x, y, children, w }: { x: number; y: number; children: ReactNode;
   return (
     <div
       role="status"
-      className="pointer-events-none absolute z-[var(--z-dock)] -translate-x-1/2 -translate-y-full rounded-[6px] border border-line bg-raised px-2.5 py-1.5 shadow-sheet"
+      className="pointer-events-none absolute z-[var(--z-dock)] -translate-x-1/2 -translate-y-full rounded-[10px] border border-line bg-raised px-2.5 py-1.5 shadow-sheet"
       style={{ left, top: y - 8 }}
     >
       {children}

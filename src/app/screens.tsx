@@ -16,7 +16,7 @@ function Page({ title, sub, back, children }: { title: string; sub?: string; bac
   return (
     <div className="px-4 pt-4 pb-8">
       {back && (
-        <Link to={back} className="t-small-strong -ml-2 mb-2 inline-flex h-12 items-center gap-1 rounded-[6px] px-2 text-brand hover:bg-brand-soft">
+        <Link to={back} className="t-small-strong -ml-2 mb-2 inline-flex h-12 items-center gap-1 rounded-[10px] px-2 text-brand hover:bg-brand-soft">
           <ArrowLeft size={20} /> Back
         </Link>
       )}
@@ -50,7 +50,7 @@ function MyTickets({ user }: { user: User }) {
   return (
     <Page title="Active issues" sub={sub}>
       {live.length === 0 ? (
-        <div className="flex flex-col items-center gap-3 rounded-[10px] bg-raised px-6 py-12 text-center shadow-raised">
+        <div className="flex flex-col items-center gap-3 rounded-[16px] bg-raised px-6 py-12 text-center shadow-raised">
           <span className="grid size-16 place-items-center rounded-full bg-ok-soft text-ok">
             <Checkmark size={32} />
           </span>
@@ -58,7 +58,7 @@ function MyTickets({ user }: { user: User }) {
           <p className="t-small max-w-[30ch] text-muted">
             {user.role === 'supervisor' ? 'No active issues. Every frame is running normally. A new fault will ring this phone.' : 'Nothing has been escalated to you.'}
           </p>
-          <Link to="/app/previous" className="t-small-strong mt-1 inline-flex h-12 items-center rounded-[6px] px-3 text-brand hover:bg-brand-soft">
+          <Link to="/app/previous" className="t-small-strong mt-1 inline-flex h-12 items-center rounded-[10px] px-3 text-brand hover:bg-brand-soft">
             See resolved issues in History
           </Link>
         </div>
@@ -100,12 +100,12 @@ function TestRequests({ user }: { user: User }) {
               <li key={r.id}>
                 <Link
                   to={`/app/test/${r.id}`}
-                  className={cx('flex items-center gap-3 rounded-[6px] border bg-raised p-4 shadow-raised hover:bg-sunken', r.urgent ? 'border-major-fill' : 'border-line')}
+                  className={cx('flex items-center gap-3 rounded-[10px] border bg-raised p-4 shadow-raised hover:bg-sunken', r.urgent ? 'border-major-fill' : 'border-line')}
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       {r.urgent && (
-                        <span className="t-label inline-flex h-6 items-center gap-1.5 rounded-[4px] bg-major-soft px-2 text-major">
+                        <span className="t-label inline-flex h-6 items-center gap-1.5 rounded-[6px] bg-major-soft px-2 text-major">
                           <SeverityShape level="major" /> Urgent
                         </span>
                       )}
@@ -144,7 +144,7 @@ function RepairJobs({ user }: { user: User }) {
       ) : (
         <ul className="flex flex-col gap-3">
           {jobs.map((t) => (
-            <li key={t.id} className="rounded-[6px] border border-line bg-raised p-4 shadow-raised">
+            <li key={t.id} className="rounded-[10px] border border-line bg-raised p-4 shadow-raised">
               <div className="flex items-center justify-between">
                 <SeverityBadge level={t.severity} />
                 <span className="t-data text-[13px] text-muted">sent {ago(now - (t.events.findLast((e) => e.kind === 'fitter_assigned')?.at ?? now))} ago</span>
@@ -217,7 +217,7 @@ function TicketDetail({ s, t, now, user }: { s: MillState; t: Ticket; now: numbe
     action = (
       <div className="flex flex-col gap-2">
         {!t.repairDoneAt && (
-          <p className="t-small flex items-center gap-2 rounded-[6px] bg-major-soft px-3 py-2.5 text-ink">
+          <p className="t-small flex items-center gap-2 rounded-[10px] bg-major-soft px-3 py-2.5 text-ink">
             <span className="t-small-strong">{fitter}</span> is repairing the frame
           </p>
         )}
@@ -282,7 +282,7 @@ function TicketDetail({ s, t, now, user }: { s: MillState; t: Ticket; now: numbe
       <section
         aria-label="Is it resolved?"
         className={cx(
-          'mt-4 flex items-center gap-4 rounded-[10px] p-4',
+          'mt-4 flex items-center gap-4 rounded-[16px] p-4',
           tone === 'ok' ? 'bg-ok-soft' : tone === 'critical' ? 'bg-critical-soft' : tone === 'major' ? 'bg-major-soft' : 'bg-sunken',
         )}
       >
@@ -331,13 +331,13 @@ function TicketDetail({ s, t, now, user }: { s: MillState; t: Ticket; now: numbe
 
       <div className="mt-6 grid grid-cols-2 gap-3">
         {reading && (
-          <section className="col-span-2 rounded-[10px] border border-line bg-raised p-4">
+          <section className="col-span-2 rounded-[16px] border border-line bg-raised p-4">
             <ReadingGauge test={reading.test} value={reading.value} min={rule?.min} max={t.kind === 'test_fail' ? rule?.max : reading.max} drift={t.kind !== 'test_fail' && reading.test === 'cv'} />
             {t.readings.length > 1 && <p className="t-small mt-3 text-muted">{t.readings.length} readings on this issue</p>}
           </section>
         )}
         {hold && (
-          <section className="rounded-[10px] bg-held-soft p-4">
+          <section className="rounded-[16px] bg-held-soft p-4">
             <p className="t-small text-held">Yarn held</p>
             <p className="t-stat text-held">
               {roundKg(holdKg(hold, now))}
@@ -347,7 +347,7 @@ function TicketDetail({ s, t, now, user }: { s: MillState; t: Ticket; now: numbe
           </section>
         )}
         {sisters.length > 0 && (
-          <section className="rounded-[10px] border border-line bg-raised p-4">
+          <section className="rounded-[16px] border border-line bg-raised p-4">
             <p className="t-small text-muted">Sister frames</p>
             <ul className="mt-2 flex flex-col gap-1.5">
               {sisters.map((x) => (
@@ -363,9 +363,9 @@ function TicketDetail({ s, t, now, user }: { s: MillState; t: Ticket; now: numbe
         )}
       </div>
 
-      {t.photo && <img src={t.photo} alt={`Photo added when ${frameWord(t.frameId)} was fixed`} className="mt-4 w-full rounded-[10px] border border-line" />}
+      {t.photo && <img src={t.photo} alt={`Photo added when ${frameWord(t.frameId)} was fixed`} className="mt-4 w-full rounded-[16px] border border-line" />}
 
-      <details className="group mt-6 rounded-[10px] border border-line bg-raised">
+      <details className="group mt-6 rounded-[16px] border border-line bg-raised">
         <summary className="t-small-strong flex h-12 cursor-pointer list-none items-center justify-between px-4 text-ink">
           Full history · {timeline(t, now).length} updates
           <ChevronRight size={20} className="text-muted transition-transform group-open:rotate-90" />
@@ -379,11 +379,11 @@ function TicketDetail({ s, t, now, user }: { s: MillState; t: Ticket; now: numbe
         <div className="mt-4 flex flex-col gap-2">
           {pendingAsk ? (
             user.role === 'qc' ? (
-              <Link to={`/app/test/${pendingAsk.id}`} className="t-body-strong flex h-12 items-center justify-center rounded-[6px] border border-line bg-raised text-brand">
+              <Link to={`/app/test/${pendingAsk.id}`} className="t-body-strong flex h-12 items-center justify-center rounded-[10px] border border-line bg-raised text-brand">
                 Enter the lab result
               </Link>
             ) : (
-              <p className="t-small rounded-[6px] bg-sunken px-3 py-2.5 text-center text-muted">Lab test asked, due {hhmm(pendingAsk.dueAt)}</p>
+              <p className="t-small rounded-[10px] bg-sunken px-3 py-2.5 text-center text-muted">Lab test asked, due {hhmm(pendingAsk.dueAt)}</p>
             )
           ) : (
             <Button variant="secondary" block onClick={() => dispatch({ type: 'test/ask', ticketId: t.id, test: askTest, by: user.id } as never)}>
@@ -442,7 +442,7 @@ function FitterSheet({ t, user, onClose }: { t: Ticket; user: User; onClose: () 
 function PhotoInput({ value, onChange }: { value?: string; onChange: (v?: string) => void }) {
   return (
     <div>
-      <label className="t-small-strong flex h-12 cursor-pointer items-center justify-center gap-2 rounded-[6px] border border-dashed border-line-strong text-ink hover:bg-sunken">
+      <label className="t-small-strong flex h-12 cursor-pointer items-center justify-center gap-2 rounded-[10px] border border-dashed border-line-strong text-ink hover:bg-sunken">
         <Camera size={20} />
         {value ? 'Replace photo' : 'Add photo'}
         <input
@@ -456,7 +456,7 @@ function PhotoInput({ value, onChange }: { value?: string; onChange: (v?: string
           }}
         />
       </label>
-      {value && <img src={value} alt="Photo to attach" className="mt-2 max-h-40 rounded-[6px] border border-line" />}
+      {value && <img src={value} alt="Photo to attach" className="mt-2 max-h-40 rounded-[10px] border border-line" />}
     </div>
   );
 }
@@ -486,7 +486,7 @@ function FixedSheet({ t, user, onClose }: { t: Ticket; user: User; onClose: () =
           value={note}
           onChange={(e) => setNote(e.target.value)}
           placeholder="Reset back roller setting, checked 3 cops"
-          className="rounded-[6px] border border-line-strong bg-raised p-3 t-body outline-none placeholder:text-[var(--ink-muted)] focus:outline-2 focus:outline-brand"
+          className="rounded-[10px] border border-line-strong bg-raised p-3 t-body outline-none placeholder:text-[var(--ink-muted)] focus:outline-2 focus:outline-brand"
         />
       </div>
       <div className="mt-4">
@@ -525,7 +525,7 @@ function HandoverSheet({ t, user, onClose }: { t: Ticket; user: User; onClose: (
           value={note}
           onChange={(e) => setNote(e.target.value)}
           placeholder="Fitter changed the top apron, check 2 cops after the next doff"
-          className="rounded-[6px] border border-line-strong bg-raised p-3 t-body outline-none placeholder:text-[var(--ink-muted)] focus:outline-2 focus:outline-brand"
+          className="rounded-[10px] border border-line-strong bg-raised p-3 t-body outline-none placeholder:text-[var(--ink-muted)] focus:outline-2 focus:outline-brand"
         />
       </div>
       <Button
@@ -567,7 +567,7 @@ export function TestEntryScreen() {
     const hold = t?.holdId ? s.holds.find((h) => h.id === t.holdId) : undefined;
     return (
       <Page title={result.pass ? 'Within limit' : 'Outside the limit'} back="/app">
-        <div className={cx('rounded-[6px] p-4', result.pass ? 'bg-ok-soft' : 'bg-critical-soft')}>
+        <div className={cx('rounded-[10px] p-4', result.pass ? 'bg-ok-soft' : 'bg-critical-soft')}>
           <p className={cx('t-body-strong', result.pass ? 'text-ok' : 'text-critical')}>
             {withUnit(result.test, result.value)} on {frameWord(result.frameId)}
           </p>
@@ -625,7 +625,7 @@ export function TestEntryScreen() {
           setSaved(r?.id);
         }}
       >
-        <p className="t-small rounded-[6px] bg-sunken px-3 py-2.5 text-ink">Instrument: {TEST[req.test].instrument}</p>
+        <p className="t-small rounded-[10px] bg-sunken px-3 py-2.5 text-ink">Instrument: {TEST[req.test].instrument}</p>
         <TextField
           big
           label={`Reading (${TEST[req.test].unit || 'value'})`}
@@ -637,7 +637,7 @@ export function TestEntryScreen() {
           error={invalid ? 'Enter a number, like 29.8' : undefined}
           hint={rule ? `Limit for ${product.short}: ${rule.min ?? '–'} to ${rule.max ?? '–'}` : undefined}
         />
-        <div className="rounded-[6px] border border-line bg-raised p-4">
+        <div className="rounded-[10px] border border-line bg-raised p-4">
           <ReadingGauge test={req.test} value={invalid ? undefined : value} min={rule?.min} max={rule?.max} pending />
           {value !== undefined && !invalid && !withinRule(rule, value) && req.reason !== 'retest' && (
             <p className="t-small mt-3 text-critical">Saving this alerts the supervisor{rule?.severity === 'critical' ? ' and holds the yarn' : ''}.</p>
@@ -689,7 +689,7 @@ export function RaiseScreen() {
                 aria-label={f.id}
                 onClick={() => setFrame(f.id)}
                 className={cx(
-                  't-data h-12 rounded-[6px] border text-[15px]',
+                  't-data h-12 rounded-[10px] border text-[15px]',
                   frame === f.id ? 'border-brand bg-brand-soft font-semibold outline outline-1 outline-brand' : 'border-line-strong bg-raised hover:bg-sunken',
                 )}
               >
@@ -736,7 +736,7 @@ export function RaiseScreen() {
             value={note}
             onChange={(e) => setNote(e.target.value)}
             placeholder="Breaks on spindles 210 to 240"
-            className="rounded-[6px] border border-line-strong bg-raised p-3 t-body outline-none placeholder:text-[var(--ink-muted)] focus:outline-2 focus:outline-brand"
+            className="rounded-[10px] border border-line-strong bg-raised p-3 t-body outline-none placeholder:text-[var(--ink-muted)] focus:outline-2 focus:outline-brand"
           />
         </div>
         <PhotoInput value={photo} onChange={setPhoto} />
@@ -779,16 +779,16 @@ export function PreviousScreen() {
     if (groups.at(-1)?.day !== d) groups.push({ day: d, items: [] });
     groups.at(-1)!.items.push(t);
   }
-  const select = 'h-12 rounded-[6px] border border-line-strong bg-raised px-2 t-small';
+  const select = 'h-12 rounded-[10px] border border-line-strong bg-raised px-2 t-small';
   return (
     <Page title="History" sub={`${user.role === 'fitter' ? 'Frames you repaired' : user.role === 'tester' ? 'Issues you tested' : 'Resolved issues'}, last 31 days · ${monthName(now)}`}>
       {user.role === 'supervisor' && (
         <div className="mb-4 grid grid-cols-2 gap-2">
-          <div className="rounded-[10px] bg-raised p-3 shadow-raised">
+          <div className="rounded-[16px] bg-raised p-3 shadow-raised">
             <p className="t-small text-muted">Your median to Seen</p>
             <p className="t-stat">{myMedian ? timer(myMedian) : '–'}</p>
           </div>
-          <div className="rounded-[10px] bg-raised p-3 shadow-raised">
+          <div className="rounded-[16px] bg-raised p-3 shadow-raised">
             <p className="t-small text-muted">Issues you handled</p>
             <p className="t-stat">{mine.length}</p>
           </div>
@@ -816,7 +816,7 @@ export function PreviousScreen() {
       {groups.map((g) => (
         <section key={g.day} className="mt-5">
           <h2 className="t-small-strong mb-2 text-muted">{g.day}</h2>
-          <ul className="overflow-hidden rounded-[10px] bg-raised shadow-raised">
+          <ul className="overflow-hidden rounded-[16px] bg-raised shadow-raised">
             {g.items.map((t, i) => (
               <li key={t.id} className={cx(i > 0 && 'border-t border-line')}>
                 <button type="button" onClick={() => nav(`/app/ticket/${t.id}`)} className="flex min-h-16 w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-sunken">

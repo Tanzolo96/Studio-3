@@ -24,7 +24,7 @@ const SEV_STYLE: Record<Severity, string> = {
 
 export function SeverityBadge({ level, className }: { level: Severity; className?: string }) {
   return (
-    <span className={cx('t-label inline-flex h-6 items-center gap-1.5 rounded-[4px] px-2', SEV_STYLE[level], className)}>
+    <span className={cx('t-label inline-flex h-6 items-center gap-1.5 rounded-[6px] px-2', SEV_STYLE[level], className)}>
       <SeverityShape level={level} />
       {SEVERITY[level].word}
     </span>
@@ -52,7 +52,7 @@ const CHIP: Record<ChipKind, { word: string; cls: string; dot: string }> = {
 export function StatusChip({ kind, label, className }: { kind: ChipKind; label?: string; className?: string }) {
   const c = CHIP[kind];
   return (
-    <span className={cx('t-small-strong inline-flex h-6 items-center gap-1.5 whitespace-nowrap rounded-[4px] px-2', c.cls, className)}>
+    <span className={cx('t-small-strong inline-flex h-6 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5', c.cls, className)}>
       <span className="size-1.5 rounded-full" style={{ background: c.dot }} aria-hidden />
       {label ?? c.word}
     </span>
@@ -77,7 +77,7 @@ export const Button = forwardRef<
       ref={ref}
       {...rest}
       className={cx(
-        'inline-flex select-none items-center justify-center gap-2 rounded-[6px] font-semibold transition-[background-color,transform] duration-150 active:scale-[0.98] disabled:opacity-45 disabled:active:scale-100',
+        'inline-flex select-none items-center justify-center gap-2 rounded-[10px] font-semibold transition-[background-color,transform] duration-150 active:scale-[0.98] disabled:opacity-45 disabled:active:scale-100',
         size === 'lg' ? 'h-12 px-5 text-[15px]' : 'h-10 px-4 text-[15px]',
         block && 'w-full',
         VARIANT[variant],
@@ -109,7 +109,7 @@ export function TextField({
       </label>
       <div
         className={cx(
-          'flex items-center rounded-[6px] border bg-raised focus-within:outline-2 focus-within:outline-offset-0',
+          'flex items-center rounded-[10px] border bg-raised focus-within:outline-2 focus-within:outline-offset-0',
           big ? 'h-16' : 'h-12',
           error ? 'border-critical focus-within:outline-critical' : 'border-line-strong focus-within:outline-brand',
         )}
@@ -156,7 +156,7 @@ export function Choice({ selected, onClick, children, className }: { selected: b
       aria-checked={selected}
       onClick={onClick}
       className={cx(
-        'min-h-12 rounded-[6px] border px-3 py-2 text-left t-body transition-colors',
+        'min-h-12 rounded-[10px] border px-3 py-2 text-left t-body transition-colors',
         selected ? 'border-brand bg-brand-soft font-semibold text-ink outline outline-1 outline-brand' : 'border-line-strong bg-raised text-ink hover:bg-sunken',
         className,
       )}
@@ -176,7 +176,7 @@ export function AiSpark({ size = 14 }: { size?: number }) {
 
 export function AiTag({ kind }: { kind: string }) {
   return (
-    <span className="t-small-strong inline-flex h-6 items-center whitespace-nowrap gap-1.5 rounded-[4px] bg-ai-soft px-2 text-ai">
+    <span className="t-small-strong inline-flex h-6 items-center whitespace-nowrap gap-1.5 rounded-[6px] bg-ai-soft px-2 text-ai">
       <AiSpark />
       AI · {kind}
     </span>
@@ -189,7 +189,7 @@ export function Dot({ color, className }: { color: string; className?: string })
 
 export function Empty({ title, body, icon }: { title: string; body?: string; icon?: ReactNode }) {
   return (
-    <div className="flex flex-col items-center gap-2 rounded-[6px] border border-dashed border-line-strong px-6 py-10 text-center">
+    <div className="flex flex-col items-center gap-2 rounded-[10px] border border-dashed border-line-strong px-6 py-10 text-center">
       {icon && <div className="text-neutral">{icon}</div>}
       <p className="t-body-strong">{title}</p>
       {body && <p className="t-small max-w-[36ch] text-muted">{body}</p>}
