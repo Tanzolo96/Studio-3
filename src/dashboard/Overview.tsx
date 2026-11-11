@@ -10,7 +10,7 @@ import { BASELINE_KG, alertHeat, dailyAlerts, frameStateCounts, seenTrend, shift
 import { DAY, dayMonth, hhmm, mill, millDayKey, shiftAt, timer } from '../engine/time';
 import { cx, Empty, SeverityBadge, StatusChip } from '../ui/primitives';
 import { InsightCard, readingLine, ticketChip } from '../ui/cards';
-import { BarList, Ring, SeverityLegend, ShiftBars, StackedColumns, TrendArea } from '../ui/charts';
+import { BarList, CategoryBar, Ring, SeverityLegend, ShiftBars, StackedColumns, TrendArea } from '../ui/charts';
 import { PageHead } from './DashShell';
 
 export function Panel({ title, sub, aside, children, className }: { title: string; sub?: string; aside?: ReactNode; children: ReactNode; className?: string }) {
@@ -213,6 +213,18 @@ export function Overview() {
           }
         >
           <FloorMap s={s} now={now} onOpen={(id) => nav(`/dashboard/machines/${id}`)} />
+          <div className="mt-auto pt-6">
+            <CategoryBar
+              label="Frames by state"
+              parts={[
+                { key: 'running', value: states.running, color: 'var(--neutral-state)', word: 'Running' },
+                { key: 'warning', value: states.warning, color: 'var(--major-fill)', word: 'Warning' },
+                { key: 'fault', value: states.fault, color: 'var(--critical)', word: 'Failed' },
+                { key: 'held', value: states.held, color: 'var(--held)', word: 'Yarn on hold' },
+                { key: 'stopped', value: states.stopped, color: 'var(--line-strong)', word: 'Stopped' },
+              ]}
+            />
+          </div>
         </Panel>
         <CalendarPanel s={s} now={now} onOpen={(id) => nav(`/dashboard/tickets/${id}`)} />
       </div>
@@ -292,7 +304,7 @@ function FloorMap({ s, now, onOpen }: { s: MillState; now: number; onOpen: (id: 
                 onFocus={() => setHover(f.id)}
                 onMouseLeave={() => setHover(null)}
                 aria-label={`${f.id}: ${v.label}. ${v.line}`}
-                className={cx('flex h-14 min-w-0 flex-col items-center justify-center overflow-hidden whitespace-nowrap rounded-[10px] border-2 transition-transform hover:-translate-y-0.5', TILE[v.kind])}
+                className={cx('flex h-[60px] min-w-0 flex-col items-center justify-center overflow-hidden whitespace-nowrap rounded-[10px] border-2 transition-transform hover:-translate-y-0.5', TILE[v.kind])}
               >
                 <span className="font-mono text-[15px] font-semibold leading-5 tabular-nums">{f.num}</span>
                 <span className="text-[11px] leading-4 opacity-80">{v.kind === 'running' ? f.lotId : SHORT[v.kind]}</span>
@@ -508,6 +520,16 @@ function CalendarPanel({ s, now, onOpen }: { s: MillState; now: number; onOpen: 
     }
     return m;
   }, [s.tickets, now]);
+  const firstKey = useMemo(() => s.tickets.reduce((m, t) => { const k = millDayKey(t.createdAt); return k < m ? k : m; }, todayKey), [s.tickets, todayKey]);
+  const kinds = Array.from({ length: dim }, (_, i) => {
+    const k = key(i + 1);
+    const list = byDay.get(k) ?? [];
+    if (k > todayKey) return 'future';
+    if (list.some((t) => t.severity === 'critical')) return 'critical';
+    if (list.length) return 'major';
+    return k >= firstKey ? 'calm' : 'none';
+  });
+  const count = (kind: string) => kinds.filter((x) => x === kind).length;
   const day = (byDay.get(picked) ?? []).slice().sort((a, b) => a.createdAt - b.createdAt);
   const step = (n: number) => setView((v) => ({ y: v.y + Math.floor((v.m + n) / 12), m: (v.m + n + 12) % 12 }));
   const btn = 'grid size-8 place-items-center rounded-[8px] text-muted hover:bg-sunken hover:text-ink';
@@ -526,7 +548,21 @@ function CalendarPanel({ s, now, onOpen }: { s: MillState; now: number; onOpen: 
         </div>
       }
     >
-      <div className="grid grid-cols-7 gap-y-1 text-center">
+      <div className="mb-4 grid grid-cols-3 gap-2">
+        <div className="rounded-[8px] bg-critical-soft px-3 py-2">
+          <p className="t-stat !text-[20px] !leading-[24px] text-critical">{count('critical')}</p>
+          <p className="t-small text-critical">Critical days</p>
+        </div>
+        <div className="rounded-[8px] bg-major-soft px-3 py-2">
+          <p className="t-stat !text-[20px] !leading-[24px] text-major">{count('major')}</p>
+          <p className="t-small text-major">Major days</p>
+        </div>
+        <div className="rounded-[8px] bg-ok-soft px-3 py-2">
+          <p className="t-stat !text-[20px] !leading-[24px] text-ok">{count('calm')}</p>
+          <p className="t-small text-ok">Calm days</p>
+        </div>
+      </div>
+      <div className="grid grid-cols-7 gap-1 text-center">
         {['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'].map((d) => (
           <span key={d} className="t-small pb-1 text-neutral">
             {d}
@@ -539,8 +575,7 @@ function CalendarPanel({ s, now, onOpen }: { s: MillState; now: number; onOpen: 
           const d = i + 1;
           const k = key(d);
           const list = byDay.get(k) ?? [];
-          const crit = list.some((t) => t.severity === 'critical');
-          const future = k > todayKey;
+          const kind = kinds[i];
           const isPicked = k === picked;
           return (
             <button
@@ -550,16 +585,35 @@ function CalendarPanel({ s, now, onOpen }: { s: MillState; now: number; onOpen: 
               aria-pressed={isPicked}
               aria-label={`${d} ${MONTH_NAMES[view.m]}, ${list.length} alert${list.length === 1 ? '' : 's'}`}
               className={cx(
-                't-small mx-auto flex size-9 flex-col items-center justify-center rounded-[8px]',
-                isPicked ? 'bg-brand font-semibold text-on-brand' : k === todayKey ? 'font-semibold text-brand ring-1 ring-[var(--brand)]' : future ? 'text-[var(--line-strong)]' : 'hover:bg-sunken',
+                't-small relative mx-auto flex size-10 items-center justify-center rounded-[10px] font-medium',
+                isPicked
+                  ? 'bg-brand font-semibold text-on-brand'
+                  : kind === 'critical'
+                    ? 'bg-critical-soft text-critical'
+                    : kind === 'major'
+                      ? 'bg-major-soft text-major'
+                      : kind === 'calm'
+                        ? 'bg-ok-soft text-ok'
+                        : kind === 'future'
+                          ? 'text-[var(--line-strong)]'
+                          : 'text-muted',
+                k === todayKey && !isPicked && 'ring-2 ring-[var(--brand)]',
               )}
             >
               {d}
-              <span className={cx('mt-px size-1 rounded-full', list.length ? (isPicked ? 'bg-on-brand' : crit ? 'bg-critical' : 'bg-major-fill') : 'bg-transparent')} />
+              {list.length > 1 && (
+                <span className={cx('absolute -top-1 -right-1 grid h-4 min-w-4 place-items-center rounded-full px-1 text-[10px] font-semibold', isPicked ? 'bg-ink text-surface' : kind === 'critical' ? 'bg-critical text-on-critical' : 'bg-major-fill text-ink')}>{list.length}</span>
+              )}
             </button>
           );
         })}
       </div>
+      <ul className="t-small mt-3 flex flex-wrap gap-x-4 gap-y-1 text-muted" aria-label="Legend">
+        <li className="flex items-center gap-1.5"><span className="size-2.5 rounded-[3px] bg-critical" />Critical</li>
+        <li className="flex items-center gap-1.5"><span className="size-2.5 rounded-[3px] bg-major-fill" />Major</li>
+        <li className="flex items-center gap-1.5"><span className="size-2.5 rounded-[3px] bg-ok" />Calm</li>
+        <li className="flex items-center gap-1.5"><span className="size-2.5 rounded-[3px] bg-brand" />Selected</li>
+      </ul>
       <div className="mt-4 border-t border-line pt-3">
         <p className="t-small-strong mb-2">{picked === todayKey ? 'Today' : dayMonth(mill(picked))}</p>
         {day.length ? (
