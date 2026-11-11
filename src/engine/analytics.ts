@@ -1,7 +1,7 @@
 // Numbers behind the dashboard charts. Pure functions over the mill state.
 
 import type { MillState, Severity, ShiftId, Ticket } from './types';
-import { DAY, mill, millDayKey, shiftAt } from './time';
+import { DAY, mill, millDayKey, millHour, shiftAt } from './time';
 import { frameView, median, type FrameStateKind } from './selectors';
 import { holdKg } from './reducer';
 
@@ -77,3 +77,15 @@ export function ticketsSince(s: MillState, since: number, now: number) {
 }
 
 export const sevOrder: Severity[] = ['critical', 'major', 'minor'];
+
+/** Critical and major alerts by weekday (Mon first) and 3-hour block, over the last `days` days. */
+export function alertHeat(s: MillState, now: number, days = 30): number[][] {
+  const since = dayStart(now) - (days - 1) * DAY;
+  const grid = Array.from({ length: 7 }, () => Array.from({ length: 8 }, () => 0));
+  for (const t of s.tickets) {
+    if (t.severity === 'minor' || t.createdAt > now || t.createdAt < since) continue;
+    const wd = (new Date(t.createdAt + 5.5 * 3600000).getUTCDay() + 6) % 7;
+    grid[wd][Math.min(7, Math.floor(millHour(t.createdAt) / 3))] += 1;
+  }
+  return grid;
+}

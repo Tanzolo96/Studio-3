@@ -31,7 +31,7 @@ export function TicketTable({ s, tickets, now, empty }: { s: MillState; tickets:
   return (
     <div className="overflow-hidden rounded-[10px] bg-surface">
       <table className="w-full border-collapse text-left">
-        <thead className="bg-sunken">
+        <thead>
           <tr className="t-label text-muted">
             <th scope="col" className="h-9 px-3 font-semibold">Severity</th>
             <th scope="col" className="px-3 font-semibold">Frame</th>
@@ -54,7 +54,7 @@ export function TicketTable({ s, tickets, now, empty }: { s: MillState; tickets:
                 tabIndex={0}
                 onClick={() => nav(`/dashboard/tickets/${t.id}`)}
                 onKeyDown={(e) => e.key === 'Enter' && nav(`/dashboard/tickets/${t.id}`)}
-                className={cx('h-12 cursor-pointer border-t border-line hover:bg-sunken focus-visible:outline-offset-[-2px]', crit && 'bg-critical-soft hover:bg-critical-soft')}
+                className={cx('h-14 cursor-pointer border-t border-line hover:bg-raised focus-visible:outline-offset-[-2px]', crit && 'bg-critical-soft hover:bg-critical-soft')}
               >
                 <td className="px-3">
                   <SeverityBadge level={t.severity} className={crit ? 'bg-transparent' : ''} />
@@ -98,7 +98,7 @@ export function Tickets() {
         .sort((a, b) => (status === 'live' ? bySeverityThenAge(a, b) : b.createdAt - a.createdAt)),
     [s.tickets, now, shift, frame, sev, status],
   );
-  const select = 'h-10 rounded-[10px] border border-line-strong bg-raised px-3 t-small';
+  const select = 't-small h-10 rounded-full bg-surface px-4';
   return (
     <div className="max-w-[1180px]">
       <PageHead title="Tickets" sub={`${list.length} shown · ${s.tickets.length} since 01 Oct`} />
@@ -269,7 +269,7 @@ export function HeldYarn() {
       <Section title="Decided" className="mt-10">
         <div className="overflow-hidden rounded-[10px] bg-surface">
           <table className="w-full text-left">
-            <thead className="bg-sunken">
+            <thead>
               <tr className="t-label text-muted">
                 <th scope="col" className="h-9 px-3 font-semibold">Frame</th>
                 <th scope="col" className="px-3 font-semibold">Lot</th>

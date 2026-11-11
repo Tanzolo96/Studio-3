@@ -6,7 +6,7 @@ import { useMillState, useNow, useUser } from '../store/store';
 import { bySeverityThenAge, escalation, frameView, heldKg, openHolds, type FrameStateKind } from '../engine/selectors';
 import { frameWord, holdKg, roundKg, userName } from '../engine/reducer';
 import { insights } from '../engine/insights';
-import { BASELINE_KG, dailyAlerts, frameStateCounts, seenTrend, shiftResponse, ticketsSince, topCauses, yarnSaved } from '../engine/analytics';
+import { BASELINE_KG, alertHeat, dailyAlerts, frameStateCounts, seenTrend, shiftResponse, ticketsSince, topCauses, yarnSaved } from '../engine/analytics';
 import { DAY, dayMonth, hhmm, mill, millDayKey, millHour, shiftAt, timer } from '../engine/time';
 import { cx, Empty, SeverityBadge, SeverityShape, StatusChip } from '../ui/primitives';
 import { InsightCard, readingLine, ticketChip } from '../ui/cards';
@@ -35,15 +35,17 @@ export function Overview() {
   const now = useNow();
   const user = useUser('dash');
   const nav = useNavigate();
+  const [range, setRange] = useState<1 | 7 | 30>(30);
 
   const live = s.tickets.filter((t) => t.status !== 'closed' && t.status !== 'fixed').sort(bySeverityThenAge);
   const incidents = live.filter((t) => t.severity !== 'minor');
   const nowMin = Math.floor(now / 60000);
   const a = useMemo(() => {
-    const since30 = mill(millDayKey(now)) - 29 * DAY;
+    const since30 = mill(millDayKey(now)) - (range - 1) * DAY;
     const month = ticketsSince(s, since30, now);
     return {
       daily: dailyAlerts(s, now, 30),
+      heat: alertHeat(s, now, 30),
       trend: seenTrend(s, now, 30),
       causes: topCauses(month).slice(0, 6),
       shifts: shiftResponse(month),
@@ -52,11 +54,11 @@ export function Overview() {
     };
     // recompute once a mill minute
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [s, nowMin]);
+  }, [s, nowMin, range]);
   const states = frameStateCounts(s, now);
   const holds = openHolds(s);
   const kg = roundKg(heldKg(s, now));
-  const alerts30 = a.daily.reduce((n, d) => n + d.critical + d.major, 0);
+  const alerts30 = a.daily.slice(-range).reduce((n, d) => n + d.critical + d.major, 0);
   const escalated30 = a.month.filter((t) => t.severity !== 'minor' && escalation(t, now).level > 0).length;
   const seenNow = [...a.trend].reverse().find((p) => p.mins !== null)?.mins ?? null;
   const h = millHour(now);
@@ -75,7 +77,10 @@ export function Overview() {
             {greet}, {user.name.split(' ')[0]}
           </h1>
         </div>
-        <FloorStatus incidents={incidents.length} critical={crit} />
+        <div className="flex flex-wrap items-center gap-3">
+          <FloorStatus incidents={incidents.length} critical={crit} />
+          <RangeToggle value={range} onChange={setRange} />
+        </div>
       </header>
 
       {incidents.length > 0 && (
@@ -105,14 +110,14 @@ export function Overview() {
           chart={<HoldStrip holds={holds.map((h) => ({ id: h.id, frame: h.frameId, kg: holdKg(h, now) }))} />}
         />
         <Kpi
-          label="Alerts, last 30 days"
+          label={`Alerts, ${RANGE_WORD[range]}`}
           value={alerts30}
           note={`${escalated30} escalated · minor faults not counted`}
           tone="neutral"
           chart={<Sparkline values={a.daily.map((d) => d.critical + d.major)} color="var(--neutral-state)" label="Critical and major alerts per day" />}
         />
         <Kpi
-          label="Yarn saved, last 30 days"
+          label={`Yarn saved, ${RANGE_WORD[range]}`}
           value={roundKg(a.saved.saved).toLocaleString('en-IN')}
           unit="kg"
           note={`Estimate: ${a.saved.incidents} holds averaged ${Math.round(a.saved.avgHeld)} kg, against about ${BASELINE_KG} kg per incident before`}
@@ -145,6 +150,11 @@ export function Overview() {
             />
           </div>
         </Panel>
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        <WeekStrip daily={a.daily.slice(-7)} heldKg={kg} />
+        <AlertHeat grid={a.heat} />
+      </div>
 
       {live.length > 0 && (
         <Panel title="Open tickets" sub={`${live.length} not closed yet`} aside={<Link to="/dashboard/tickets" className="t-small-strong flex items-center gap-1 text-brand hover:underline">All tickets <ArrowRight size={14} /></Link>}>
@@ -434,5 +444,97 @@ export function InsightsPage() {
         <Empty title="No new insights" body="Insights appear when the data shows a pattern worth a look." />
       )}
     </div>
+  );
+}
+
+const RANGE_WORD = { 1: 'today', 7: 'last 7 days', 30: 'last 30 days' } as const;
+
+function RangeToggle({ value, onChange }: { value: 1 | 7 | 30; onChange: (v: 1 | 7 | 30) => void }) {
+  const opts: [1 | 7 | 30, string][] = [[1, 'Today'], [7, 'Week'], [30, 'Month']];
+  return (
+    <div role="radiogroup" aria-label="Time range" className="flex rounded-full bg-surface p-1">
+      {opts.map(([v, label]) => (
+        <button
+          key={v}
+          type="button"
+          role="radio"
+          aria-checked={value === v}
+          onClick={() => onChange(v)}
+          className={cx('t-small h-8 rounded-full px-4', value === v ? 'bg-raised font-semibold text-ink shadow-raised' : 'text-muted hover:text-ink')}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+function WeekStrip({ daily, heldKg: kg }: { daily: { day: number; critical: number; major: number; minor: number }[]; heldKg: number }) {
+  const crit = daily.reduce((n, d) => n + d.critical, 0);
+  const maj = daily.reduce((n, d) => n + d.major, 0);
+  return (
+    <Panel title="This week" sub="Critical and major alerts per day">
+      <ol className="grid grid-cols-7 gap-2">
+        {daily.map((d, i) => {
+          const today = i === daily.length - 1;
+          const n = d.critical + d.major;
+          return (
+            <li key={d.day} className={cx('flex flex-col items-center gap-1.5 rounded-[14px] px-1 py-3', today ? 'bg-brand text-on-brand' : 'bg-raised')}>
+              <span className={cx('t-small', today ? 'font-semibold' : 'text-muted')}>{DOW[new Date(d.day + 5.5 * 3600000).getUTCDay()]}</span>
+              <span className="t-stat !text-[22px] !leading-7">{n}</span>
+              <span className={cx('t-data text-[11px]', today ? 'opacity-80' : 'text-muted')}>{d.critical ? `${d.critical} crit` : n ? 'major' : 'calm'}</span>
+            </li>
+          );
+        })}
+      </ol>
+      <dl className="mt-4 grid grid-cols-3 gap-2 border-t border-line pt-4">
+        <div>
+          <dt className="t-small text-muted">Critical</dt>
+          <dd className="t-body-strong">{crit}</dd>
+        </div>
+        <div>
+          <dt className="t-small text-muted">Major</dt>
+          <dd className="t-body-strong">{maj}</dd>
+        </div>
+        <div>
+          <dt className="t-small text-muted">On hold now</dt>
+          <dd className="t-body-strong">{kg} kg</dd>
+        </div>
+      </dl>
+    </Panel>
+  );
+}
+
+const HOURS = ['00', '03', '06', '09', '12', '15', '18', '21'];
+const DAYS7 = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+function AlertHeat({ grid }: { grid: number[][] }) {
+  const max = Math.max(1, ...grid.flat());
+  return (
+    <Panel title="When alerts happen" sub="Critical and major, last 30 days, by weekday and hour">
+      <div role="img" aria-label="Heat map of critical and major alerts by weekday and 3-hour block" className="grid grid-cols-[32px_repeat(8,minmax(0,1fr))] items-center gap-1.5">
+        {grid.map((row, r) => (
+          <div key={DAYS7[r]} className="contents">
+            <span className="t-small text-muted">{DAYS7[r]}</span>
+            {row.map((v, c) => (
+              <span
+                key={c}
+                title={`${DAYS7[r]} ${HOURS[c]}:00, ${v} alert${v === 1 ? '' : 's'}`}
+                className="h-6 rounded-[6px]"
+                style={{ background: v ? `color-mix(in srgb, var(--brand) ${Math.round(18 + (v / max) * 82)}%, var(--surface-raised))` : 'var(--surface-sunken)' }}
+              />
+            ))}
+          </div>
+        ))}
+        <span />
+        {HOURS.map((h) => (
+          <span key={h} className="t-data text-center text-[11px] text-muted">
+            {h}
+          </span>
+        ))}
+      </div>
+    </Panel>
   );
 }

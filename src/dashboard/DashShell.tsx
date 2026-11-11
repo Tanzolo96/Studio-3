@@ -1,12 +1,23 @@
 import { useState, type ReactNode } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
-import { Asleep, Light } from '@carbon/icons-react';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { ArrowLeft, ArrowRight, Asleep, Chip, Dashboard, Idea, Light, Locked, Notification, Report, Rule, Search, Task, UserAvatar } from '@carbon/icons-react';
 import { useMillState, useNow, useSession, useTheme, useUser } from '../store/store';
 import { heldKg, isEscalated } from '../engine/selectors';
 import { roundKg } from '../engine/reducer';
 import { cx } from '../ui/primitives';
 import { ROLE_WORD } from '../app/Person';
 import { SimulatorDock } from '../demo/Simulator';
+
+const ICON: Record<string, ReactNode> = {
+  Overview: <Dashboard size={18} />,
+  Tickets: <Task size={18} />,
+  'Held yarn': <Locked size={18} />,
+  Machines: <Chip size={18} />,
+  'AI insights': <Idea size={18} />,
+  'Monthly report': <Report size={18} />,
+  Rules: <Rule size={18} />,
+  Account: <UserAvatar size={18} />,
+};
 
 const NAV: { group: string; items: { to: string; label: string; end?: boolean }[] }[] = [
   {
@@ -47,7 +58,7 @@ export function DashShell() {
       </a>
       <aside className="w-[220px] shrink-0">
         <div className="sticky top-3 z-[var(--z-dock)] flex h-[calc(100dvh-24px)] flex-col">
-        <div className="flex h-[60px] items-center gap-2 px-4">
+        <div className="flex h-[60px] items-center gap-2.5 px-5">
           <svg width="22" height="22" viewBox="0 0 64 64" aria-hidden>
             <rect width="64" height="64" rx="12" fill="var(--ink)" />
             <path d="M32 13 54 51H10Z" fill="var(--critical)" />
@@ -117,9 +128,12 @@ export function DashShell() {
         </div>
         </div>
       </aside>
-      <main id="main" className="min-w-0 flex-1 rounded-[28px] bg-raised px-8 pt-8 pb-24 shadow-raised">
-        <Outlet />
-      </main>
+      <div className="flex min-w-0 flex-1 flex-col gap-3">
+        <TopBar live={live.length} urgent={urgent} />
+        <main id="main" className="min-w-0 flex-1 rounded-[28px] bg-raised px-8 pt-8 pb-24 shadow-raised">
+          <Outlet />
+        </main>
+      </div>
     </div>
   );
 }
@@ -133,7 +147,10 @@ function NavItem({ to, label, end, children }: { to: string; label: string; end?
         cx('mx-3 flex h-10 items-center justify-between rounded-[12px] px-3 t-body', isActive ? 'bg-brand font-semibold text-on-brand' : 'text-muted hover:bg-[var(--surface-raised)] hover:text-ink')
       }
     >
-      {label}
+      <span className="flex items-center gap-3">
+        {ICON[label]}
+        {label}
+      </span>
       {children}
     </NavLink>
   );
@@ -148,5 +165,54 @@ export function PageHead({ title, sub, actions }: { title: string; sub?: ReactNo
       </div>
       {actions}
     </header>
+  );
+}
+
+const TITLES: [string, string][] = [
+  ['/dashboard/tickets', 'Tickets'],
+  ['/dashboard/held', 'Held yarn'],
+  ['/dashboard/machines', 'Machines'],
+  ['/dashboard/insights', 'AI insights'],
+  ['/dashboard/report', 'Monthly report'],
+  ['/dashboard/rules', 'Rules'],
+  ['/dashboard/account', 'Account'],
+];
+
+function TopBar({ live, urgent }: { live: number; urgent: boolean }) {
+  const nav = useNavigate();
+  const { pathname } = useLocation();
+  const [q, setQ] = useState('');
+  const title = TITLES.find(([p]) => pathname.startsWith(p))?.[1] ?? 'Overview';
+  const go = () => {
+    const n = q.trim().replace(/\D/g, '');
+    if (n) nav(`/dashboard/machines/RF-${n.padStart(2, '0')}`);
+    setQ('');
+  };
+  const iconBtn = 'grid size-10 place-items-center rounded-full text-muted hover:bg-raised hover:text-ink';
+  return (
+    <div className="flex h-12 items-center gap-3 px-1">
+      <button type="button" aria-label="Back" onClick={() => nav(-1)} className={iconBtn}>
+        <ArrowLeft size={18} />
+      </button>
+      <button type="button" aria-label="Forward" onClick={() => nav(1)} className={iconBtn}>
+        <ArrowRight size={18} />
+      </button>
+      <h1 className="t-body-strong mr-4">{title}</h1>
+      <label className="relative mx-auto flex h-10 w-full max-w-[420px] items-center">
+        <Search size={16} className="pointer-events-none absolute left-4 text-neutral" />
+        <input
+          id="quick-search"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && go()}
+          placeholder="Go to frame, for example 12"
+          className="t-small h-full w-full rounded-full bg-raised pr-4 pl-10 outline-none placeholder:text-[var(--neutral-state)] focus-visible:outline-2 focus-visible:outline-[var(--brand)]"
+        />
+      </label>
+      <NavLink to="/dashboard/tickets" aria-label={`${live} open tickets`} className={cx(iconBtn, 'relative bg-raised')}>
+        <Notification size={18} />
+        {live > 0 && <span className={cx('absolute top-1.5 right-1.5 size-2.5 rounded-full', urgent ? 'bg-critical' : 'bg-brand')} />}
+      </NavLink>
+    </div>
   );
 }

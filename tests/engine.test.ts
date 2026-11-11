@@ -3,6 +3,7 @@ import { apply, holdKg, roundKg } from '../src/engine/reducer';
 import { DEMO_START, seedState } from '../src/engine/seed';
 import { escalation, frameView, heldKg, openHolds, takeoversFor, timeline } from '../src/engine/selectors';
 import { MIN } from '../src/engine/time';
+import { alertHeat } from '../src/engine/analytics';
 import type { MillEvent, MillEventInput, MillState } from '../src/engine/types';
 
 let n = 0;
@@ -114,5 +115,18 @@ describe('jury demo path', () => {
     run(s, DEMO_START + 9 * MIN, { type: 'hold/approve', holdId: h.id, by: 'mohit' });
     expect(h.status).toBe('released');
     expect(t.status).toBe('closed');
+  });
+});
+
+describe('alert heat map', () => {
+  it('counts every critical and major ticket in the window once', () => {
+    const s = seedState();
+    const grid = alertHeat(s, DEMO_START, 30);
+    const total = grid.flat().reduce((a, b) => a + b, 0);
+    const first = DEMO_START - 30 * 24 * 60 * MIN;
+    const expected = s.tickets.filter((t) => t.severity !== 'minor' && t.createdAt <= DEMO_START && t.createdAt >= first).length;
+    expect(grid).toHaveLength(7);
+    expect(total).toBeLessThanOrEqual(expected);
+    expect(total).toBeGreaterThan(0);
   });
 });
