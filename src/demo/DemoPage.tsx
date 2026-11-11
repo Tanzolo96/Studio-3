@@ -30,7 +30,7 @@ export function DemoPage() {
         </InDemo.Provider>
       </div>
       <div className="flex h-full w-[430px] shrink-0 flex-col border-l border-line">
-        <div role="tablist" aria-label="Phone belongs to" className="mx-3 mt-3 flex gap-1 rounded-[10px] bg-surface p-1">
+        <div role="tablist" aria-label="Phone belongs to" className="mx-3 mt-3 flex gap-1 rounded-[6px] bg-surface p-1">
           {PEOPLE.map((id) => {
             const u = s.users.find((x) => x.id === id)!;
             const n = needs(id);
@@ -40,7 +40,7 @@ export function DemoPage() {
                 role="tab"
                 aria-selected={as === id}
                 onClick={() => setAs(id)}
-                className={cx('relative flex-1 rounded-[6px] px-1 py-1.5 text-center', as === id ? 'bg-raised shadow-raised' : 'hover:bg-raised')}
+                className={cx('relative flex-1 rounded-[4px] px-1 py-1.5 text-center', as === id ? 'bg-raised shadow-raised' : 'hover:bg-raised')}
               >
                 <span className="t-small-strong block">{u.name.split(' ')[0]}</span>
                 <span className="block text-[11px] leading-4 text-muted">{ROLE_WORD[u.role].replace('Shift ', '')}</span>

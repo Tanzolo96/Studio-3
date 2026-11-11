@@ -60,7 +60,7 @@ export function AppShell() {
           </button>
         </div>
         {ready && !sound && (
-          <button type="button" onClick={() => unlock()} className="t-small-strong mx-4 mb-1 rounded-[10px] bg-brand-soft px-3 py-2 text-left text-ink">
+          <button type="button" onClick={() => unlock()} className="t-small-strong mx-4 mb-1 rounded-[6px] bg-brand-soft px-3 py-2 text-left text-ink">
             Tap anywhere to turn on alert sound
           </button>
         )}

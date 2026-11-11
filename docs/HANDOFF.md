@@ -164,7 +164,7 @@ scripts/       artifact.mjs (turns the single-file build into the hosted page)
 
 ## 8. Design system notes
 
-Look (since Nov 2026): IT HEAVY moodboard palette, Plus Jakarta Sans, Verdant-style dashboard layout. Orange `#FF5A1F` accent on cool near-white/near-black greys. Earlier direction: ISA-101 "gray is good" on an IBM Carbon base, Carbon status pattern (never colour alone), Siemens iX for industrial UI.
+Look (since Nov 2026): IT HEAVY moodboard palette, Inter, flat professional layout (hairline borders, 6 to 10 px radius, no shadows, no decorative icons). Orange `#FF5A1F` accent on cool near-white/near-black greys. Earlier direction: ISA-101 "gray is good" on an IBM Carbon base, Carbon status pattern (never colour alone), Siemens iX for industrial UI.
 
 Tokens live in `src/styles/tokens.css` and match the Figma variables 1:1, plus these additions:
 

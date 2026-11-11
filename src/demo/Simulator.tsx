@@ -28,7 +28,7 @@ export function SimulatorDock() {
         type="button"
         onClick={() => toggle(!open)}
         aria-expanded={open}
-        className="t-small-strong mb-2 flex h-10 w-full items-center justify-between rounded-[10px] border border-dashed border-line-strong px-3 text-ink hover:bg-raised"
+        className="t-small-strong mb-2 flex h-10 w-full items-center justify-between rounded-[6px] border border-dashed border-line-strong px-3 text-ink hover:bg-raised"
       >
         <span className="flex items-center gap-2">
           <span className="size-2 rounded-full bg-[var(--ai)]" aria-hidden />
@@ -59,13 +59,13 @@ function SimulatorPanel({ onClose }: { onClose: () => void }) {
   const lastFail = [...s.results].reverse().find((r) => !r.pass && !r.sampleError);
 
   return (
-    <section aria-label="Simulator" className="anim-slide w-[340px] rounded-[16px] border border-line bg-raised shadow-sheet">
+    <section aria-label="Simulator" className="anim-slide w-[340px] rounded-[10px] border border-line bg-raised shadow-sheet">
       <header className="flex items-center justify-between border-b border-line px-4 py-3">
         <div>
           <p className="t-body-strong">Simulator</p>
           <p className="t-small text-muted">Demo only · stands in for the lab and sensors</p>
         </div>
-        <button type="button" onClick={onClose} aria-label="Close simulator" className="grid size-10 place-items-center rounded-[10px] text-muted hover:bg-sunken">
+        <button type="button" onClick={onClose} aria-label="Close simulator" className="grid size-10 place-items-center rounded-[6px] text-muted hover:bg-sunken">
           <Close size={20} />
         </button>
       </header>
@@ -79,7 +79,7 @@ function SimulatorPanel({ onClose }: { onClose: () => void }) {
               {shiftAt(now)} shift · {dateTime(now).split(', ')[0]}
             </span>
           </p>
-          <div role="radiogroup" aria-label="Demo speed" className="mt-2 grid grid-cols-4 gap-1 rounded-[10px] bg-sunken p-1">
+          <div role="radiogroup" aria-label="Demo speed" className="mt-2 grid grid-cols-4 gap-1 rounded-[6px] bg-sunken p-1">
             {[0, 1, 10, 60].map((v) => (
               <button
                 key={v}
@@ -87,7 +87,7 @@ function SimulatorPanel({ onClose }: { onClose: () => void }) {
                 role="radio"
                 aria-checked={speed === v}
                 onClick={() => setSpeed(v)}
-                className={cx('t-small-strong flex h-8 items-center justify-center gap-1 rounded-[6px]', speed === v ? 'bg-raised text-ink shadow-raised' : 'text-muted hover:text-ink')}
+                className={cx('t-small-strong flex h-8 items-center justify-center gap-1 rounded-[4px]', speed === v ? 'bg-raised text-ink shadow-raised' : 'text-muted hover:text-ink')}
               >
                 {v === 0 ? <Pause size={16} aria-label="Pause" /> : v === 1 ? <><Play size={14} aria-hidden />1×</> : `${v}×`}
               </button>
@@ -107,7 +107,7 @@ function SimulatorPanel({ onClose }: { onClose: () => void }) {
           <label htmlFor="sim-frame" className="t-small-strong text-muted">
             Ring frame
           </label>
-          <select id="sim-frame" value={frame} onChange={(e) => setFrame(e.target.value)} className="mt-1.5 h-10 w-full rounded-[10px] border border-line-strong bg-raised px-3 t-data">
+          <select id="sim-frame" value={frame} onChange={(e) => setFrame(e.target.value)} className="mt-1.5 h-10 w-full rounded-[6px] border border-line-strong bg-raised px-3 t-data">
             {s.frames.map((f) => (
               <option key={f.id} value={f.id}>
                 {f.id} · {productOfFrame(s, f.id).short} · Lot {f.lotId}
@@ -124,7 +124,7 @@ function SimulatorPanel({ onClose }: { onClose: () => void }) {
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
                 inputMode="decimal"
-                className="h-10 w-20 rounded-[10px] border border-line-strong bg-raised px-2 t-data"
+                className="h-10 w-20 rounded-[6px] border border-line-strong bg-raised px-2 t-data"
               />
               <Button
                 variant="secondary"

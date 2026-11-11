@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, type ReactNode } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Asleep, Chip, Dashboard, Idea, Light, Locked, Notification, Report, Rule, Search, Task, UserAvatar } from '@carbon/icons-react';
+import { Asleep, Chip, Dashboard, Idea, Light, Locked, Notification, Report, Rule, Search, Task, UserAvatar } from '@carbon/icons-react';
 import { useMillState, useNow, useSession, useTheme, useUser } from '../store/store';
 import { heldKg, isEscalated } from '../engine/selectors';
 import { roundKg } from '../engine/reducer';
@@ -56,12 +56,12 @@ export function DashShell() {
   const kg = roundKg(heldKg(s, now));
 
   return (
-    <div data-theme={surfaceTheme} className="flex min-h-dvh gap-3 bg-surface p-3 text-ink">
-      <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[var(--z-toast)] focus:rounded-[10px] focus:bg-raised focus:p-3">
+    <div data-theme={surfaceTheme} className="flex min-h-dvh bg-surface text-ink">
+      <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[var(--z-toast)] focus:rounded-[6px] focus:bg-raised focus:p-3">
         Skip to content
       </a>
-      <aside className="w-[220px] shrink-0">
-        <div className="sticky top-3 z-[var(--z-dock)] flex h-[calc(100dvh-24px)] flex-col">
+      <aside className="w-[232px] shrink-0 border-r border-line bg-raised">
+        <div className="sticky top-0 z-[var(--z-dock)] flex h-dvh flex-col">
         <div className="flex h-[60px] items-center gap-2.5 px-5">
           <svg width="22" height="22" viewBox="0 0 64 64" aria-hidden>
             <rect width="64" height="64" rx="12" fill="var(--ink)" />
@@ -76,11 +76,11 @@ export function DashShell() {
               {g.items.map((n) => (
             <NavItem key={n.to} {...n}>
               {n.label === 'Tickets' && live.length > 0 && (
-                <span className={cx('t-data grid h-6 min-w-6 place-items-center rounded-[6px] px-1.5 text-[13px]', urgent ? 'bg-critical-soft text-critical' : 'bg-minor-soft text-minor')}>
+                <span className={cx('t-data grid h-6 min-w-6 place-items-center rounded-[4px] px-1.5 text-[13px]', urgent ? 'bg-critical-soft text-critical' : 'bg-minor-soft text-minor')}>
                   {live.length}
                 </span>
               )}
-              {n.label === 'Held yarn' && kg > 0 && <span className="t-data rounded-[6px] bg-held-soft px-1.5 text-[13px] text-held">{kg} kg</span>}
+              {n.label === 'Held yarn' && kg > 0 && <span className="t-data rounded-[4px] bg-held-soft px-1.5 text-[13px] text-held">{kg} kg</span>}
             </NavItem>
               ))}
             </div>
@@ -96,19 +96,19 @@ export function DashShell() {
                 role="radio"
                 aria-checked={theme.dash === t}
                 onClick={() => setTheme('dash', t)}
-                className={cx('t-small flex h-9 items-center justify-center gap-1.5 rounded-[10px]', theme.dash === t ? 'bg-raised font-semibold text-ink shadow-raised' : 'text-muted hover:text-ink')}
+                className={cx('t-small flex h-9 items-center justify-center gap-1.5 rounded-[6px]', theme.dash === t ? 'bg-raised font-semibold text-ink shadow-raised' : 'text-muted hover:text-ink')}
               >
                 {t === 'day' ? <Light size={16} /> : <Asleep size={16} />}
                 {t === 'day' ? 'Day' : 'Night'}
               </button>
             ))}
           </div>
-          <button type="button" onClick={() => setPicker((p) => !p)} aria-expanded={picker} className="w-full rounded-[10px] px-2 py-2 text-left hover:bg-raised">
+          <button type="button" onClick={() => setPicker((p) => !p)} aria-expanded={picker} className="w-full rounded-[6px] px-2 py-2 text-left hover:bg-raised">
             <span className="t-body-strong block">{user.name}</span>
             <span className="t-small text-muted">{ROLE_WORD[user.role]} · switch</span>
           </button>
           {picker && (
-            <ul className="anim-fade mt-1 flex flex-col rounded-[10px] border border-line bg-raised py-1 shadow-sheet">
+            <ul className="anim-fade mt-1 flex flex-col rounded-[6px] border border-line bg-raised py-1 shadow-sheet">
               {['priya', 'mohit', 'krish'].map((id) => {
                 const u = s.users.find((x) => x.id === id)!;
                 return (
@@ -132,9 +132,9 @@ export function DashShell() {
         </div>
         </div>
       </aside>
-      <div className="flex min-w-0 flex-1 flex-col gap-3">
+      <div className="flex min-w-0 flex-1 flex-col">
         <TopBar live={live.length} urgent={urgent} />
-        <main id="main" className="min-w-0 flex-1 px-4 pt-4 pb-24">
+        <main id="main" className="min-w-0 flex-1 px-8 pt-6 pb-24">
           <Outlet />
         </main>
       </div>
@@ -148,10 +148,10 @@ function NavItem({ to, label, end, children }: { to: string; label: string; end?
       to={to}
       end={end}
       className={({ isActive }) =>
-        cx('mx-3 flex h-10 items-center justify-between rounded-[12px] px-3 t-body', isActive ? 'bg-brand-soft font-semibold text-brand' : 'text-muted hover:bg-[var(--surface-raised)] hover:text-ink')
+        cx('relative mx-3 flex h-9 items-center justify-between rounded-[6px] px-3 t-body', isActive ? 'bg-sunken font-semibold text-ink before:absolute before:top-2 before:bottom-2 before:-left-3 before:w-[3px] before:rounded-r before:bg-brand' : 'text-muted hover:bg-sunken hover:text-ink')
       }
     >
-      <span className="flex items-center gap-3">
+      <span className="flex items-center gap-3 [&_svg]:opacity-70">
         {ICON[label]}
         {label}
       </span>
@@ -184,6 +184,7 @@ const TITLES: [string, string][] = [
 
 function TopBar({ live, urgent }: { live: number; urgent: boolean }) {
   const nav = useNavigate();
+  const user = useUser('dash');
   const { pathname } = useLocation();
   const [q, setQ] = useState('');
   const title = TITLES.find(([p]) => pathname.startsWith(p))?.[1] ?? 'Overview';
@@ -192,31 +193,34 @@ function TopBar({ live, urgent }: { live: number; urgent: boolean }) {
     if (n) nav(`/dashboard/machines/RF-${n.padStart(2, '0')}`);
     setQ('');
   };
-  const iconBtn = 'grid size-10 place-items-center rounded-full text-muted hover:bg-raised hover:text-ink';
   return (
-    <div className="flex h-12 items-center gap-3 px-1">
-      <button type="button" aria-label="Back" onClick={() => nav(-1)} className={iconBtn}>
-        <ArrowLeft size={18} />
-      </button>
-      <button type="button" aria-label="Forward" onClick={() => nav(1)} className={iconBtn}>
-        <ArrowRight size={18} />
-      </button>
-      <h1 className="t-body-strong mr-4">{title}</h1>
-      <label className="relative mx-auto flex h-10 w-full max-w-[420px] items-center">
-        <Search size={16} className="pointer-events-none absolute left-4 text-neutral" />
+    <div className="flex h-14 shrink-0 items-center gap-4 border-b border-line bg-raised px-8">
+      <p className="t-small whitespace-nowrap text-muted">
+        <span className="hidden md:inline">QC Alert <span className="mx-1.5">/</span></span>
+        <span className="font-semibold text-ink">{title}</span>
+      </p>
+      <label className="relative mx-auto flex h-9 w-full min-w-0 max-w-[380px] items-center">
+        <Search size={16} className="pointer-events-none absolute left-3 text-neutral" />
         <input
           id="quick-search"
           value={q}
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && go()}
           placeholder="Go to frame, for example 12"
-          className="t-small h-full w-full rounded-full bg-raised pr-4 pl-10 outline-none placeholder:text-[var(--neutral-state)] focus-visible:outline-2 focus-visible:outline-[var(--brand)]"
+          className="t-small h-full w-full rounded-[6px] border border-line bg-surface pr-3 pl-9 outline-none placeholder:text-[var(--neutral-state)] focus-visible:border-[var(--brand)] focus-visible:outline-2 focus-visible:outline-[var(--brand)]"
         />
       </label>
-      <NavLink to="/dashboard/tickets" aria-label={`${live} open tickets`} className={cx(iconBtn, 'relative bg-raised')}>
+      <NavLink to="/dashboard/tickets" aria-label={`${live} open tickets`} className="relative grid size-9 place-items-center rounded-[6px] text-muted hover:bg-sunken hover:text-ink">
         <Notification size={18} />
-        {live > 0 && <span className={cx('absolute top-1.5 right-1.5 size-2.5 rounded-full', urgent ? 'bg-critical' : 'bg-brand')} />}
+        {live > 0 && <span className={cx('absolute top-1.5 right-1.5 size-2 rounded-full', urgent ? 'bg-critical' : 'bg-brand')} />}
       </NavLink>
+      <div className="flex shrink-0 items-center gap-2.5 border-l border-line pl-4">
+        <span className="grid size-8 place-items-center rounded-full bg-ink text-[11px] font-semibold text-surface">{user.name.split(' ').map((p) => p[0]).join('')}</span>
+        <span className="hidden leading-tight xl:block">
+          <span className="t-small-strong block whitespace-nowrap">{user.name}</span>
+          <span className="t-small block !text-[11px] text-muted">{ROLE_WORD[user.role]}</span>
+        </span>
+      </div>
     </div>
   );
 }
