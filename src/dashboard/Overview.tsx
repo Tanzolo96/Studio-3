@@ -57,6 +57,10 @@ export function Overview() {
   const lessLost = Math.max(0, Math.round(100 - (saved.avgHeld / BASELINE_KG) * 100));
   const doneCount = a.month.filter((t) => t.status === 'closed' || t.status === 'fixed').length;
   const resolvedPct = a.month.length ? Math.round((doneCount / a.month.length) * 100) : 100;
+  const recent = s.tickets
+    .filter((t) => (t.status === 'closed' || t.status === 'fixed') && t.createdAt <= now)
+    .sort((x, y) => (y.closedAt ?? y.createdAt) - (x.closedAt ?? x.createdAt))
+    .slice(0, 3);
   const weekday = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][new Date(now + 5.5 * 3600000).getUTCDay()];
 
   return (
@@ -82,7 +86,7 @@ export function Overview() {
         </section>
       )}
 
-      <section className="grid gap-4 md:grid-cols-3" aria-label="Key numbers">
+      <section className="grid gap-5 md:grid-cols-3" aria-label="Key numbers">
         <Goal
           label="Time to Seen"
           value={seenNow !== null ? timer(seenNow * 60000) : '–'}
@@ -137,8 +141,8 @@ export function Overview() {
         </Panel>
       )}
 
-      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
-        <section data-theme="night" className="rounded-[12px] bg-surface p-5 text-ink">
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+        <section data-theme="night" className="flex flex-col rounded-[12px] bg-surface p-5 text-ink">
           <header className="flex items-center justify-between">
             <h2 className="t-label text-muted">Needs attention</h2>
             <Link to="/dashboard/tickets" className="t-small-strong flex items-center gap-1 text-brand hover:underline">
@@ -174,6 +178,20 @@ export function Overview() {
           ) : (
             <p className="t-body mt-6 pb-4 text-muted">Nothing needs attention. Every frame is running normally.</p>
           )}
+          <div className="mt-auto pt-5">
+            <h3 className="t-label border-t border-line pt-4 text-muted">Recently resolved</h3>
+            <ul className="mt-2 flex flex-col">
+              {recent.map((t) => (
+                <li key={t.id}>
+                  <button type="button" onClick={() => nav(`/dashboard/tickets/${t.id}`)} className="flex w-full items-center gap-3 py-2 text-left hover:opacity-90">
+                    <span className="t-data">{t.frameId}</span>
+                    <span className="t-small min-w-0 flex-1 truncate text-muted">{t.title}</span>
+                    <span className="t-data text-[12px] text-muted">{dayMonth(t.closedAt ?? t.createdAt)}, {hhmm(t.closedAt ?? t.createdAt)}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
         </section>
 
         <section className="divide-y divide-[var(--line)] rounded-[12px] border border-line bg-raised" aria-label="Health">
@@ -184,7 +202,7 @@ export function Overview() {
         </section>
       </div>
 
-      <div className={cx('grid gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]', isPlant && 'hidden')}>
+      <div className={cx('grid gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]', isPlant && 'hidden')}>
         <Panel
           title="Ring frames, floor order"
           sub={`${states.running} of ${s.frames.length} running normally${states.stopped ? `, ${states.stopped} stopped for doffing` : ''}`}
