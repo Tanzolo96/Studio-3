@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowRight, ChevronLeft, ChevronRight } from '@carbon/icons-react';
 import type { MillState, Ticket } from '../engine/types';
@@ -10,7 +10,7 @@ import { BASELINE_KG, alertHeat, dailyAlerts, frameStateCounts, seenTrend, shift
 import { DAY, dayMonth, hhmm, mill, millDayKey, shiftAt, timer } from '../engine/time';
 import { cx, Empty, SeverityBadge, StatusChip } from '../ui/primitives';
 import { InsightCard, readingLine, ticketChip } from '../ui/cards';
-import { BarList, CategoryBar, Ring, SeverityLegend, ShiftBars, StackedColumns, TrendArea } from '../ui/charts';
+import { BarList, CategoryBar, CountUp, Ring, Sparkline, SeverityLegend, ShiftBars, StackedColumns, TrendArea } from '../ui/charts';
 import { PageHead } from './DashShell';
 
 export function Panel({ title, sub, aside, children, className }: { title: string; sub?: string; aside?: ReactNode; children: ReactNode; className?: string }) {
@@ -65,7 +65,7 @@ export function Overview() {
 
   return (
     <div className="mx-auto flex max-w-[1240px] flex-col gap-5">
-      <header className="flex flex-wrap items-end justify-between gap-3">
+      <header className="anim-in flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="t-page">Overview</h1>
           <p className="t-small mt-0.5 text-muted">
@@ -88,22 +88,28 @@ export function Overview() {
 
       <section className="grid gap-5 md:grid-cols-3" aria-label="Key numbers">
         <Goal
+          i={1}
           label="Time to Seen"
-          value={seenNow !== null ? timer(seenNow * 60000) : '–'}
+          value={seenNow !== null ? <CountUp value={seenNow * 60} format={(v) => timer(v * 1000)} /> : '–'}
+          chart={<Sparkline values={a.trend.map((p) => p.mins)} color="var(--brand)" limit={5} height={46} label="Median minutes to Seen over 30 days, dashed line is the 5 minute limit" />}
           goal="5:00"
           badge={seenNow === null ? undefined : seenNow <= 5 ? { text: 'On target', tone: 'good' } : { text: 'Over limit', tone: 'bad' }}
           note="Median minutes from alert to Seen, last 7 days"
         />
         <Goal
+          i={2}
           label="Seen in time"
-          value={`${inTimePct}%`}
+          value={<CountUp value={inTimePct} format={(v) => `${Math.round(v)}%`} />}
+          chart={<TargetBar pct={inTimePct} target={90} />}
           goal="90%"
           badge={inTimePct >= 90 ? { text: 'On target', tone: 'good' } : { text: `${90 - inTimePct}% short`, tone: 'bad' }}
           note={`${inTime} of ${serious.length} critical and major alerts, last 30 days`}
         />
         <Goal
+          i={3}
           label="Yarn held per incident"
-          value={`${Math.round(saved.avgHeld)}`}
+          value={<CountUp value={saved.avgHeld} />}
+          chart={<CompareBars now={saved.avgHeld} before={BASELINE_KG} unit="kg" />}
           unit="kg"
           goal={`${BASELINE_KG} kg`}
           badge={{ text: `${lessLost}% less`, tone: 'good' }}
@@ -141,7 +147,7 @@ export function Overview() {
         </Panel>
       )}
 
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+      <div className="anim-in grid gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]" style={{ '--i': 4 } as CSSProperties}>
         <section data-theme="night" className="flex flex-col rounded-[12px] bg-surface p-5 text-ink">
           <header className="flex items-center justify-between">
             <h2 className="t-label text-muted">Needs attention</h2>
@@ -151,7 +157,7 @@ export function Overview() {
           </header>
           {live.length ? (
             <ul className="mt-3 flex flex-col divide-y divide-[var(--line)]">
-              {live.slice(0, 4).map((t) => {
+              {live.slice(0, 4).map((t, n) => {
                 const mins = (now - t.alertAt) / 60000;
                 const pct = Math.min(100, Math.round((mins / t.escalateQcMins) * 100));
                 return (
@@ -164,7 +170,7 @@ export function Overview() {
                       </div>
                       <div className="mt-2.5 flex items-center gap-3">
                         <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-sunken" role="img" aria-label={`${Math.round(mins)} of ${t.escalateQcMins} minutes before escalation`}>
-                          <div className={cx('h-full rounded-full', pct >= 100 ? 'bg-critical' : 'bg-brand')} style={{ width: `${pct}%` }} />
+                          <div className={cx('anim-grow-x h-full rounded-full', pct >= 100 ? 'bg-critical' : 'bg-brand')} style={{ width: `${pct}%`, '--i': n } as CSSProperties} />
                         </div>
                         <span className="t-data whitespace-nowrap text-[12px] text-muted">
                           {Math.round(mins)} / {t.escalateQcMins} min
@@ -195,14 +201,14 @@ export function Overview() {
         </section>
 
         <section className="divide-y divide-[var(--line)] rounded-[12px] border border-line bg-raised" aria-label="Health">
-          <GaugeRow label="Frames running" value={`${states.running}`} goal={`${s.frames.length}`} pct={Math.round((states.running / s.frames.length) * 100)} />
-          <GaugeRow label="Calm days, 30 days" value={`${calmDays}`} goal="30" pct={Math.round((calmDays / 30) * 100)} />
-          <GaugeRow label="Holds decided" value={`${s.holds.filter((h) => h.status !== 'on_hold').length}`} goal={`${s.holds.length}`} pct={s.holds.length ? Math.round((s.holds.filter((h) => h.status !== 'on_hold').length / s.holds.length) * 100) : 100} />
-          <GaugeRow label="Tickets resolved" value={`${doneCount}`} goal={`${a.month.length}`} pct={resolvedPct} />
+          <GaugeRow i={0} label="Frames running" value={`${states.running}`} goal={`${s.frames.length}`} pct={Math.round((states.running / s.frames.length) * 100)} />
+          <GaugeRow i={1} label="Calm days, 30 days" value={`${calmDays}`} goal="30" pct={Math.round((calmDays / 30) * 100)} />
+          <GaugeRow i={2} label="Holds decided" value={`${s.holds.filter((h) => h.status !== 'on_hold').length}`} goal={`${s.holds.length}`} pct={s.holds.length ? Math.round((s.holds.filter((h) => h.status !== 'on_hold').length / s.holds.length) * 100) : 100} />
+          <GaugeRow i={3} label="Tickets resolved" value={`${doneCount}`} goal={`${a.month.length}`} pct={resolvedPct} />
         </section>
       </div>
 
-      <div className={cx('grid gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]', isPlant && 'hidden')}>
+      <div className={cx('anim-in grid gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]', isPlant && 'hidden')} style={{ '--i': 5 } as CSSProperties}>
         <Panel
           title="Ring frames, floor order"
           sub={`${states.running} of ${s.frames.length} running normally${states.stopped ? `, ${states.stopped} stopped for doffing` : ''}`}
@@ -232,9 +238,9 @@ export function Overview() {
   );
 }
 
-function Goal({ label, value, unit, goal, badge, note }: { label: string; value: string; unit?: string; goal: string; badge?: { text: string; tone: 'good' | 'bad' }; note: string }) {
+function Goal({ i = 0, label, value, unit, goal, badge, note, chart }: { i?: number; label: string; value: ReactNode; unit?: string; goal: string; badge?: { text: string; tone: 'good' | 'bad' }; note: string; chart?: ReactNode }) {
   return (
-    <div className="rounded-[12px] border border-line bg-raised p-5">
+    <div className="anim-in lift flex flex-col rounded-[12px] border border-line bg-raised p-5" style={{ '--i': i } as CSSProperties}>
       <div className="flex items-start justify-between gap-2">
         <p className="t-label text-muted">{label}</p>
         {badge && <span className={cx('t-label rounded-[4px] px-1.5 text-[10px]', badge.tone === 'good' ? 'bg-ok text-surface' : 'bg-critical text-on-critical')}>{badge.text}</span>}
@@ -244,17 +250,59 @@ function Goal({ label, value, unit, goal, badge, note }: { label: string; value:
         {unit && <span className="t-body text-muted">{unit}</span>}
         <span className="t-stat !text-[22px] !leading-[28px] !font-normal text-neutral">/ {goal}</span>
       </p>
-      <p className="t-small mt-2 text-muted">{note}</p>
+      {chart && <div className="mt-4">{chart}</div>}
+      <p className="t-small mt-3 text-muted">{note}</p>
     </div>
   );
 }
 
-function GaugeRow({ label, value, goal, pct, invert }: { label: string; value: string; goal: string; pct: number; invert?: boolean }) {
+function TargetBar({ pct, target }: { pct: number; target: number }) {
+  const ok = pct >= target;
+  return (
+    <div role="img" aria-label={`${pct}% seen in time against a ${target}% target`}>
+      <div className="relative h-3 rounded-full bg-sunken">
+        <div className={cx('anim-grow-x h-full rounded-full', ok ? 'bg-ok' : 'bg-brand')} style={{ width: `${pct}%` }} />
+        <span className="absolute -top-1 -bottom-1 w-0.5 rounded-full bg-ink" style={{ left: `${target}%` }} />
+      </div>
+      <div className="t-small mt-1.5 flex justify-between text-muted">
+        <span>{pct}% seen within 5 min</span>
+        <span className="flex items-center gap-1.5">
+          <span className="h-3 w-0.5 rounded-full bg-ink" />
+          Target {target}%
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function CompareBars({ now, before, unit }: { now: number; before: number; unit: string }) {
+  const rows = [
+    { label: 'Now', v: now, cls: 'bg-brand' },
+    { label: 'Before', v: before, cls: 'bg-[var(--line-strong)]' },
+  ];
+  return (
+    <div className="flex flex-col gap-1.5" role="img" aria-label={`About ${Math.round(now)} ${unit} held per incident now, against ${before} ${unit} before`}>
+      {rows.map((r, k) => (
+        <div key={r.label} className="grid grid-cols-[48px_1fr_52px] items-center gap-2">
+          <span className="t-small text-muted">{r.label}</span>
+          <div className="h-3 rounded-full bg-sunken">
+            <div className={cx('anim-grow-x h-full rounded-full', r.cls)} style={{ width: `${Math.min(100, (r.v / before) * 100)}%`, '--i': k } as CSSProperties} />
+          </div>
+          <span className="t-data text-right text-[12px]">
+            {Math.round(r.v)} {unit}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function GaugeRow({ i = 0, label, value, goal, pct, invert }: { i?: number; label: string; value: string; goal: string; pct: number; invert?: boolean }) {
   const p = Math.max(0, Math.min(100, pct));
   const tone = invert ? 'var(--ink)' : p >= 80 ? 'var(--ok)' : p >= 40 ? 'var(--ink)' : 'var(--critical)';
   const len = Math.PI * 28;
   return (
-    <div className="flex items-center justify-between gap-3 px-5 py-3.5">
+    <div className="flex items-center justify-between gap-3 px-5 py-3.5 transition-colors hover:bg-sunken">
       <div className="min-w-0">
         <p className="t-label text-[10px] text-muted">{label}</p>
         <p className="mt-1 flex items-baseline gap-1">
@@ -265,9 +313,11 @@ function GaugeRow({ label, value, goal, pct, invert }: { label: string; value: s
       <div className="relative h-[38px] w-[64px] shrink-0" role="img" aria-label={`${label}: ${p}%`}>
         <svg viewBox="0 0 64 36" className="h-full w-full">
           <path d="M4 32 A28 28 0 0 1 60 32" fill="none" stroke="var(--grid)" strokeWidth="5" strokeLinecap="round" />
-          <path d="M4 32 A28 28 0 0 1 60 32" fill="none" stroke={tone} strokeWidth="5" strokeLinecap="round" strokeDasharray={`${(len * p) / 100} ${len}`} />
+          <path d="M4 32 A28 28 0 0 1 60 32" fill="none" stroke={tone} strokeWidth="5" strokeLinecap="round" strokeDasharray={`${(len * p) / 100} ${len}`} className="anim-gauge" style={{ '--i': i } as CSSProperties} />
         </svg>
-        <span className="t-data absolute inset-x-0 bottom-0 text-center text-[11px] leading-none">{p}%</span>
+        <span className="t-data absolute inset-x-0 bottom-0 text-center text-[11px] leading-none">
+          <CountUp value={p} format={(v) => `${Math.round(v)}%`} ms={1300} />
+        </span>
       </div>
     </div>
   );
@@ -293,7 +343,7 @@ function FloorMap({ s, now, onOpen }: { s: MillState; now: number; onOpen: (id: 
       {rows.map((row, r) => (
         <div key={r} className="grid grid-cols-[56px_repeat(8,minmax(0,1fr))] items-center gap-2">
           <span className="t-small text-muted">Row {r + 1}</span>
-          {row.map((f) => {
+          {row.map((f, c) => {
             const v = frameView(s, f.id, now);
             return (
               <button
@@ -304,7 +354,8 @@ function FloorMap({ s, now, onOpen }: { s: MillState; now: number; onOpen: (id: 
                 onFocus={() => setHover(f.id)}
                 onMouseLeave={() => setHover(null)}
                 aria-label={`${f.id}: ${v.label}. ${v.line}`}
-                className={cx('flex h-[60px] min-w-0 flex-col items-center justify-center overflow-hidden whitespace-nowrap rounded-[10px] border-2 transition-transform hover:-translate-y-0.5', TILE[v.kind])}
+                style={{ '--i': r * 8 + c } as CSSProperties}
+                className={cx('flex h-[60px] min-w-0 flex-col items-center justify-center overflow-hidden whitespace-nowrap rounded-[10px] border-2 transition-transform hover:-translate-y-0.5', v.kind !== 'fault' && 'anim-pop', TILE[v.kind])}
               >
                 <span className="font-mono text-[15px] font-semibold leading-5 tabular-nums">{f.num}</span>
                 <span className="text-[11px] leading-4 opacity-80">{v.kind === 'running' ? f.lotId : SHORT[v.kind]}</span>
@@ -583,9 +634,10 @@ function CalendarPanel({ s, now, onOpen }: { s: MillState; now: number; onOpen: 
               type="button"
               onClick={() => setPicked(k)}
               aria-pressed={isPicked}
+              style={{ '--i': i } as CSSProperties}
               aria-label={`${d} ${MONTH_NAMES[view.m]}, ${list.length} alert${list.length === 1 ? '' : 's'}`}
               className={cx(
-                't-small relative mx-auto flex size-10 items-center justify-center rounded-[10px] font-medium',
+                'anim-pop t-small relative mx-auto flex size-10 items-center justify-center rounded-[10px] font-medium transition-transform hover:scale-110',
                 isPicked
                   ? 'bg-brand font-semibold text-on-brand'
                   : kind === 'critical'

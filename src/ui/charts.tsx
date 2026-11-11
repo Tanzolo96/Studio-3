@@ -1,6 +1,6 @@
 // Small hand-built SVG charts. One axis each, thin marks, recessive grid,
 // text in text tokens, hover tooltips on every plot.
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { SeverityShape, cx } from './primitives';
 import type { Severity } from '../engine/types';
 
@@ -30,22 +30,30 @@ function Tip({ x, y, children, w }: { x: number; y: number; children: ReactNode;
 }
 
 // ---------- sparkline (KPI cards) ----------
-export function Sparkline({ values, color = 'var(--data)', height = 36, label }: { values: (number | null)[]; color?: string; height?: number; label: string }) {
+export function Sparkline({ values, color = 'var(--data)', height = 36, label, limit }: { values: (number | null)[]; color?: string; height?: number; label: string; limit?: number }) {
   const [ref, w] = useWidth<HTMLDivElement>();
+  const gid = useId().replace(/:/g, '');
   const pts = values.map((v, i) => ({ i, v })).filter((p) => p.v !== null) as { i: number; v: number }[];
-  const max = Math.max(1, ...pts.map((p) => p.v));
+  const max = Math.max(1, limit ?? 0, ...pts.map((p) => p.v)) * 1.1;
   const min = Math.min(0, ...pts.map((p) => p.v));
   const x = (i: number) => (values.length > 1 ? (i / (values.length - 1)) * (w - 6) + 3 : w / 2);
   const y = (v: number) => height - 4 - ((v - min) / (max - min || 1)) * (height - 10);
   const line = pts.map((p, k) => `${k ? 'L' : 'M'}${x(p.i).toFixed(1)},${y(p.v).toFixed(1)}`).join('');
   const last = pts.at(-1);
   return (
-    <div ref={ref} className="h-9 w-full" role="img" aria-label={label}>
+    <div ref={ref} className="w-full" style={{ height }} role="img" aria-label={label}>
       {w > 0 && pts.length > 1 && (
         <svg width={w} height={height} aria-hidden>
-          <path d={`${line}L${x(last!.i)},${height}L${x(pts[0].i)},${height}Z`} fill={color} opacity={0.1} />
-          <path d={line} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
-          <circle cx={x(last!.i)} cy={y(last!.v)} r={4} fill={color} stroke="var(--surface-raised)" strokeWidth={2} />
+          <defs>
+            <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={color} stopOpacity={0.28} />
+              <stop offset="100%" stopColor={color} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          {limit !== undefined && <line x1={0} x2={w} y1={y(limit)} y2={y(limit)} stroke="var(--critical)" strokeWidth={1} strokeDasharray="3 3" opacity={0.6} />}
+          <path d={`${line}L${x(last!.i)},${height}L${x(pts[0].i)},${height}Z`} fill={`url(#${gid})`} className="anim-fade" />
+          <path d={line} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" pathLength={100} strokeDasharray={100} className="anim-draw" />
+          <circle cx={x(last!.i)} cy={y(last!.v)} r={4} fill={color} stroke="var(--surface-raised)" strokeWidth={2} className="anim-pop" style={{ '--i': 90 } as CSSProperties} />
         </svg>
       )}
     </div>
@@ -119,8 +127,8 @@ export function TrendArea({
               </text>
             </g>
           )}
-          <path d={area} fill="var(--data)" opacity={0.1} />
-          <path d={path} fill="none" stroke="var(--data)" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+          <path d={area} fill="var(--data)" opacity={0.1} className="anim-fade" />
+          <path d={path} fill="none" stroke="var(--data)" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" pathLength={100} strokeDasharray={100} className="anim-draw" />
           {[0, Math.floor((points.length - 1) / 2), points.length - 1].map((i) => (
             <text key={i} x={x(i)} y={height - 6} textAnchor={i === 0 ? 'start' : i === points.length - 1 ? 'end' : 'middle'} className="fill-[var(--ink-muted)] text-[11px]">
               {dayLabel(points[i].day)}
@@ -216,9 +224,11 @@ export function StackedColumns({
                       key={s}
                       d={`M${cx0},${y0 - (k > 0 ? 2 : 0)}V${y1 + 4}a4,4 0 0 1 4,-4H${cx0 + bw - 4}a4,4 0 0 1 4,4V${y0 - (k > 0 ? 2 : 0)}Z`}
                       fill={SEV_FILL[s]}
+                      className="anim-grow-y"
+                      style={{ '--i': i } as CSSProperties}
                     />
                   ) : (
-                    <rect key={s} x={cx0} y={y1} width={bw} height={hgt} fill={SEV_FILL[s]} />
+                    <rect key={s} x={cx0} y={y1} width={bw} height={hgt} fill={SEV_FILL[s]} className="anim-grow-y" style={{ '--i': i } as CSSProperties} />
                   );
                 })}
                 {total === 0 && <rect x={cx0} y={y(0) - 2} width={bw} height={2} rx={1} fill="var(--grid)" />}
@@ -259,7 +269,7 @@ export function BarList({ items, max: maxIn, format = (v) => String(v), onPick }
             <span className="t-data text-[13px]">{format(it.value)}</span>
           </div>
           <div className="mt-1 h-2 rounded-full bg-sunken">
-            <div className="h-full rounded-full bg-data transition-[width] duration-500 group-hover:opacity-80" style={{ width: `${(it.value / max) * 100}%` }} />
+            <div className="anim-grow-x h-full rounded-full bg-data transition-[width] duration-500 group-hover:opacity-80" style={{ width: `${(it.value / max) * 100}%` }} />
           </div>
         </li>
       ))}
@@ -281,7 +291,7 @@ export function CategoryBar({ parts, label }: { parts: { key: string; value: num
               key={p.key}
               onMouseEnter={() => setHover(p.key)}
               onMouseLeave={() => setHover(null)}
-              className={cx('h-full transition-opacity', hover && hover !== p.key && 'opacity-40')}
+              className={cx('anim-grow-x h-full transition-opacity', hover && hover !== p.key && 'opacity-40')}
               style={{ width: `${(p.value / total) * 100}%`, background: p.color }}
               title={`${p.word}: ${p.value}`}
             />
@@ -315,7 +325,7 @@ export function ShiftBars({ rows, limit, label }: { rows: { shift: string; mins:
         <div key={r.shift} className="grid grid-cols-[52px_1fr_44px] items-center gap-3" title={`${r.shift} shift: ${r.n} alerts`}>
           <span className="t-small-strong">{r.shift} shift</span>
           <div className="h-6 rounded-r-[4px] bg-transparent">
-            <div className="h-full rounded-r-[4px]" style={{ width: `${((r.mins ?? 0) / max) * 100}%`, background: (r.mins ?? 0) > limit ? 'var(--chart-critical)' : 'var(--data)' }} />
+            <div className="anim-grow-x h-full rounded-r-[4px]" style={{ width: `${((r.mins ?? 0) / max) * 100}%`, background: (r.mins ?? 0) > limit ? 'var(--chart-critical)' : 'var(--data)' }} />
           </div>
           <span className="t-data text-right">{r.mins === null ? '–' : `${r.mins.toFixed(1)}m`}</span>
         </div>
@@ -333,9 +343,40 @@ export function Ring({ value, max, color = 'var(--data)', size = 64, children, l
     <div className="relative grid shrink-0 place-items-center" style={{ width: size, height: size }} role="img" aria-label={label}>
       <svg width={size} height={size} className="-rotate-90" aria-hidden>
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--grid)" strokeWidth={6} />
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={6} strokeLinecap="round" strokeDasharray={`${pct * c} ${c}`} className="transition-[stroke-dasharray] duration-700" />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={6} strokeLinecap="round" strokeDasharray={`${pct * c} ${c}`} className="anim-gauge transition-[stroke-dasharray] duration-700" />
       </svg>
       <div className="absolute inset-0 grid place-items-center">{children}</div>
     </div>
   );
+}
+
+const reducedMotion = () => typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+/** Counts a number up from its last value, so a live clock tick moves it smoothly instead of restarting from zero. */
+export function CountUp({ value, format = (v) => String(Math.round(v)), ms = 900 }: { value: number; format?: (v: number) => string; ms?: number }) {
+  const last = useRef(0);
+  const [v, setV] = useState(() => (reducedMotion() ? value : 0));
+  useEffect(() => {
+    if (reducedMotion()) {
+      setV(value);
+      last.current = value;
+      return;
+    }
+    const from = last.current;
+    const t0 = performance.now();
+    let raf = 0;
+    const tick = (t: number) => {
+      const k = Math.min(1, (t - t0) / ms);
+      const e = 1 - Math.pow(1 - k, 3);
+      setV(from + (value - from) * e);
+      if (k < 1) raf = requestAnimationFrame(tick);
+      else last.current = value;
+    };
+    raf = requestAnimationFrame(tick);
+    return () => {
+      cancelAnimationFrame(raf);
+      last.current = value;
+    };
+  }, [value, ms]);
+  return <>{format(v)}</>;
 }

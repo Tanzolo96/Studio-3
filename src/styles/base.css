@@ -81,6 +81,21 @@ p { margin: 0; text-wrap: pretty; }
 @keyframes slide-in { from { transform: translateX(16px); opacity: 0; } to { transform: none; opacity: 1; } }
 
 .anim-rise { animation: rise 320ms var(--ease-out) both; }
+@keyframes draw { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
+@keyframes grow-x { from { transform: scaleX(0); } }
+@keyframes grow-y { from { transform: scaleY(0); } }
+@keyframes pop { from { opacity: 0; transform: scale(0.82); } }
+@keyframes gauge { from { stroke-dasharray: 0 1000; } }
+/* Entrance: sections rise in one after another (--i sets the order). */
+.anim-in { animation: rise 560ms var(--ease-out) both; animation-delay: calc(var(--i, 0) * 70ms); }
+/* Charts: lines draw, bars grow, arcs sweep, cells pop. */
+.anim-draw { animation: draw 1200ms var(--ease-out) both; animation-delay: 150ms; }
+.anim-grow-x { transform-origin: left center; animation: grow-x 900ms var(--ease-out) both; animation-delay: calc(120ms + var(--i, 0) * 70ms); }
+.anim-grow-y { transform-origin: bottom; transform-box: fill-box; animation: grow-y 700ms var(--ease-out) both; animation-delay: calc(var(--i, 0) * 18ms); }
+.anim-pop { animation: pop 420ms var(--ease-out) both; animation-delay: calc(var(--i, 0) * 12ms); }
+.anim-gauge { animation: gauge 1300ms var(--ease-out) both; animation-delay: calc(200ms + var(--i, 0) * 90ms); }
+.lift { transition: transform 220ms var(--ease-out), box-shadow 220ms var(--ease-out), border-color 220ms var(--ease-out); }
+.lift:hover { transform: translateY(-2px); box-shadow: var(--shadow-sheet); }
 .anim-fade { animation: fade 200ms var(--ease-out) both; }
 .anim-slide { animation: slide-in 260ms var(--ease-out) both; }
 .pulse-critical { animation: pulse-ring 1.4s var(--ease-out) infinite; }
