@@ -2,7 +2,7 @@ import { useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowRight, ChevronLeft, ChevronRight, Locked } from '@carbon/icons-react';
 import type { MillState, Ticket } from '../engine/types';
-import { useMillState, useNow, useUser } from '../store/store';
+import { useMillState, useNow, useTheme, useUser } from '../store/store';
 import { bySeverityThenAge, escalation, frameView, holdNeedsApproval, isEscalated, median, pendingRequests, seenTimes, type FrameStateKind } from '../engine/selectors';
 import { frameWord, holdKg, roundKg, userName } from '../engine/reducer';
 import { insights } from '../engine/insights';
@@ -29,6 +29,7 @@ export function Panel({ title, sub, aside, children, className }: { title: strin
 }
 
 function QcOverview() {
+  const theme = useTheme('dash');
   const s = useMillState();
   const now = useNow();
   const user = useUser('dash');
@@ -150,7 +151,7 @@ function QcOverview() {
       )}
 
       <div className="anim-in grid gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]" style={{ '--i': 4 } as CSSProperties}>
-        <section data-theme="night" className="flex flex-col rounded-[12px] bg-surface p-5 text-ink">
+        <section data-theme={theme === 'day' ? 'night' : undefined} className="flex flex-col rounded-[12px] border-t-2 border-t-[var(--brand)] p-5 text-ink ring-1 ring-[var(--line)]" style={{ background: 'var(--focus-surface)' }}>
           <header className="flex items-center justify-between">
             <h2 className="t-label text-muted">Needs attention</h2>
             <Link to="/dashboard/tickets" className="t-small-strong flex items-center gap-1 text-brand hover:underline">
@@ -175,7 +176,7 @@ function QcOverview() {
                           <div className={cx('anim-grow-x h-full rounded-full', pct >= 100 ? 'bg-critical' : 'bg-brand')} style={{ width: `${pct}%`, '--i': n } as CSSProperties} />
                         </div>
                         <span className="t-data whitespace-nowrap text-[12px] text-muted">
-                          {Math.round(mins)} / {t.escalateQcMins} min
+                          {mins > t.escalateQcMins ? `open ${ago(now - t.alertAt)}` : `${Math.round(mins)} / ${t.escalateQcMins} min`}
                         </span>
                       </div>
                     </button>
@@ -245,7 +246,7 @@ function Goal({ i = 0, label, value, unit, goal, badge, note, chart }: { i?: num
     <div className="anim-in lift flex flex-col rounded-[12px] border border-line bg-raised p-5" style={{ '--i': i } as CSSProperties}>
       <div className="flex items-start justify-between gap-2">
         <p className="t-label min-w-0 truncate text-muted">{label}</p>
-        {badge && <span className={cx('t-label shrink-0 whitespace-nowrap rounded-[4px] px-1.5 text-[10px]', badge.tone === 'good' ? 'bg-ok text-surface' : 'bg-critical text-on-critical')}>{badge.text}</span>}
+        {badge && <span className={cx('t-label shrink-0 whitespace-nowrap rounded-[4px] px-1.5 text-[10px]', badge.tone === 'good' ? 'bg-ok-soft text-ok' : 'bg-critical-soft text-critical')}>{badge.text}</span>}
       </div>
       <p className="mt-3 flex items-baseline gap-1.5">
         <span className="t-stat !text-[34px] !leading-[38px]">{value}</span>
@@ -900,10 +901,10 @@ function WaitingForYou({ s, now }: { s: MillState; now: number }) {
   return (
     <Panel title="Waiting for you" sub={n ? `${n} thing${n > 1 ? 's' : ''} need the QC manager` : 'Nothing waiting'} className="anim-in">
       {n ? (
-        <ul className="grid gap-2 md:grid-cols-2">
+        <ul className="grid gap-x-4 gap-y-1 md:grid-cols-2">
           {holds.map((h) => (
             <li key={h.id}>
-              <button type="button" onClick={() => nav('/dashboard/held')} className="flex w-full items-center gap-3 rounded-[10px] border border-line px-3 py-2.5 text-left hover:bg-sunken">
+              <button type="button" onClick={() => nav('/dashboard/held')} className="flex w-full items-center gap-3 rounded-[10px] px-3 py-2.5 transition-colors hover:bg-sunken text-left hover:bg-sunken">
                 <span className="grid size-8 shrink-0 place-items-center rounded-full bg-held-soft text-held">
                   <Locked size={16} />
                 </span>
@@ -919,7 +920,7 @@ function WaitingForYou({ s, now }: { s: MillState; now: number }) {
           ))}
           {tests.map((r) => (
             <li key={r.id}>
-              <div className="flex items-center gap-3 rounded-[10px] border border-line px-3 py-2.5">
+              <div className="flex items-center gap-3 rounded-[10px] px-3 py-2.5 transition-colors hover:bg-sunken">
                 <span className={cx('grid size-8 shrink-0 place-items-center rounded-full text-[11px] font-semibold', r.urgent ? 'bg-major-soft text-major' : 'bg-sunken text-muted')}>Lab</span>
                 <span className="min-w-0 flex-1">
                   <span className="t-small-strong block">
@@ -1052,8 +1053,9 @@ function PlantOverview() {
 // ---------- the black attention panel, shared ----------
 function AttentionPanel({ s, now, tickets, title, recent = [] }: { s: MillState; now: number; tickets: Ticket[]; title: string; recent?: Ticket[] }) {
   const nav = useNavigate();
+  const theme = useTheme('dash');
   return (
-    <section data-theme="night" className="flex flex-col rounded-[12px] bg-surface p-5 text-ink">
+    <section data-theme={theme === 'day' ? 'night' : undefined} className="flex flex-col rounded-[12px] border-t-2 border-t-[var(--brand)] p-5 text-ink ring-1 ring-[var(--line)]" style={{ background: 'var(--focus-surface)' }}>
       <header className="flex items-center justify-between">
         <h2 className="t-label text-muted">{title}</h2>
         <Link to="/dashboard/tickets" className="t-small-strong flex items-center gap-1 text-brand hover:underline">
