@@ -268,8 +268,8 @@ function TargetBar({ pct, target }: { pct: number; target?: number }) {
 
 function GaugeRow({ i = 0, label, value, goal, pct, invert }: { i?: number; label: string; value: string; goal: string; pct: number; invert?: boolean }) {
   const p = Math.max(0, Math.min(100, pct));
-  const tone = invert ? 'var(--ink)' : p >= 80 ? 'var(--ok)' : p >= 40 ? 'var(--ink)' : 'var(--critical)';
-  const len = Math.PI * 28;
+  const tone = invert ? 'var(--ink)' : p >= 80 ? 'var(--ok)' : p >= 40 ? 'var(--major-fill)' : 'var(--critical)';
+  const len = Math.PI * 44;
   return (
     <div className="flex items-center justify-between gap-3 px-5 py-3.5 transition-colors hover:bg-sunken">
       <div className="min-w-0">
@@ -279,12 +279,12 @@ function GaugeRow({ i = 0, label, value, goal, pct, invert }: { i?: number; labe
           <span className="t-body text-neutral">/ {goal}</span>
         </p>
       </div>
-      <div className="relative h-[38px] w-[64px] shrink-0" role="img" aria-label={`${label}: ${p}%`}>
-        <svg viewBox="0 0 64 36" className="h-full w-full">
-          <path d="M4 32 A28 28 0 0 1 60 32" fill="none" stroke="var(--grid)" strokeWidth="5" strokeLinecap="round" />
-          <path d="M4 32 A28 28 0 0 1 60 32" fill="none" stroke={tone} strokeWidth="5" strokeLinecap="round" strokeDasharray={`${(len * p) / 100} ${len}`} className="anim-gauge" style={{ '--i': i } as CSSProperties} />
+      <div className="relative h-[60px] w-[104px] shrink-0" role="img" aria-label={`${label}: ${p}%`}>
+        <svg viewBox="0 0 104 58" className="h-full w-full">
+          <path d="M8 52 A44 44 0 0 1 96 52" fill="none" stroke="var(--grid)" strokeWidth="9" strokeLinecap="round" />
+          <path d="M8 52 A44 44 0 0 1 96 52" fill="none" stroke={tone} strokeWidth="9" strokeLinecap="round" strokeDasharray={`${(len * p) / 100} ${len}`} className="anim-gauge" style={{ '--i': i } as CSSProperties} />
         </svg>
-        <span className="t-data absolute inset-x-0 bottom-0 text-center text-[11px] leading-none">
+        <span className="absolute inset-x-0 bottom-0 text-center text-[17px] font-semibold leading-none tabular-nums">
           <CountUp value={p} format={(v) => `${Math.round(v)}%`} ms={1300} />
         </span>
       </div>
