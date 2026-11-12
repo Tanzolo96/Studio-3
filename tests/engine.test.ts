@@ -4,6 +4,7 @@ import { DEMO_START, seedState } from '../src/engine/seed';
 import { escalation, frameView, heldKg, openHolds, takeoversFor, timeline } from '../src/engine/selectors';
 import { MIN } from '../src/engine/time';
 import { alertHeat } from '../src/engine/analytics';
+import { predictAll, predictFrame } from '../src/engine/predict';
 import type { MillEvent, MillEventInput, MillState } from '../src/engine/types';
 
 let n = 0;
@@ -141,5 +142,38 @@ describe('ask for a test now', () => {
     const asked = s.requests.filter((r) => r.ticketId === t.id && r.reason === 'manual' && r.status === 'pending');
     expect(asked).toHaveLength(1);
     expect(asked[0].urgent).toBe(true);
+  });
+});
+
+describe('breakdown forecast', () => {
+  it('ranks a frame with repeat draft faults as risky at the drafting zone', () => {
+    const s = seedState();
+    const p = predictFrame(s, 'RF-12', DEMO_START);
+    expect(p.parts[0].part).toBe('drafting');
+    expect(p.parts[0].evidence.join(' ')).toMatch(/draft setting slipped/);
+    expect(p.risk).toBeGreaterThan(predictFrame(s, 'RF-01', DEMO_START).risk);
+  });
+  it('gives every frame a risk between 0 and 95 with evidence', () => {
+    const all = predictAll(seedState(), DEMO_START);
+    expect(all).toHaveLength(24);
+    for (const p of all) {
+      expect(p.risk).toBeGreaterThanOrEqual(0);
+      expect(p.risk).toBeLessThanOrEqual(95);
+      expect(p.parts.every((x) => x.evidence.length > 0)).toBe(true);
+    }
+  });
+});
+
+describe('rules', () => {
+  it('QC manager can change a limit, and a bad range is ignored', () => {
+    const s = seedState();
+    const r = s.rules[0];
+    run(s, DEMO_START, { type: 'rule/set', ruleId: r.id, min: 10, max: 20, severity: 'major', escalateQcMins: 12, escalatePhMins: 25, by: 'priya' } as never);
+    expect(r.min).toBe(10);
+    expect(r.max).toBe(20);
+    expect(r.severity).toBe('major');
+    expect(r.updatedBy).toBe('priya');
+    run(s, DEMO_START + MIN, { type: 'rule/set', ruleId: r.id, min: 30, max: 20, severity: 'minor', escalateQcMins: 5, escalatePhMins: 9, by: 'priya' } as never);
+    expect(r.min).toBe(10);
   });
 });

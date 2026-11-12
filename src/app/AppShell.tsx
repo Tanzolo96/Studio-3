@@ -99,7 +99,7 @@ function Tab({ to, icon, label, badge, end }: { to: string; icon: React.ReactNod
       to={to}
       end={end}
       className={({ isActive }) =>
-        cx('relative flex flex-col items-center justify-center gap-1 text-[13px] leading-4', isActive ? 'font-semibold text-brand' : 'text-muted hover:text-ink')
+        cx('relative flex flex-col items-center justify-center gap-1 text-[13px] leading-4', isActive ? 'font-semibold text-brand-text' : 'text-muted hover:text-ink')
       }
     >
       <span className="relative">

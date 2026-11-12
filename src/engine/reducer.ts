@@ -395,6 +395,20 @@ export function apply(s: MillState, e: MillEvent): void {
       return;
     }
 
+    case 'rule/set': {
+      const r = s.rules.find((x) => x.id === e.ruleId);
+      if (!r) return;
+      if (e.min !== undefined && e.max !== undefined && e.min >= e.max) return;
+      r.min = e.min;
+      r.max = e.max;
+      r.severity = e.severity;
+      r.escalateQcMins = Math.max(1, Math.round(e.escalateQcMins));
+      r.escalatePhMins = Math.max(r.escalateQcMins + 1, Math.round(e.escalatePhMins));
+      r.updatedAt = e.at;
+      r.updatedBy = e.by;
+      return;
+    }
+
     case 'test/ask': {
       const t = s.tickets.find((x) => x.id === e.ticketId);
       if (!t || t.status === 'closed' || t.status === 'fixed') return;

@@ -139,7 +139,7 @@ export function DashShell() {
                         <span className="t-small-strong block truncate">{u.name}</span>
                         <span className="t-small block text-muted">{ROLE_WORD[u.role]}</span>
                       </span>
-                      {u.id === user.id && <span className="t-small-strong shrink-0 text-brand">Current</span>}
+                      {u.id === user.id && <span className="t-small-strong shrink-0 text-brand-text">Current</span>}
                     </button>
                   </li>
                 );
@@ -166,7 +166,7 @@ function NavItem({ to, label, end, children }: { to: string; label: string; end?
       to={to}
       end={end}
       className={({ isActive }) =>
-        cx('mx-3 flex h-10 items-center justify-between rounded-[12px] px-3 t-body', isActive ? 'bg-brand-soft font-semibold text-brand' : 'text-muted hover:bg-[var(--surface-raised)] hover:text-ink')
+        cx('mx-3 flex h-10 items-center justify-between rounded-[12px] px-3 t-body', isActive ? 'bg-brand-soft font-semibold text-brand-text' : 'text-muted hover:bg-[var(--surface-raised)] hover:text-ink')
       }
     >
       <span className="flex items-center gap-3">

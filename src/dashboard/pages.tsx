@@ -69,7 +69,7 @@ export function TicketTable({ s, tickets, now, empty }: { s: MillState; tickets:
                 <td className="t-small px-3">
                   {owner ? (
                     <span className="flex items-center gap-2">
-                      <span className="grid size-6 shrink-0 place-items-center rounded-full bg-brand-soft text-[10px] font-semibold text-brand">{userName(s, owner).split(' ').map((p) => p[0]).join('')}</span>
+                      <span className="grid size-6 shrink-0 place-items-center rounded-full bg-brand-soft text-[10px] font-semibold text-brand-text">{userName(s, owner).split(' ').map((p) => p[0]).join('')}</span>
                       {userName(s, owner).split(' ')[0]} <span className="text-muted">· {t.shift}</span>
                     </span>
                   ) : (
@@ -279,7 +279,7 @@ export function TicketDetailPage() {
 
 function BackLink({ to, children }: { to: string; children: ReactNode }) {
   return (
-    <Link to={to} className="t-small-strong -ml-2 mb-3 inline-flex h-9 items-center gap-1 rounded-[10px] px-2 text-brand hover:bg-brand-soft">
+    <Link to={to} className="t-small-strong -ml-2 mb-3 inline-flex h-9 items-center gap-1 rounded-[10px] px-2 text-brand-text hover:bg-brand-soft">
       <ArrowLeft size={16} /> {children}
     </Link>
   );
@@ -393,7 +393,7 @@ function HoldCard({ s, h, now, user, compact }: { s: MillState; h: Hold; now: nu
           <div>
             <dt className="t-small text-muted">Frame</dt>
             <dd className="t-small-strong">
-              <Link className="text-brand hover:underline" to={`/dashboard/tickets/${t.id}`}>
+              <Link className="text-brand-text hover:underline" to={`/dashboard/tickets/${t.id}`}>
                 {t.id}
               </Link>{' '}
               · {STATUS_WORD[t.status]}
@@ -463,7 +463,7 @@ function HoldCard({ s, h, now, user, compact }: { s: MillState; h: Hold; now: nu
         <p className="t-small text-muted">Only the QC manager decides on held yarn.</p>
       )}
       {compact && h.status === 'on_hold' && (
-        <Link to="/dashboard/held" className="t-small-strong text-brand hover:underline">
+        <Link to="/dashboard/held" className="t-small-strong text-brand-text hover:underline">
           Decide in Held yarn
         </Link>
       )}
@@ -746,7 +746,7 @@ function TicketBoard({ s, tickets, now }: { s: MillState; tickets: Ticket[]; now
                       <span className="flex items-center justify-between gap-2">
                         {owner ? (
                           <span className="t-small flex items-center gap-1.5">
-                            <span className="grid size-5 place-items-center rounded-full bg-brand-soft text-[9px] font-semibold text-brand">{userName(s, owner).split(' ').map((p) => p[0]).join('')}</span>
+                            <span className="grid size-5 place-items-center rounded-full bg-brand-soft text-[9px] font-semibold text-brand-text">{userName(s, owner).split(' ').map((p) => p[0]).join('')}</span>
                             {userName(s, owner).split(' ')[0]}
                           </span>
                         ) : (

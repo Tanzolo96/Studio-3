@@ -125,7 +125,7 @@ function QcOverview() {
           title="Waiting for your approval"
           sub={waiting.length ? `${waiting.length} decision${waiting.length > 1 ? 's' : ''} need the plant head` : 'Nothing waiting'}
           aside={
-            <Link to="/dashboard/held" className="t-small-strong flex items-center gap-1 text-brand hover:underline">
+            <Link to="/dashboard/held" className="t-small-strong flex items-center gap-1 text-brand-text hover:underline">
               Held yarn <ArrowRight size={14} />
             </Link>
           }
@@ -139,7 +139,7 @@ function QcOverview() {
                     <span className="t-small flex-1 text-muted">
                       Lot {h.lotId} · {roundKg(holdKg(h, now))} kg held
                     </span>
-                    <span className="t-small-strong text-brand">Review</span>
+                    <span className="t-small-strong text-brand-text">Review</span>
                   </Link>
                 </li>
               ))}
@@ -154,7 +154,7 @@ function QcOverview() {
         <section data-theme={theme === 'day' ? 'night' : undefined} className="flex flex-col rounded-[12px] border-t-2 border-t-[var(--brand)] p-5 text-ink ring-1 ring-[var(--line)]" style={{ background: 'var(--focus-surface)' }}>
           <header className="flex items-center justify-between">
             <h2 className="t-label text-muted">Needs attention</h2>
-            <Link to="/dashboard/tickets" className="t-small-strong flex items-center gap-1 text-brand hover:underline">
+            <Link to="/dashboard/tickets" className="t-small-strong flex items-center gap-1 text-brand-text hover:underline">
               All tickets <ArrowRight size={14} />
             </Link>
           </header>
@@ -214,7 +214,7 @@ function QcOverview() {
           title="Ring frames, floor order"
           sub={`${states.running} of ${s.frames.length} running normally${states.stopped ? `, ${states.stopped} stopped for doffing` : ''}`}
           aside={
-            <Link to="/dashboard/machines" className="t-small-strong flex items-center gap-1 text-brand hover:underline">
+            <Link to="/dashboard/machines" className="t-small-strong flex items-center gap-1 text-brand-text hover:underline">
               Machines <ArrowRight size={14} />
             </Link>
           }
@@ -268,7 +268,7 @@ function GaugeRow({ i = 0, label, value, goal, pct, invert }: { i?: number; labe
           <span className="t-stat !text-[24px] !leading-[28px]">{value}</span>
           <span className="t-body text-neutral">/ {goal}</span>
         </p>
-        <p className="t-small-strong mt-0.5 tabular-nums" style={{ color: tone }}>
+        <p className="t-small-strong mt-0.5 tabular-nums" style={{ color: tone === 'var(--major-fill)' ? 'var(--major)' : tone }}>
           <CountUp value={p} format={(v) => `${Math.round(v)}%`} ms={1300} />
         </p>
       </div>
@@ -280,7 +280,7 @@ const TILE: Record<FrameStateKind, string> = {
   running: 'bg-[var(--tile-run)] text-ink border-transparent hover:border-[var(--ok)]',
   warning: 'bg-major-soft text-major border-[var(--major-fill)]',
   fault: 'bg-critical text-on-critical border-critical pulse-critical',
-  held: 'bg-brand-soft text-brand border-[var(--brand)]',
+  held: 'bg-brand-soft text-brand-text border-[var(--brand)]',
   stopped: 'bg-transparent text-muted border-dashed border-line-strong',
 };
 const SHORT: Record<FrameStateKind, string> = { running: 'Run', warning: 'Warning', fault: 'Failed', held: 'On hold', stopped: 'Stopped' };
@@ -829,7 +829,7 @@ function ShiftOverview() {
           title="Ring frames, floor order"
           sub={`${states.running} of ${s.frames.length} running normally`}
           aside={
-            <Link to="/dashboard/machines" className="t-small-strong flex items-center gap-1 text-brand hover:underline">
+            <Link to="/dashboard/machines" className="t-small-strong flex items-center gap-1 text-brand-text hover:underline">
               Machines <ArrowRight size={14} />
             </Link>
           }
@@ -928,7 +928,7 @@ function PlantOverview() {
             {weekday} {dayMonth(now)} · last 30 days
           </p>
         </div>
-        <Link to="/dashboard/report" className="t-small-strong flex items-center gap-1 text-brand hover:underline">
+        <Link to="/dashboard/report" className="t-small-strong flex items-center gap-1 text-brand-text hover:underline">
           Full monthly report <ArrowRight size={14} />
         </Link>
       </header>
@@ -944,7 +944,7 @@ function PlantOverview() {
                     <span className="t-small flex-1 text-muted">
                       Lot {h.lotId} · {roundKg(holdKg(h, now))} kg held
                     </span>
-                    <span className="t-small-strong text-brand">Review</span>
+                    <span className="t-small-strong text-brand-text">Review</span>
                   </Link>
                 </li>
               ))}
@@ -1007,7 +1007,7 @@ function AttentionPanel({ s, now, tickets, title, recent = [] }: { s: MillState;
     <section data-theme={theme === 'day' ? 'night' : undefined} className="flex flex-col rounded-[12px] border-t-2 border-t-[var(--brand)] p-5 text-ink ring-1 ring-[var(--line)]" style={{ background: 'var(--focus-surface)' }}>
       <header className="flex items-center justify-between">
         <h2 className="t-label text-muted">{title}</h2>
-        <Link to="/dashboard/tickets" className="t-small-strong flex items-center gap-1 text-brand hover:underline">
+        <Link to="/dashboard/tickets" className="t-small-strong flex items-center gap-1 text-brand-text hover:underline">
           All tickets <ArrowRight size={14} />
         </Link>
       </header>

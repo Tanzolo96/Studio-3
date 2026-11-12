@@ -2,8 +2,10 @@ import { Link, Navigate, type RouteObject } from 'react-router-dom';
 import { AppShell } from './app/AppShell';
 import { AlertsScreen, PreviousScreen, RaiseScreen, TestEntryScreen, TicketScreen } from './app/screens';
 import { DashShell } from './dashboard/DashShell';
-import { HeldYarn, Later, MachinesGrid, TicketDetailPage, Tickets } from './dashboard/pages';
-import { InsightsPage, Overview, Report } from './dashboard/Overview';
+import { HeldYarn, MachinesGrid, TicketDetailPage, Tickets } from './dashboard/pages';
+import { Overview, Report } from './dashboard/Overview';
+import { InsightsHub, MachineDetail } from './dashboard/machine';
+import { AccountPage, RulesPage } from './dashboard/settings';
 import { Kit } from './demo/Kit';
 
 /** True when built as one self-contained page (claude.ai artifact): no server, memory routing. */
@@ -34,7 +36,7 @@ function Home() {
           <span className="t-small text-muted">Supervisor, lab tester, fitter (phone)</span>
         </Link>
       </div>
-      <Link to="/kit" className="t-small text-brand hover:underline">
+      <Link to="/kit" className="t-small text-brand-text hover:underline">
         Component kit
       </Link>
     </main>
@@ -62,11 +64,11 @@ export const dashRoutes: RouteObject = {
     { path: 'tickets/:id', element: <TicketDetailPage /> },
     { path: 'held', element: <HeldYarn /> },
     { path: 'machines', element: <MachinesGrid /> },
-    { path: 'machines/:id', element: <MachinesGrid /> },
-    { path: 'insights', element: <InsightsPage /> },
+    { path: 'machines/:id', element: <MachineDetail /> },
+    { path: 'insights', element: <InsightsHub /> },
     { path: 'report', element: <Report /> },
-    { path: 'rules', element: <Later title="Rules" what="The six-step rule editor with a preview of last month’s impact. Only the QC manager can save." /> },
-    { path: 'account', element: <Later title="Account" what="Profile, people and roles, shifts and roster, notifications." /> },
+    { path: 'rules', element: <RulesPage /> },
+    { path: 'account', element: <AccountPage /> },
   ],
 };
 

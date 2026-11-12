@@ -16,7 +16,7 @@ function Page({ title, sub, back, children }: { title: string; sub?: string; bac
   return (
     <div className="px-4 pt-4 pb-8">
       {back && (
-        <Link to={back} className="t-small-strong -ml-2 mb-2 inline-flex h-12 items-center gap-1 rounded-[10px] px-2 text-brand hover:bg-brand-soft">
+        <Link to={back} className="t-small-strong -ml-2 mb-2 inline-flex h-12 items-center gap-1 rounded-[10px] px-2 text-brand-text hover:bg-brand-soft">
           <ArrowLeft size={20} /> Back
         </Link>
       )}
@@ -58,7 +58,7 @@ function MyTickets({ user }: { user: User }) {
           <p className="t-small max-w-[30ch] text-muted">
             {user.role === 'supervisor' ? 'No active issues. Every frame is running normally. A new fault will ring this phone.' : 'Nothing has been escalated to you.'}
           </p>
-          <Link to="/app/previous" className="t-small-strong mt-1 inline-flex h-12 items-center rounded-[10px] px-3 text-brand hover:bg-brand-soft">
+          <Link to="/app/previous" className="t-small-strong mt-1 inline-flex h-12 items-center rounded-[10px] px-3 text-brand-text hover:bg-brand-soft">
             See resolved issues in History
           </Link>
         </div>
@@ -379,7 +379,7 @@ function TicketDetail({ s, t, now, user }: { s: MillState; t: Ticket; now: numbe
         <div className="mt-4 flex flex-col gap-2">
           {pendingAsk ? (
             user.role === 'qc' ? (
-              <Link to={`/app/test/${pendingAsk.id}`} className="t-body-strong flex h-12 items-center justify-center rounded-[10px] border border-line bg-raised text-brand">
+              <Link to={`/app/test/${pendingAsk.id}`} className="t-body-strong flex h-12 items-center justify-center rounded-[10px] border border-line bg-raised text-brand-text">
                 Enter the lab result
               </Link>
             ) : (

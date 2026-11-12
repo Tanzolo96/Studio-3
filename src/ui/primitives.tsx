@@ -35,7 +35,7 @@ export function SeverityBadge({ level, className }: { level: Severity; className
 export type ChipKind = TicketStatus | 'escalated' | 'on_hold' | 'released' | 'reprocess' | 'downgrade' | 'pending' | 'passed' | 'failed';
 const CHIP: Record<ChipKind, { word: string; cls: string; dot: string }> = {
   open: { word: 'Open', cls: 'bg-critical-soft text-critical', dot: 'var(--critical)' },
-  seen: { word: 'Seen', cls: 'bg-brand-soft text-brand', dot: 'var(--brand)' },
+  seen: { word: 'Seen', cls: 'bg-brand-soft text-brand-text', dot: 'var(--brand)' },
   working: { word: 'Working on it', cls: 'bg-major-soft text-major', dot: 'var(--major)' },
   fixed: { word: 'Fixed', cls: 'bg-ok-soft text-ok', dot: 'var(--ok)' },
   closed: { word: 'Closed', cls: 'bg-minor-soft text-minor', dot: 'var(--neutral-state)' },
@@ -65,7 +65,7 @@ const VARIANT: Record<Variant, string> = {
   primary: 'bg-brand text-on-brand hover:bg-[var(--brand-hover)]',
   secondary: 'bg-raised text-ink border border-line-strong hover:bg-sunken',
   danger: 'bg-critical text-on-critical hover:bg-[var(--critical-hover)]',
-  ghost: 'bg-transparent text-brand hover:bg-brand-soft',
+  ghost: 'bg-transparent text-brand-text hover:bg-brand-soft',
 };
 
 export const Button = forwardRef<

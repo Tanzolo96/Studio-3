@@ -12,6 +12,7 @@
   --color-neutral: var(--neutral-state);
   --color-brand: var(--brand);
   --color-brand-soft: var(--brand-soft);
+  --color-brand-text: var(--brand-text);
   --color-on-brand: var(--on-brand);
   --color-critical: var(--critical);
   --color-critical-soft: var(--critical-soft);
@@ -54,7 +55,7 @@
 
 @layer base {
 html, body, #root { height: 100%; }
-table { color: inherit; font: inherit; }
+table, button, input, select, textarea { color: inherit; font: inherit; }
 body {
   margin: 0;
   background: var(--surface);
@@ -101,6 +102,11 @@ p { margin: 0; text-wrap: pretty; }
 .pulse-dot { transform-box: fill-box; transform-origin: center; animation: pulse-dot 1.8s var(--ease-out) infinite; animation-delay: 1.4s; }
 @keyframes needle { from { transform: rotate(-90deg); } to { transform: rotate(var(--a)); } }
 .anim-needle { transform: rotate(var(--a)); animation: needle 1400ms cubic-bezier(0.34, 1.4, 0.64, 1) both; animation-delay: calc(250ms + var(--i, 0) * 90ms); }
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin-slow { animation: spin 3s linear infinite; }
+.spin-fast { animation: spin 0.9s linear infinite; }
+@keyframes yarn-turn { to { transform: translateX(6px); } }
+.yarn-turn { animation: yarn-turn 0.5s linear infinite; }
 .lift { transition: transform 220ms var(--ease-out), box-shadow 220ms var(--ease-out), border-color 220ms var(--ease-out); }
 .lift:hover { transform: translateY(-2px); box-shadow: var(--shadow-sheet); }
 .anim-fade { animation: fade 200ms var(--ease-out) both; }

@@ -250,18 +250,18 @@ Legend: ✅ done · 🟡 partly done · ⬜ not started. Add an owner name when 
 - Done when: an alert fired from the laptop rings a phone on another network within 2 s, and escalation matches on both.
 
 ### M6 Remaining screens
-- [ ] **Machines → frame detail** (`/dashboard/machines/:id`): count test history chart with the limit band, CV winding-sensor trend, fault history list, current lot and product. Use `TrendArea`-style charts from `ui/charts.tsx`.
-- [ ] **AI insights** page: all insights from `engine/insights.ts` as `InsightCard`s, grouped by kind; each action opens the real screen. "Create RCA task" needs a real RCA task (new event `rca/create`, list on the frame page).
-- [ ] **Monthly report**: summary (alerts, kg held, kg saved), response times by shift, top causes, worst frames, false alarms counted. Export as PDF (print stylesheet on Vercel; the claude.ai page cannot print).
-- [ ] **Rules** (QC manager edits, others read-only), 6 steps: 1 product + test, 2 lower/upper limit, 3 severity, 4 who gets it + response times, 5 **preview impact on last month** ("would have raised 4 more alerts": re-run the rule over seeded results), 6 save, logged for everyone. New event `rule/save`. Plus sensor warning thresholds per product.
-- [ ] **Account**: profile, people and roles, shifts and roster, notifications.
+- [x] **Machines → frame detail** (`/dashboard/machines/:id`): count test history chart with the limit band, CV winding-sensor trend, fault history list, current lot and product. Use `TrendArea`-style charts from `ui/charts.tsx`.
+- [x] **AI insights** page: all insights from `engine/insights.ts` as `InsightCard`s, grouped by kind; each action opens the real screen. "Create RCA task" needs a real RCA task (new event `rca/create`, list on the frame page).
+- [x] **Monthly report**: summary (alerts, kg held, kg saved), response times by shift, top causes, worst frames, false alarms counted. Export as PDF (print stylesheet on Vercel; the claude.ai page cannot print).
+- [x] **Rules** (QC manager edits, others read-only), 6 steps: 1 product + test, 2 lower/upper limit, 3 severity, 4 who gets it + response times, 5 **preview impact on last month** ("would have raised 4 more alerts": re-run the rule over seeded results), 6 save, logged for everyone. New event `rule/save`. Plus sensor warning thresholds per product.
+- [x] **Account**: profile, people and roles, shifts and roster, notifications.
 - [ ] **Shift change**: auto-move open tickets to the next shift supervisor at 08/16/24 if not handed over (derive from time like escalation).
-- [ ] Bring **Tickets** and **Held yarn** pages to the same visual style as the new Overview (panels, kg bars, friendlier cards).
+- [x] Bring **Tickets** and **Held yarn** pages to the same visual style as the new Overview (panels, kg bars, friendlier cards).
 - [ ] App: friendlier Active issues cards (frame number large, plain issue line), matching the new ticket screen.
 
 ### M7 Polish
 - [ ] Empty, loading, error and offline states on every list.
-- [ ] WCAG AA contrast in both themes, visible focus, keyboard path through the dashboard, screen-reader labels on charts (most exist).
+- [x] WCAG AA contrast in both themes (text checked on every dashboard page and role, Day and Night), visible focus, keyboard path through the dashboard, screen-reader labels on charts (most exist).
 - [ ] One-handed check of the app at 375 px; tap targets ≥ 48 px.
 - [ ] Full screenshot set at 1440 and 390 in Day and Night (`tests/shots.mjs`).
 - [ ] Copy pass: verb + object buttons, floor words, no em dashes.
