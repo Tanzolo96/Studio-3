@@ -80,6 +80,7 @@ export function TrendArea({
 }) {
   const [ref, w] = useWidth<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
+  const gid = useId().replace(/:/g, '');
   const padL = 36, padR = 12, padT = 12, padB = 24;
   const vals = points.map((p) => p.mins).filter((v): v is number => v !== null);
   const top = Math.ceil(Math.max(limit ?? 0, ...vals, 1) * 1.15);
@@ -121,26 +122,43 @@ export function TrendArea({
           ))}
           {limit !== undefined && (
             <g>
-              <line x1={padL} x2={w - padR} y1={y(limit)} y2={y(limit)} stroke="var(--critical)" strokeWidth={1} />
+              <line x1={padL} x2={w - padR} y1={y(limit)} y2={y(limit)} stroke="var(--critical)" strokeWidth={1} strokeDasharray="4 4" className="anim-grow-x" style={{ transformBox: 'fill-box' } as CSSProperties} />
               <text x={w - padR} y={y(limit) - 6} textAnchor="end" className="fill-[var(--critical)] text-[11px] font-semibold">
                 {limitLabel}
               </text>
             </g>
           )}
-          <path d={area} fill="var(--data)" opacity={0.1} className="anim-fade" />
-          <path d={path} fill="none" stroke="var(--data)" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" pathLength={100} strokeDasharray={100} className="anim-draw" />
+          <defs>
+            <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="var(--brand)" stopOpacity={0.22} />
+              <stop offset="100%" stopColor="var(--brand)" stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <path d={area} fill={`url(#${gid})`} className="anim-grow-y" />
+          <path d={path} fill="none" stroke="var(--brand)" strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" pathLength={100} strokeDasharray={100} className="anim-draw" />
+          {limit !== undefined &&
+            points.map((p, i) =>
+              p.mins !== null && p.mins > limit ? (
+                <circle key={i} cx={x(i)} cy={y(p.mins)} r={4} fill="var(--critical)" stroke="var(--surface-raised)" strokeWidth={2} className="anim-pop" style={{ '--i': 60 + i } as CSSProperties}>
+                  <title>{`${dayLabel(p.day)}: ${format(p.mins)}, over the limit`}</title>
+                </circle>
+              ) : null,
+            )}
           {[0, Math.floor((points.length - 1) / 2), points.length - 1].map((i) => (
             <text key={i} x={x(i)} y={height - 6} textAnchor={i === 0 ? 'start' : i === points.length - 1 ? 'end' : 'middle'} className="fill-[var(--ink-muted)] text-[11px]">
               {dayLabel(points[i].day)}
             </text>
           ))}
           {lastIdx >= 0 && points[lastIdx].mins !== null && (
-            <circle cx={x(lastIdx)} cy={y(points[lastIdx].mins!)} r={4} fill="var(--data)" stroke="var(--surface-raised)" strokeWidth={2} />
+            <g>
+              <circle cx={x(lastIdx)} cy={y(points[lastIdx].mins!)} r={4} fill="var(--brand)" className="pulse-dot" />
+              <circle cx={x(lastIdx)} cy={y(points[lastIdx].mins!)} r={4.5} fill="var(--brand)" stroke="var(--surface-raised)" strokeWidth={2} className="anim-pop" style={{ '--i': 100 } as CSSProperties} />
+            </g>
           )}
           {h && (
             <g>
-              <line x1={x(hover!)} x2={x(hover!)} y1={padT} y2={padT + ih} stroke="var(--line-strong)" strokeWidth={1} />
-              {h.mins !== null && <circle cx={x(hover!)} cy={y(h.mins)} r={4} fill="var(--data)" stroke="var(--surface-raised)" strokeWidth={2} />}
+              <line x1={x(hover!)} x2={x(hover!)} y1={padT} y2={padT + ih} stroke="var(--line-strong)" strokeWidth={1} strokeDasharray="3 3" />
+              {h.mins !== null && <circle cx={x(hover!)} cy={y(h.mins)} r={5} fill={limit !== undefined && h.mins > limit ? 'var(--critical)' : 'var(--brand)'} stroke="var(--surface-raised)" strokeWidth={2} />}
             </g>
           )}
         </svg>
