@@ -3,12 +3,12 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Checkmark } from '@carbon/icons-react';
 import type { Hold, MillState, Severity, ShiftId, Ticket, User } from '../engine/types';
 import { useDispatch, useMillState, useNow, useUser } from '../store/store';
-import { bySeverityThenAge, escalation, heldKg, holdNeedsApproval, isEscalated, openHolds } from '../engine/selectors';
+import { bySeverityThenAge, escalation, frameView, heldKg, holdNeedsApproval, isEscalated, openHolds, type FrameStateKind } from '../engine/selectors';
 import { frameWord, holdKg, lotOf, roundKg, ruleFor, userName } from '../engine/reducer';
 import { OUTCOME_WORD, SEVERITY, STATUS_WORD, TEST } from '../engine/vocab';
 import { dateTime, dayMonth, hhmm, hmm } from '../engine/time';
 import { Button, Choice, cx, Empty, SeverityBadge, StatusChip } from '../ui/primitives';
-import { FrameTile, ReadingGauge, ResponseTimer, readingLine, ticketChip, ticketMeta } from '../ui/cards';
+import { ReadingGauge, ResponseTimer, readingLine, ticketChip, ticketMeta } from '../ui/cards';
 import { Timeline } from '../ui/timeline';
 import { PageHead } from './DashShell';
 
@@ -442,20 +442,92 @@ export function Later({ title, what }: { title: string; what: string }) {
   );
 }
 
+const KIND_UI: Record<FrameStateKind, { word: string; dot: string; text: string; card: string }> = {
+  running: { word: 'Running', dot: 'bg-ok', text: 'text-muted', card: 'border-line bg-raised' },
+  warning: { word: 'Warning', dot: 'bg-major-fill', text: 'text-major', card: 'border-[var(--major-fill)] bg-major-soft' },
+  fault: { word: 'Failed', dot: 'bg-critical', text: 'text-critical', card: 'border-[var(--critical)] bg-critical-soft' },
+  held: { word: 'On hold', dot: 'bg-held', text: 'text-held', card: 'border-line bg-held-soft' },
+  stopped: { word: 'Stopped', dot: 'bg-[var(--line-strong)]', text: 'text-muted', card: 'border-dashed border-line-strong bg-transparent' },
+};
+const KIND_ORDER: FrameStateKind[] = ['fault', 'warning', 'held', 'stopped', 'running'];
+
 export function MachinesGrid() {
   const s = useMillState();
   const now = useNow();
   const nav = useNavigate();
+  const [show, setShow] = useState<'all' | FrameStateKind>('all');
+  const views = s.frames.map((f) => ({ f, v: frameView(s, f.id, now) }));
+  const count = (k: FrameStateKind) => views.filter((x) => x.v.kind === k).length;
+  const rows = [views.slice(0, 8), views.slice(8, 16), views.slice(16, 24)];
   return (
     <div className="max-w-[1180px]">
-      <PageHead title="Machines" sub="24 ring frames in floor order" />
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-3">
-        {s.frames.map((f) => (
-          <FrameTile key={f.id} s={s} frameId={f.id} now={now} onOpen={() => nav(`/dashboard/machines/${f.id}`)} />
+      <PageHead title="Machines" sub={`${count('running')} of ${s.frames.length} ring frames running normally`} />
+      <div className="mb-6 flex flex-wrap gap-2" role="group" aria-label="Show frames">
+        {(['all', ...KIND_ORDER] as const).map((k) => {
+          const n = k === 'all' ? s.frames.length : count(k);
+          if (k !== 'all' && n === 0) return null;
+          const on = show === k;
+          return (
+            <button
+              key={k}
+              type="button"
+              aria-pressed={on}
+              onClick={() => setShow(k)}
+              className={cx('t-small flex h-8 items-center gap-2 rounded-full border px-3 transition-colors', on ? 'border-ink bg-ink text-surface' : 'border-line bg-raised text-muted hover:text-ink')}
+            >
+              {k !== 'all' && <span className={cx('size-2 rounded-full', KIND_UI[k].dot)} />}
+              {k === 'all' ? 'All' : KIND_UI[k].word}
+              <span className="tabular-nums opacity-70">{n}</span>
+            </button>
+          );
+        })}
+      </div>
+      <div className="flex flex-col gap-5">
+        {rows.map((row, r) => (
+          <section key={r} aria-label={`Row ${r + 1}`}>
+            <h2 className="t-label mb-2 text-[11px] text-muted">Row {r + 1}</h2>
+            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4 xl:grid-cols-8">
+              {row.map(({ f, v }) => {
+                const ui = KIND_UI[v.kind];
+                const lot = lotOf(s, f.lotId);
+                const product = s.products.find((p) => p.id === lot.productId)!;
+                const dim = show !== 'all' && v.kind !== show;
+                return (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => nav(`/dashboard/machines/${f.id}`)}
+                    aria-label={`${f.id}, ${product.short}, lot ${f.lotId}: ${v.label}. ${v.line}`}
+                    className={cx(
+                      'flex min-w-0 flex-col gap-1 rounded-[10px] border p-3 text-left transition-[opacity,transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-sheet',
+                      ui.card,
+                      v.kind === 'fault' && 'pulse-critical',
+                      dim && 'opacity-30',
+                    )}
+                  >
+                    <span className="flex items-center justify-between gap-2">
+                      <span className="t-body-strong tabular-nums">{f.id}</span>
+                      <span className={cx('size-2 shrink-0 rounded-full', ui.dot, (v.kind === 'running' || v.kind === 'warning') && 'breathe')} aria-hidden />
+                    </span>
+                    <span className="t-small truncate text-muted">
+                      {product.short} · Lot {f.lotId}
+                    </span>
+                    {v.kind === 'running' ? (
+                      <span className="t-small mt-1 truncate text-muted">{v.line}</span>
+                    ) : (
+                      <span className="mt-1 flex flex-col">
+                        <span className={cx('t-small-strong', ui.text)}>{ui.word}</span>
+                        <span className="t-small line-clamp-2 text-muted">{v.line}</span>
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </section>
         ))}
       </div>
       <p className="t-small mt-6 text-muted">Frame detail with test history and the winding sensor trend comes in the next milestone.</p>
     </div>
   );
 }
-
