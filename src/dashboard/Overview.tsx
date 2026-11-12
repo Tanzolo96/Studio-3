@@ -277,7 +277,7 @@ function GaugeRow({ i = 0, label, value, goal, pct, invert }: { i?: number; labe
   );
 }
 const TILE: Record<FrameStateKind, string> = {
-  running: 'bg-[var(--tile-run)] text-ink border-transparent hover:border-[var(--ok)]',
+  running: 'bg-[var(--tile-run)] text-ink border-[var(--tile-run-line)] hover:border-[var(--ok)]',
   warning: 'bg-major-soft text-major border-[var(--major-fill)]',
   fault: 'bg-critical text-on-critical border-critical pulse-critical',
   held: 'bg-brand-soft text-brand-text border-[var(--brand)]',

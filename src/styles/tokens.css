@@ -43,6 +43,7 @@
   --grid: #eceef1;
   --focus-surface: #0e0f11;
   --tile-run: var(--ok-soft);
+  --tile-run-line: color-mix(in srgb, var(--ok) 30%, transparent);
   --cell-off: #e3e5e9;
   --brand-text: #c2410c;
   --panel-radius: 14px;
@@ -87,7 +88,8 @@
   --chart-minor: #4a5059;
   --grid: #22262b;
   --focus-surface: #1f2328;
-  --tile-run: color-mix(in srgb, var(--ok) 7%, var(--surface-raised));
+  --tile-run: color-mix(in srgb, var(--ok) 18%, var(--surface-raised));
+  --tile-run-line: color-mix(in srgb, var(--ok) 45%, transparent);
   --cell-off: #2e333a;
   --brand-text: #f2683d;
 }
