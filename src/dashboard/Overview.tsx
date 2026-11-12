@@ -238,7 +238,7 @@ function Goal({ i = 0, label, value, unit, goal, badge, note, chart }: { i?: num
   return (
     <div className="anim-in lift flex flex-col rounded-[12px] border border-line bg-raised p-5" style={{ '--i': i } as CSSProperties}>
       <div className="flex items-start justify-between gap-2">
-        <p className="t-label min-w-0 truncate text-muted">{label}</p>
+        <p className="t-label min-w-0 text-muted">{label}</p>
         {badge && <span className={cx('t-label shrink-0 whitespace-nowrap rounded-[4px] px-1.5 text-[10px]', badge.tone === 'good' ? 'bg-ok-soft text-ok' : 'bg-critical-soft text-critical')}>{badge.text}</span>}
       </div>
       <p className="mt-3 flex items-baseline gap-1.5">
@@ -683,7 +683,7 @@ function CalendarPanel({ s, now, onOpen }: { s: MillState; now: number; onOpen: 
                       : kind === 'calm'
                         ? 'bg-ok-soft text-ok'
                         : kind === 'future'
-                          ? 'text-[var(--line-strong)]'
+                          ? 'text-neutral'
                           : 'text-muted',
                 k === todayKey && !isPicked && 'ring-2 ring-[var(--brand)]',
               )}

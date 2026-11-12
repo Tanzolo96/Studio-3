@@ -43,6 +43,7 @@
   --grid: #eceef1;
   --focus-surface: #0e0f11;
   --tile-run: var(--ok-soft);
+  --cell-off: #e3e5e9;
   --panel-radius: 14px;
 }
 
@@ -86,6 +87,7 @@
   --grid: #22262b;
   --focus-surface: #1f2328;
   --tile-run: color-mix(in srgb, var(--ok) 7%, var(--surface-raised));
+  --cell-off: #2e333a;
 }
 
 :root {

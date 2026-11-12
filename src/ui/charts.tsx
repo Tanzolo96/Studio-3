@@ -405,7 +405,7 @@ export function SegmentMeter({ pct, target, segments = 20, color = 'var(--brand)
     <div className={cx('relative', className)} role={label ? 'img' : undefined} aria-label={label}>
       <div className="flex gap-[2px]" style={{ height }}>
         {Array.from({ length: segments }, (_, i) => (
-          <span key={i} className={cx('flex-1 rounded-[2px]', i < on && 'anim-pop')} style={{ background: i < on ? color : 'var(--grid)', '--i': i } as CSSProperties} />
+          <span key={i} className={cx('flex-1 rounded-[2px]', i < on && 'anim-pop')} style={{ background: i < on ? color : 'var(--cell-off)', '--i': i } as CSSProperties} />
         ))}
       </div>
       {target !== undefined && <span className="absolute -top-1.5 -bottom-1.5 w-[2px] bg-ink" style={{ left: `calc(${target}% - 1px)` }} title={`Target ${target}%`} />}
@@ -427,7 +427,7 @@ export function Dial({ pct, color, i = 0, label }: { pct: number; color: string;
   return (
     <div className="relative shrink-0" role="img" aria-label={label}>
       <svg viewBox="0 0 104 60" width={104} height={60}>
-        <path d={`M${cx0 - r} ${cy0} A${r} ${r} 0 0 1 ${cx0 + r} ${cy0}`} fill="none" stroke="var(--grid)" strokeWidth={5} />
+        <path d={`M${cx0 - r} ${cy0} A${r} ${r} 0 0 1 ${cx0 + r} ${cy0}`} fill="none" stroke="var(--cell-off)" strokeWidth={5} />
         <path d={`M${cx0 - r} ${cy0} A${r} ${r} 0 0 1 ${cx0 + r} ${cy0}`} fill="none" stroke={color} strokeWidth={5} strokeDasharray={`${(len * p) / 100} ${len}`} className="anim-gauge" style={{ '--i': i } as CSSProperties} />
         {ticks.map((t, k) => (
           <line key={k} x1={t.x1} y1={t.y1} x2={t.x2} y2={t.y2} stroke="var(--line-strong)" strokeWidth={t.major ? 1.6 : 1} />
