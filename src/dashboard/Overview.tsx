@@ -10,7 +10,7 @@ import { BASELINE_KG, alertHeat, dailyAlerts, frameStateCounts, seenTrend, shift
 import { DAY, ago, dayMonth, hhmm, mill, millDayKey, shiftAt, shiftEndsAt, timer } from '../engine/time';
 import { cx, Empty, SeverityBadge, StatusChip } from '../ui/primitives';
 import { InsightCard, readingLine, ticketChip } from '../ui/cards';
-import { BarList, CategoryBar, CountUp, Ring, Sparkline, SeverityLegend, ShiftBars, StackedColumns, TrendArea } from '../ui/charts';
+import { BarList, CountUp, Ring, Sparkline, SeverityLegend, ShiftBars, StackedColumns, TrendArea } from '../ui/charts';
 import { PageHead } from './DashShell';
 
 export function Panel({ title, sub, aside, children, className }: { title: string; sub?: string; aside?: ReactNode; children: ReactNode; className?: string }) {
@@ -222,18 +222,13 @@ function QcOverview() {
           }
         >
           <FloorMap s={s} now={now} onOpen={(id) => nav(`/dashboard/machines/${id}`)} />
-          <div className="mt-5">
-            <CategoryBar
-              label="Frames by state"
-              parts={[
-                { key: 'running', value: states.running, color: 'var(--neutral-state)', word: 'Running' },
-                { key: 'warning', value: states.warning, color: 'var(--major-fill)', word: 'Warning' },
-                { key: 'fault', value: states.fault, color: 'var(--critical)', word: 'Failed' },
-                { key: 'held', value: states.held, color: 'var(--held)', word: 'Yarn on hold' },
-                { key: 'stopped', value: states.stopped, color: 'var(--line-strong)', word: 'Stopped' },
-              ]}
-            />
-          </div>
+          <ul className="t-small mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-line pt-3 text-muted" aria-label="Legend">
+            <li className="flex items-center gap-1.5"><span className="size-2.5 rounded-[3px] bg-surface ring-1 ring-[var(--line-strong)]" />Running {states.running}</li>
+            {states.warning > 0 && <li className="flex items-center gap-1.5"><span className="size-2.5 rounded-[3px] bg-major-fill" />Warning {states.warning}</li>}
+            {states.fault > 0 && <li className="flex items-center gap-1.5"><span className="size-2.5 rounded-[3px] bg-critical" />Failed {states.fault}</li>}
+            {states.held > 0 && <li className="flex items-center gap-1.5"><span className="size-2.5 rounded-[3px] bg-held-soft ring-1 ring-[var(--line-strong)]" />On hold {states.held}</li>}
+            {states.stopped > 0 && <li className="flex items-center gap-1.5"><span className="size-2.5 rounded-[3px] border border-dashed border-line-strong" />Stopped {states.stopped}</li>}
+          </ul>
         </Panel>
         <CalendarPanel s={s} now={now} onOpen={(id) => nav(`/dashboard/tickets/${id}`)} />
       </div>
@@ -298,35 +293,29 @@ function GaugeRow({ i = 0, label, value, goal, pct, invert }: { i?: number; labe
 }
 
 const TILE: Record<FrameStateKind, string> = {
-  running: 'bg-raised text-ink border-line hover:border-line-strong',
-  warning: 'bg-major-soft text-major border-major-fill',
+  running: 'bg-surface text-ink border-transparent hover:border-line-strong',
+  warning: 'bg-major-soft text-major border-[var(--major-fill)]',
   fault: 'bg-critical text-on-critical border-critical pulse-critical',
-  held: 'bg-held-soft text-held border-held',
+  held: 'bg-held-soft text-held border-line-strong',
   stopped: 'bg-transparent text-muted border-dashed border-line-strong',
 };
-const SHORT: Record<FrameStateKind, string> = { running: 'Run', warning: 'Warn', fault: 'Fail', held: 'Hold', stopped: 'Stop' };
-const DOT: Record<FrameStateKind, string> = { running: 'bg-ok breathe', warning: 'bg-major-fill breathe', fault: 'bg-[var(--on-critical)]', held: '', stopped: '' };
-/** One colour per lot, so sister frames spinning the same lot read as a group. */
-const LOT_COLOR = ['var(--brand)', 'var(--data)', 'var(--major-fill)', 'var(--ok)', 'var(--held)', 'var(--ink)'];
+const SHORT: Record<FrameStateKind, string> = { running: 'Run', warning: 'Warning', fault: 'Failed', held: 'On hold', stopped: 'Stopped' };
 
 function FloorMap({ s, now, onOpen }: { s: MillState; now: number; onOpen: (id: string) => void }) {
   const rows = [s.frames.slice(0, 8), s.frames.slice(8, 16), s.frames.slice(16, 24)];
   const [hover, setHover] = useState<string | null>(null);
-  const [lotPick, setLotPick] = useState<string | null>(null);
   const hv = hover ? frameView(s, hover, now) : undefined;
   const hf = hover ? s.frames.find((f) => f.id === hover) : undefined;
   const product = hf ? s.products.find((p) => p.id === s.lots.find((l) => l.id === hf.lotId)!.productId) : undefined;
-  const lots = [...new Set(s.frames.map((f) => f.lotId))].sort();
-  const colorOf = (lotId: string) => LOT_COLOR[lots.indexOf(lotId) % LOT_COLOR.length];
-  const focusLot = lotPick ?? hf?.lotId ?? null;
+  const sisters = hf ? s.frames.filter((f) => f.lotId === hf.lotId).length : 0;
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-1 flex-col gap-2">
       {rows.map((row, r) => (
-        <div key={r} className="grid grid-cols-[56px_repeat(8,minmax(0,1fr))] items-center gap-2">
-          <span className="t-small text-muted">Row {r + 1}</span>
+        <div key={r} className="grid flex-1 grid-cols-[48px_repeat(8,minmax(0,1fr))] items-stretch gap-2">
+          <span className="t-small self-center text-muted">Row {r + 1}</span>
           {row.map((f, c) => {
             const v = frameView(s, f.id, now);
-            const dim = focusLot !== null && f.lotId !== focusLot;
+            const sister = hf && f.lotId === hf.lotId;
             return (
               <button
                 key={f.id}
@@ -339,54 +328,30 @@ function FloorMap({ s, now, onOpen }: { s: MillState; now: number; onOpen: (id: 
                 aria-label={`${f.id}: ${v.label}. Lot ${f.lotId}. ${v.line}`}
                 style={{ '--i': r * 8 + c } as CSSProperties}
                 className={cx(
-                  'relative flex h-[66px] min-w-0 flex-col items-center justify-center overflow-hidden whitespace-nowrap rounded-[10px] border-2 transition-[transform,opacity,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-sheet',
+                  'flex min-h-[60px] min-w-0 flex-col items-center justify-center rounded-[10px] border transition-[opacity,box-shadow,border-color] duration-200',
                   v.kind !== 'fault' && 'anim-pop',
                   TILE[v.kind],
-                  dim && 'opacity-35',
-                  focusLot !== null && !dim && 'ring-2 ring-[var(--brand)] ring-offset-1 ring-offset-[var(--surface-raised)]',
+                  hf && !sister && 'opacity-40',
+                  sister && 'ring-2 ring-[var(--brand)]',
                 )}
               >
-                {DOT[v.kind] && <span className={cx('absolute top-1.5 right-1.5 size-1.5 rounded-full', DOT[v.kind])} style={{ '--i': r * 8 + c } as CSSProperties} />}
-                {v.kind === 'held' && <Locked size={12} className="absolute top-1.5 right-1.5" />}
-                <span className="font-mono text-[16px] font-semibold leading-5 tabular-nums">{f.num}</span>
-                <span className="text-[11px] leading-4 opacity-80">{v.kind === 'running' ? f.lotId : SHORT[v.kind]}</span>
-                <span className="absolute inset-x-2 bottom-1 h-[3px] rounded-full" style={{ background: colorOf(f.lotId) }} aria-hidden />
+                <span className="t-body-strong tabular-nums">{f.num}</span>
+                <span className="text-[11px] leading-4 opacity-70">{v.kind === 'running' ? f.lotId : SHORT[v.kind]}</span>
               </button>
             );
           })}
         </div>
       ))}
-      <p className="t-small mt-1 h-5 truncate text-muted" aria-live="polite">
+      <p className="t-small mt-2 min-h-5 truncate text-muted" aria-live="polite">
         {hf && hv ? (
           <>
-            <span className="font-semibold text-ink">{hf.id}</span> · {product?.name} · Lot {hf.lotId} · {hv.label} · {hv.line}
+            <span className="font-semibold text-ink">{hf.id}</span> · {product?.short} · Lot {hf.lotId} · {hv.label}
+            {sisters > 1 ? ` · ${sisters} frames on this lot` : ''}
           </>
         ) : (
-          'Point at a frame for details. The coloured line under each frame is its lot.'
+          'Point at a frame to see it and the other frames on its lot.'
         )}
       </p>
-      <div className="mt-2 flex flex-wrap gap-2" role="group" aria-label="Lots on the floor">
-        {lots.map((id) => {
-          const lot = s.lots.find((l) => l.id === id);
-          const prod = lot ? s.products.find((p) => p.id === lot.productId) : undefined;
-          const n = s.frames.filter((f) => f.lotId === id).length;
-          const on = lotPick === id;
-          return (
-            <button
-              key={id}
-              type="button"
-              aria-pressed={on}
-              onClick={() => setLotPick(on ? null : id)}
-              className={cx('t-small flex items-center gap-2 rounded-[8px] border px-2.5 py-1.5 transition-colors', on ? 'border-[var(--brand)] bg-brand-soft text-ink' : 'border-line bg-raised text-muted hover:border-line-strong hover:text-ink')}
-            >
-              <span className="h-2.5 w-2.5 rounded-[3px]" style={{ background: colorOf(id) }} />
-              <span className="t-small-strong text-ink">Lot {id}</span>
-              {prod && <span>{prod.short}</span>}
-              <span className="t-data text-[11px]">{n}</span>
-            </button>
-          );
-        })}
-      </div>
     </div>
   );
 }
