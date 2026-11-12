@@ -99,6 +99,15 @@
   --touch: 48px;
   --control: 40px;
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  /* LED alert board: a dark panel in both themes, like the counters on the shop floor */
+  --led-bg: #171716;
+  --led-rule: #2c2c2a;
+  --led-off: #343432;
+  --led-ink: #ecebe4;
+  --led-dim: #9a988f;
+  --led-critical: #ff5a4d;
+  --led-major: #ffb21e;
+  --led-minor: #c9ccd2;
   /* z scale */
   --z-sticky: 10;
   --z-dock: 20;

@@ -10,7 +10,7 @@ import { BASELINE_KG, alertHeat, dailyAlerts, frameStateCounts, seenTrend, shift
 import { DAY, ago, dayMonth, hhmm, mill, millDayKey, shiftAt, shiftEndsAt, timer } from '../engine/time';
 import { cx, Empty, SeverityBadge, StatusChip } from '../ui/primitives';
 import { InsightCard, readingLine, ticketChip } from '../ui/cards';
-import { BarList, Dial, SegmentMeter, CountUp, Ring, Sparkline, SeverityLegend, ShiftBars, StackedColumns, TrendArea } from '../ui/charts';
+import { BarList, Dial, SegmentMeter, CountUp, Ring, LedBoard, Sparkline, ShiftBars, TrendArea } from '../ui/charts';
 import { PageHead } from './DashShell';
 
 export function Panel({ title, sub, aside, children, className }: { title: string; sub?: string; aside?: ReactNode; children: ReactNode; className?: string }) {
@@ -463,8 +463,8 @@ export function Report() {
       </div>
 
       <div className="anim-in grid gap-4 xl:grid-cols-3" style={{ '--i': 2 } as CSSProperties}>
-        <Panel className="xl:col-span-2" title="Alerts per day" sub="Last 30 days, by severity" aside={<SeverityLegend />}>
-          <StackedColumns data={a.daily} dayLabel={dayMonth} label="Alerts per day for the last 30 days, by severity" />
+        <Panel className="xl:col-span-2" title="Alerts per day" sub="Last 30 days · one lit dot = one alert">
+          <LedBoard data={a.daily} dayLabel={dayMonth} label="Alerts per day for the last 30 days, by severity" />
         </Panel>
         <Panel title="Top causes" sub="What fixed frames had in common">
           {a.causes.length ? <BarList items={a.causes} /> : <p className="t-small text-muted">No fixed tickets yet.</p>}
@@ -980,8 +980,8 @@ function PlantOverview() {
       </section>
 
       <div className="anim-in grid gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]" style={{ '--i': 4 } as CSSProperties}>
-        <Panel title="Alerts per day" sub="Last 30 days, by severity" aside={<SeverityLegend />}>
-          <StackedColumns data={a.daily.slice(-30)} dayLabel={dayMonth} label="Alerts per day for the last 30 days, by severity" />
+        <Panel title="Alerts per day" sub="Last 30 days · one lit dot = one alert">
+          <LedBoard data={a.daily.slice(-30)} dayLabel={dayMonth} label="Alerts per day for the last 30 days, by severity" />
         </Panel>
         <section className="divide-y divide-[var(--line)] rounded-[12px] border border-line bg-raised" aria-label="Health">
           <GaugeRow i={0} label="Frames running" value={`${states.running}`} goal={`${s.frames.length}`} pct={Math.round((states.running / s.frames.length) * 100)} />
