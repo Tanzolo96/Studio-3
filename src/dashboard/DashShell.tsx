@@ -10,6 +10,7 @@ import { SimulatorDock } from '../demo/Simulator';
 
 const ICON: Record<string, ReactNode> = {
   Overview: <Dashboard size={18} />,
+  'My shift': <Dashboard size={18} />,
   Tickets: <Task size={18} />,
   'Held yarn': <Locked size={18} />,
   Machines: <Chip size={18} />,
@@ -19,22 +20,24 @@ const ICON: Record<string, ReactNode> = {
   Account: <UserAvatar size={18} />,
 };
 
-const NAV: { group: string; items: { to: string; label: string; end?: boolean }[] }[] = [
+type Role = 'supervisor' | 'qc' | 'plant';
+/** roles: who sees the item in the sidebar. Left out = everyone. */
+const NAV: { group: string; items: { to: string; label: string; end?: boolean; roles?: Role[] }[] }[] = [
   {
     group: 'Operations',
     items: [
       { to: '/dashboard', label: 'Overview', end: true },
       { to: '/dashboard/tickets', label: 'Tickets' },
       { to: '/dashboard/held', label: 'Held yarn' },
-      { to: '/dashboard/machines', label: 'Machines' },
+      { to: '/dashboard/machines', label: 'Machines', roles: ['supervisor', 'qc'] },
     ],
   },
   {
     group: 'Insight',
     items: [
-      { to: '/dashboard/insights', label: 'AI insights' },
-      { to: '/dashboard/report', label: 'Monthly report' },
-      { to: '/dashboard/rules', label: 'Rules' },
+      { to: '/dashboard/insights', label: 'AI insights', roles: ['qc', 'plant'] },
+      { to: '/dashboard/report', label: 'Monthly report', roles: ['qc', 'plant'] },
+      { to: '/dashboard/rules', label: 'Rules', roles: ['qc'] },
       { to: '/dashboard/account', label: 'Account' },
     ],
   },
@@ -79,11 +82,11 @@ export function DashShell() {
           <span className="t-section">QC Alert</span>
         </div>
         <nav aria-label="Dashboard" className="flex flex-col gap-5 pt-2">
-          {NAV.map((g) => (
+          {NAV.map((g) => ({ ...g, items: g.items.filter((n) => !n.roles || n.roles.includes(user.role as Role)) })).filter((g) => g.items.length).map((g) => (
             <div key={g.group} className="flex flex-col gap-1">
               <p className="t-label px-5 pb-1 text-[11px] text-neutral">{g.group}</p>
               {g.items.map((n) => (
-            <NavItem key={n.to} {...n}>
+            <NavItem key={n.to} to={n.to} end={n.end} label={n.to === '/dashboard' && user.role === 'supervisor' ? 'My shift' : n.label}>
               {n.label === 'Tickets' && live.length > 0 && (
                 <span className={cx('t-data grid h-6 min-w-6 place-items-center rounded-[6px] px-1.5 text-[13px]', urgent ? 'bg-critical-soft text-critical' : 'bg-minor-soft text-minor')}>
                   {live.length}
@@ -199,9 +202,10 @@ const TITLES: [string, string][] = [
 
 function TopBar({ live, urgent }: { live: number; urgent: boolean }) {
   const nav = useNavigate();
+  const user = useUser('dash');
   const { pathname } = useLocation();
   const [q, setQ] = useState('');
-  const title = TITLES.find(([p]) => pathname.startsWith(p))?.[1] ?? 'Overview';
+  const title = TITLES.find(([p]) => pathname.startsWith(p))?.[1] ?? (user.role === 'supervisor' ? 'My shift' : 'Overview');
   const go = () => {
     const n = q.trim().replace(/\D/g, '');
     if (n) nav(`/dashboard/machines/RF-${n.padStart(2, '0')}`);
