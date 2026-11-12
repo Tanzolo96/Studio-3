@@ -42,6 +42,7 @@
   --chart-minor: #bcc0c7;
   --grid: #eceef1;
   --focus-surface: #0e0f11;
+  --tile-run: var(--ok-soft);
   --panel-radius: 14px;
 }
 
@@ -84,6 +85,7 @@
   --chart-minor: #4a5059;
   --grid: #22262b;
   --focus-surface: #1f2328;
+  --tile-run: color-mix(in srgb, var(--ok) 7%, var(--surface-raised));
 }
 
 :root {
