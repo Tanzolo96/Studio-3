@@ -469,24 +469,57 @@ export function Report() {
   const a = useMemo(() => {
     const since30 = mill(millDayKey(now)) - 29 * DAY;
     const month = ticketsSince(s, since30, now);
-    return { daily: dailyAlerts(s, now, 30), trend: seenTrend(s, now, 30), causes: topCauses(month).slice(0, 6), shifts: shiftResponse(month) };
+    const serious = month.filter((t) => t.severity !== 'minor');
+    const byFrame = new Map<string, number>();
+    for (const t of serious) byFrame.set(t.frameId, (byFrame.get(t.frameId) ?? 0) + 1);
+    const frames = [...byFrame.entries()].sort((x, y) => y[1] - x[1]).slice(0, 6).map(([name, value]) => ({ name, value }));
+    const holds = s.holds.filter((h) => h.from >= since30 && h.from <= now);
+    return {
+      daily: dailyAlerts(s, now, 30),
+      trend: seenTrend(s, now, 30),
+      causes: topCauses(month).slice(0, 6),
+      shifts: shiftResponse(month),
+      heat: alertHeat(s, now, 30),
+      serious,
+      crit: serious.filter((t) => t.severity === 'critical').length,
+      frames,
+      heldKg: holds.reduce((n, h) => n + holdKg(h, now), 0),
+      holds: holds.length,
+    };
     // recompute once a mill minute
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [s, nowMin]);
+  const seenNow = [...a.trend].reverse().find((p) => p.mins !== null)?.mins ?? null;
+  const top = a.frames[0];
   return (
-    <div className="mx-auto flex max-w-[1240px] flex-col gap-6">
+    <div className="mx-auto flex max-w-[1240px] flex-col gap-5">
       <PageHead title="Monthly report" sub="Last 30 days" />
-      <AlertHeat grid={alertHeat(s, now, 30)} />
-      <div className="grid gap-4 xl:grid-cols-3">
+
+      <section className="anim-in grid grid-cols-2 divide-x divide-y divide-[var(--line)] overflow-hidden rounded-[12px] border border-line bg-raised lg:grid-cols-4 lg:divide-y-0" aria-label="Month in numbers">
+        <ReportStat label="Critical and major alerts" value={<CountUp value={a.serious.length} />} note={`${a.crit} critical`} />
+        <ReportStat label="Median time to Seen" value={seenNow !== null ? <CountUp value={seenNow * 60} format={(v) => timer(v * 1000)} /> : '–'} note="Limit 5:00" tone={seenNow !== null && seenNow > 5 ? 'bad' : 'good'} />
+        <ReportStat label="Yarn held" value={<CountUp value={a.heldKg} format={(v) => `${Math.round(v).toLocaleString('en-IN')} kg`} />} note={`${a.holds} hold${a.holds === 1 ? '' : 's'}, about ${a.holds ? Math.round(a.heldKg / a.holds) : 0} kg each`} />
+        <ReportStat label="Frame with most alerts" value={top ? top.name : '–'} note={top ? `${top.value} alert${top.value === 1 ? '' : 's'} this month` : 'No alerts'} tone={top && top.value >= 3 ? 'bad' : undefined} />
+      </section>
+
+      <div className="anim-in grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]" style={{ '--i': 1 } as CSSProperties}>
+        <AlertHeat grid={a.heat} />
+        <Panel title="Frames with most alerts" sub="Critical and major, last 30 days">
+          {a.frames.length ? <BarList items={a.frames} format={(v) => `${v}`} /> : <p className="t-small text-muted">No alerts this month.</p>}
+          <p className="t-small mt-auto pt-4 text-muted">Frames that keep coming back are worth a deeper check, not another quick fix.</p>
+        </Panel>
+      </div>
+
+      <div className="anim-in grid gap-4 xl:grid-cols-3" style={{ '--i': 2 } as CSSProperties}>
         <Panel className="xl:col-span-2" title="Alerts per day" sub="Last 30 days, by severity" aside={<SeverityLegend />}>
           <StackedColumns data={a.daily} dayLabel={dayMonth} label="Alerts per day for the last 30 days, by severity" />
         </Panel>
-        <Panel title="Top causes" sub="What fixed frames had in common, last 30 days">
+        <Panel title="Top causes" sub="What fixed frames had in common">
           {a.causes.length ? <BarList items={a.causes} /> : <p className="t-small text-muted">No fixed tickets yet.</p>}
         </Panel>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-3">
+      <div className="anim-in grid gap-4 xl:grid-cols-3" style={{ '--i': 3 } as CSSProperties}>
         <Panel className="xl:col-span-2" title="How fast alerts are seen" sub="Median minutes from alert to Seen, rolling 7 days">
           <TrendArea
             points={a.trend}
@@ -497,13 +530,23 @@ export function Report() {
             label="Median minutes to Seen over the last 30 days, against the 5 minute limit"
           />
         </Panel>
-        <Panel title="By shift" sub="Median minutes to Seen, last 30 days">
+        <Panel title="By shift" sub="Median minutes to Seen">
           <div className="pt-6">
             <ShiftBars rows={a.shifts} limit={5} label="Median minutes to Seen for shifts A, B and C" />
           </div>
           <p className="t-small mt-4 text-muted">A 00–08 · B 08–16 · C 16–24</p>
         </Panel>
       </div>
+    </div>
+  );
+}
+
+function ReportStat({ label, value, note, tone }: { label: string; value: ReactNode; note: string; tone?: 'good' | 'bad' }) {
+  return (
+    <div className="p-5">
+      <p className="t-label text-[10px] text-muted">{label}</p>
+      <p className="t-stat mt-2">{value}</p>
+      <p className={cx('t-small mt-1', tone === 'good' ? 'text-ok' : tone === 'bad' ? 'text-critical' : 'text-muted')}>{note}</p>
     </div>
   );
 }
@@ -535,28 +578,58 @@ const DAYS7 = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 function AlertHeat({ grid }: { grid: number[][] }) {
   const max = Math.max(1, ...grid.flat());
+  const [hover, setHover] = useState<[number, number] | null>(null);
+  let peak: [number, number] = [0, 0];
+  grid.forEach((row, r) => row.forEach((v, c) => { if (v > grid[peak[0]][peak[1]]) peak = [r, c]; }));
+  const peakV = grid[peak[0]][peak[1]];
+  const rowTotals = grid.map((row) => row.reduce((n, v) => n + v, 0));
+  const shade = (v: number) => (v ? `color-mix(in srgb, var(--brand) ${Math.round(22 + (v / max) * 78)}%, var(--surface-raised))` : 'var(--surface-sunken)');
+  const end = (c: number) => String((c + 1) * 3).padStart(2, '0');
+  const info = hover
+    ? `${DAYS7[hover[0]]} ${HOURS[hover[1]]}:00–${end(hover[1])}:00 · ${grid[hover[0]][hover[1]]} alert${grid[hover[0]][hover[1]] === 1 ? '' : 's'}`
+    : peakV
+      ? `Busiest: ${DAYS7[peak[0]]} ${HOURS[peak[1]]}:00–${end(peak[1])}:00, ${peakV} alert${peakV === 1 ? '' : 's'}`
+      : 'No alerts in the last 30 days';
   return (
-    <Panel title="When alerts happen" sub="Critical and major, last 30 days, by weekday and hour">
-      <div role="img" aria-label="Heat map of critical and major alerts by weekday and 3-hour block" className="grid grid-cols-[32px_repeat(8,minmax(0,1fr))] items-center gap-1.5">
-        {grid.map((row, r) => (
-          <div key={DAYS7[r]} className="contents">
-            <span className="t-small text-muted">{DAYS7[r]}</span>
-            {row.map((v, c) => (
-              <span
-                key={c}
-                title={`${DAYS7[r]} ${HOURS[c]}:00, ${v} alert${v === 1 ? '' : 's'}`}
-                className="h-6 rounded-[6px]"
-                style={{ background: v ? `color-mix(in srgb, var(--brand) ${Math.round(18 + (v / max) * 82)}%, var(--surface-raised))` : 'var(--surface-sunken)' }}
-              />
-            ))}
-          </div>
-        ))}
+    <Panel title="When alerts happen" sub="Critical and major, last 30 days, by weekday and 3-hour block">
+      <div role="img" aria-label={`Heat map of critical and major alerts by weekday and 3-hour block. ${info}`} className="grid grid-cols-[36px_repeat(8,minmax(0,1fr))_32px] items-center gap-1.5">
         <span />
         {HOURS.map((h) => (
           <span key={h} className="t-data text-center text-[11px] text-muted">
             {h}
           </span>
         ))}
+        <span className="t-data text-right text-[11px] text-muted">Σ</span>
+        {grid.map((row, r) => (
+          <div key={DAYS7[r]} className="contents">
+            <span className="t-small text-muted">{DAYS7[r]}</span>
+            {row.map((v, c) => {
+              const isPeak = peakV > 0 && r === peak[0] && c === peak[1];
+              return (
+                <span
+                  key={c}
+                  onMouseEnter={() => setHover([r, c])}
+                  onMouseLeave={() => setHover(null)}
+                  className={cx('anim-pop grid h-9 place-items-center rounded-[8px] text-[12px] font-semibold tabular-nums transition-transform hover:scale-105', isPeak && 'ring-2 ring-[var(--ink)] ring-offset-1 ring-offset-[var(--surface-raised)]')}
+                  style={{ background: shade(v), color: v / max > 0.5 ? 'var(--on-brand)' : 'var(--ink)', '--i': r * 8 + c } as CSSProperties}
+                >
+                  {v || ''}
+                </span>
+              );
+            })}
+            <span className="t-data text-right text-[12px] text-muted">{rowTotals[r]}</span>
+          </div>
+        ))}
+      </div>
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+        <p className="t-small-strong" aria-live="polite">{info}</p>
+        <div className="t-small flex items-center gap-1.5 text-muted" aria-hidden>
+          Fewer
+          {[0, 0.25, 0.5, 0.75, 1].map((k) => (
+            <span key={k} className="size-3.5 rounded-[4px]" style={{ background: k ? shade(Math.max(1, Math.round(k * max))) : 'var(--surface-sunken)' }} />
+          ))}
+          More
+        </div>
       </div>
     </Panel>
   );

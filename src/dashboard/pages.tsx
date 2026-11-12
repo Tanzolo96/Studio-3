@@ -1,12 +1,12 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Checkmark } from '@carbon/icons-react';
 import type { Hold, MillState, Severity, ShiftId, Ticket, User } from '../engine/types';
 import { useDispatch, useMillState, useNow, useUser } from '../store/store';
-import { bySeverityThenAge, escalation, frameView, heldKg, holdNeedsApproval, isEscalated, openHolds, type FrameStateKind } from '../engine/selectors';
+import { bySeverityThenAge, escalation, frameView, holdNeedsApproval, isEscalated, openHolds, type FrameStateKind } from '../engine/selectors';
 import { frameWord, holdKg, lotOf, roundKg, ruleFor, userName } from '../engine/reducer';
 import { OUTCOME_WORD, SEVERITY, STATUS_WORD, TEST } from '../engine/vocab';
-import { dateTime, dayMonth, hhmm, hmm } from '../engine/time';
+import { ago, dateTime, dayMonth, hhmm, hmm } from '../engine/time';
 import { Button, Choice, cx, Empty, SeverityBadge, StatusChip } from '../ui/primitives';
 import { ReadingGauge, ResponseTimer, readingLine, ticketChip, ticketMeta } from '../ui/cards';
 import { Timeline } from '../ui/timeline';
@@ -65,7 +65,16 @@ export function TicketTable({ s, tickets, now, empty }: { s: MillState; tickets:
                 <td className="px-3">
                   <StatusChip kind={ticketChip(t, now)} />
                 </td>
-                <td className="t-small px-3">{owner ? `${userName(s, owner).split(' ')[0]} (${t.shift} shift)` : <span className="text-muted">Not seen yet</span>}</td>
+                <td className="t-small px-3">
+                  {owner ? (
+                    <span className="flex items-center gap-2">
+                      <span className="grid size-6 shrink-0 place-items-center rounded-full bg-brand-soft text-[10px] font-semibold text-brand">{userName(s, owner).split(' ').map((p) => p[0]).join('')}</span>
+                      {userName(s, owner).split(' ')[0]} <span className="text-muted">· {t.shift}</span>
+                    </span>
+                  ) : (
+                    <span className="text-muted">Not seen yet</span>
+                  )}
+                </td>
                 <td className="t-data px-3 text-[13px] text-muted">{dateTime(t.createdAt)}</td>
                 <td className="t-data px-3 text-right">{hmm((t.closedAt ?? now) - t.createdAt)}</td>
               </tr>
@@ -85,30 +94,45 @@ export function Tickets() {
   const [frame, setFrame] = useState('all');
   const [sev, setSev] = useState<'all' | Severity>('all');
   const [status, setStatus] = useState<'live' | 'all' | 'escalated' | 'closed'>('live');
-  const list = useMemo(
+  type St = 'live' | 'all' | 'escalated' | 'closed';
+  const inStatus = (t: Ticket, st: St) => (st === 'all' ? true : st === 'live' ? t.status !== 'closed' : st === 'closed' ? t.status === 'closed' : isEscalated(t, now));
+  const base = useMemo(
     () =>
       s.tickets
         .filter((t) => t.createdAt <= now)
         .filter((t) => shift === 'all' || t.shift === shift)
         .filter((t) => frame === 'all' || t.frameId === frame)
-        .filter((t) => sev === 'all' || t.severity === sev)
-        .filter((t) =>
-          status === 'all' ? true : status === 'live' ? t.status !== 'closed' : status === 'closed' ? t.status === 'closed' : isEscalated(t, now),
-        )
-        .sort((a, b) => (status === 'live' ? bySeverityThenAge(a, b) : b.createdAt - a.createdAt)),
-    [s.tickets, now, shift, frame, sev, status],
+        .filter((t) => sev === 'all' || t.severity === sev),
+    [s.tickets, now, shift, frame, sev],
   );
+  const list = base.filter((t) => inStatus(t, status)).sort((a, b) => (status === 'live' ? bySeverityThenAge(a, b) : b.createdAt - a.createdAt));
+  const TABS: [St, string][] = [['live', 'Open now'], ['escalated', 'Escalated'], ['closed', 'Closed'], ['all', 'All']];
   const select = 't-small h-10 rounded-full border border-line bg-raised px-4';
   return (
     <div className="max-w-[1180px]">
       <PageHead title="Tickets" sub={`${list.length} shown · ${s.tickets.length} since 01 Oct`} />
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-3 border-b border-line">
+        <div role="tablist" aria-label="Status" className="flex gap-1">
+          {TABS.map(([k, label]) => {
+            const n = base.filter((t) => inStatus(t, k)).length;
+            const on = status === k;
+            return (
+              <button
+                key={k}
+                type="button"
+                role="tab"
+                aria-selected={on}
+                onClick={() => setStatus(k)}
+                className={cx('t-small -mb-px flex items-center gap-2 border-b-2 px-3 pb-2.5 pt-1 transition-colors', on ? 'border-[var(--brand)] font-semibold text-ink' : 'border-transparent text-muted hover:text-ink')}
+              >
+                {label}
+                <span className={cx('rounded-full px-1.5 text-[11px] tabular-nums', on ? 'bg-brand text-on-brand' : k === 'escalated' && n ? 'bg-critical-soft text-critical' : 'bg-sunken text-muted')}>{n}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
       <div className="mb-4 flex flex-wrap gap-2" role="group" aria-label="Filters">
-        <select aria-label="Status" className={select} value={status} onChange={(e) => setStatus(e.target.value as never)}>
-          <option value="live">Open now</option>
-          <option value="escalated">Escalated</option>
-          <option value="closed">Closed</option>
-          <option value="all">All statuses</option>
-        </select>
         <select aria-label="Severity" className={select} value={sev} onChange={(e) => setSev(e.target.value as never)}>
           <option value="all">All severities</option>
           {(Object.keys(SEVERITY) as Severity[]).map((k) => (
@@ -253,10 +277,8 @@ export function HeldYarn() {
   const decided = s.holds.filter((h) => h.status !== 'on_hold').sort((a, b) => (b.closedAt ?? 0) - (a.closedAt ?? 0));
   return (
     <div className="max-w-[1180px]">
-      <PageHead
-        title="Held yarn"
-        sub={`${roundKg(heldKg(s, now))} kg in ${open.length} lot${open.length === 1 ? '' : 's'} waiting · only the QC manager decides, the plant head approves overrides`}
-      />
+      <PageHead title="Held yarn" sub="Only the QC manager decides. The plant head approves overrides." />
+      <HoldSummary now={now} open={open} decided={decided} />
       {open.length === 0 ? (
         <Empty icon={<Checkmark size={32} />} title="No yarn on hold" body="When a critical test fails, yarn made since the last good test is held here." />
       ) : (
@@ -529,5 +551,69 @@ export function MachinesGrid() {
       </div>
       <p className="t-small mt-6 text-muted">Frame detail with test history and the winding sensor trend comes in the next milestone.</p>
     </div>
+  );
+}
+
+const HOLD_COLORS = ['var(--brand)', 'var(--major-fill)', 'var(--data)', 'var(--held)', 'var(--ok)'];
+
+function HoldSummary({ now, open, decided }: { now: number; open: Hold[]; decided: Hold[] }) {
+  const total = open.reduce((n, h) => n + holdKg(h, now), 0);
+  const outcomes: { key: Hold['status']; word: string; cls: string }[] = [
+    { key: 'released', word: 'Released', cls: 'bg-ok' },
+    { key: 'reprocess', word: 'Reprocessed', cls: 'bg-major-fill' },
+    { key: 'downgrade', word: 'Sold as lower grade', cls: 'bg-[var(--line-strong)]' },
+  ];
+  const maxOut = Math.max(1, ...outcomes.map((o) => decided.filter((h) => h.status === o.key).length));
+  return (
+    <section className="mb-6 grid gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]" aria-label="Held yarn summary">
+      <div className="rounded-[12px] border border-line bg-raised p-5">
+        <p className="t-label text-[10px] text-muted">On hold now</p>
+        <p className="mt-2 flex items-baseline gap-2">
+          <span className="t-stat">{roundKg(total)}</span>
+          <span className="t-body text-muted">kg in {open.length} lot{open.length === 1 ? '' : 's'}</span>
+        </p>
+        {open.length > 0 && (
+          <>
+            <div className="mt-4 flex h-4 gap-1 overflow-hidden rounded-full" role="img" aria-label={open.map((h) => `${h.frameId} ${roundKg(holdKg(h, now))} kg`).join(', ')}>
+              {open.map((h, i) => (
+                <div key={h.id} className="anim-grow-x h-full first:rounded-l-full last:rounded-r-full" style={{ width: `${(holdKg(h, now) / total) * 100}%`, background: HOLD_COLORS[i % HOLD_COLORS.length], '--i': i } as CSSProperties} />
+              ))}
+            </div>
+            <ul className="mt-4 grid gap-2 sm:grid-cols-2">
+              {open.map((h, i) => (
+                <li key={h.id} className="t-small flex items-center gap-2">
+                  <span className="size-2.5 shrink-0 rounded-[3px]" style={{ background: HOLD_COLORS[i % HOLD_COLORS.length] }} />
+                  <span className="t-small-strong">{h.frameId}</span>
+                  <span className="text-muted">
+                    Lot {h.lotId} · {roundKg(holdKg(h, now))} kg · waiting {ago(now - h.from)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </div>
+      <div className="rounded-[12px] border border-line bg-raised p-5">
+        <p className="t-label text-[10px] text-muted">Decisions so far</p>
+        <p className="mt-2 flex items-baseline gap-2">
+          <span className="t-stat">{decided.length}</span>
+          <span className="t-body text-muted">holds decided</span>
+        </p>
+        <ul className="mt-4 flex flex-col gap-3">
+          {outcomes.map((o, i) => {
+            const n = decided.filter((h) => h.status === o.key).length;
+            return (
+              <li key={o.key} className="grid grid-cols-[130px_1fr_28px] items-center gap-3">
+                <span className="t-small text-muted">{o.word}</span>
+                <span className="h-2.5 rounded-full bg-sunken">
+                  <span className={cx('anim-grow-x block h-full rounded-full', o.cls)} style={{ width: `${(n / maxOut) * 100}%`, '--i': i } as CSSProperties} />
+                </span>
+                <span className="t-data text-right text-[13px]">{n}</span>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    </section>
   );
 }
