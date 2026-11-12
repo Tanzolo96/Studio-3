@@ -108,6 +108,9 @@ export function Tickets() {
   const list = base.filter((t) => inStatus(t, status)).sort((a, b) => (status === 'live' ? bySeverityThenAge(a, b) : b.createdAt - a.createdAt));
   const TABS: [St, string][] = [['live', 'Open now'], ['escalated', 'Escalated'], ['closed', 'Closed'], ['all', 'All']];
   const select = 't-small h-10 rounded-full border border-line bg-raised px-4';
+  const [view, setView] = useState<'board' | 'list'>('board');
+  const boardOk = status === 'live' || status === 'escalated';
+  const showBoard = boardOk && view === 'board';
   return (
     <div className="max-w-[1180px]">
       <PageHead title="Tickets" sub={`${list.length} shown · ${s.tickets.length} since 01 Oct`} />
@@ -132,7 +135,16 @@ export function Tickets() {
           })}
         </div>
       </div>
-      <div className="mb-4 flex flex-wrap gap-2" role="group" aria-label="Filters">
+      <div className="mb-4 flex flex-wrap items-center gap-2" role="group" aria-label="Filters">
+        {boardOk && (
+          <div role="radiogroup" aria-label="View" className="order-last ml-auto flex rounded-full border border-line bg-raised p-1">
+            {(["board", "list"] as const).map((v) => (
+              <button key={v} type="button" role="radio" aria-checked={view === v} onClick={() => setView(v)} className={cx('t-small h-8 rounded-full px-4', view === v ? 'bg-ink font-semibold text-surface' : 'text-muted hover:text-ink')}>
+                {v === 'board' ? 'Board' : 'List'}
+              </button>
+            ))}
+          </div>
+        )}
         <select aria-label="Severity" className={select} value={sev} onChange={(e) => setSev(e.target.value as never)}>
           <option value="all">All severities</option>
           {(Object.keys(SEVERITY) as Severity[]).map((k) => (
@@ -154,7 +166,11 @@ export function Tickets() {
           ))}
         </select>
       </div>
-      <TicketTable s={s} tickets={list} now={now} empty={status === 'live' ? 'No open tickets. All frames running normally.' : 'No tickets match these filters.'} />
+      {showBoard ? (
+        <TicketBoard s={s} tickets={list} now={now} />
+      ) : (
+        <TicketTable s={s} tickets={list} now={now} empty={status === 'live' ? 'No open tickets. All frames running normally.' : 'No tickets match these filters.'} />
+      )}
     </div>
   );
 }
@@ -615,5 +631,78 @@ function HoldSummary({ now, open, decided }: { now: number; open: Hold[]; decide
         </ul>
       </div>
     </section>
+  );
+}
+
+// ---------- tickets as a board: one column per step ----------
+const BOARD_COLS: { key: Ticket['status']; word: string; dot: string }[] = [
+  { key: 'open', word: 'Open', dot: 'bg-critical' },
+  { key: 'seen', word: 'Seen', dot: 'bg-brand' },
+  { key: 'working', word: 'Working on it', dot: 'bg-major-fill' },
+  { key: 'fixed', word: 'Fixed, waiting to close', dot: 'bg-ok' },
+];
+const SEV_STRIPE: Record<Severity, string> = { critical: 'bg-critical', major: 'bg-major-fill', minor: 'bg-[var(--line-strong)]' };
+
+function TicketBoard({ s, tickets, now }: { s: MillState; tickets: Ticket[]; now: number }) {
+  const nav = useNavigate();
+  return (
+    <div className="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-4">
+      {BOARD_COLS.map((col, ci) => {
+        const items = tickets.filter((t) => t.status === col.key);
+        return (
+          <section key={col.key} className="anim-in flex min-w-0 flex-col rounded-[12px] bg-sunken p-2.5" style={{ '--i': ci } as CSSProperties} aria-label={`${col.word}, ${items.length}`}>
+            <header className="flex items-center justify-between px-1.5 pb-2.5 pt-1">
+              <span className="t-small-strong flex items-center gap-2">
+                <span className={cx('size-2 rounded-full', col.dot)} />
+                {col.word}
+              </span>
+              <span className="t-data rounded-full bg-raised px-2 text-[12px] text-muted">{items.length}</span>
+            </header>
+            <div className="flex flex-col gap-2">
+              {items.length === 0 && <p className="t-small rounded-[10px] border border-dashed border-line-strong px-3 py-6 text-center text-muted">Nothing here</p>}
+              {items.map((t, i) => {
+                const owner = t.seenBy ?? (t.raisedBy && s.users.find((u) => u.id === t.raisedBy)?.role === 'supervisor' ? t.raisedBy : undefined);
+                const esc = isEscalated(t, now);
+                const mins = (now - t.alertAt) / 60000;
+                const pct = Math.min(100, (mins / t.escalateQcMins) * 100);
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => nav(`/dashboard/tickets/${t.id}`)}
+                    className="anim-pop relative flex flex-col gap-2 overflow-hidden rounded-[10px] border border-line bg-raised p-3 pl-4 text-left transition-[transform,box-shadow] hover:-translate-y-0.5 hover:shadow-sheet"
+                    style={{ '--i': i + ci * 3 } as CSSProperties}
+                  >
+                    <span className={cx('absolute inset-y-0 left-0 w-1', SEV_STRIPE[t.severity])} aria-hidden />
+                    <span className="flex items-center justify-between gap-2">
+                      <span className="t-body-strong">{t.frameId}</span>
+                      <span className="t-data text-[12px] text-muted">{ago(now - t.createdAt)}</span>
+                    </span>
+                    <span className="t-small -mt-1.5 text-muted">{t.kind === 'drift' ? 'Winding drift' : t.test ? `${TEST[t.test].name} test` : t.title}</span>
+                    <span className="t-data text-[12px]">{readingLine(s, t)}</span>
+                    {(t.status === 'open' || t.status === 'seen') && (
+                      <span className="h-1 overflow-hidden rounded-full bg-sunken" role="img" aria-label={`${Math.round(mins)} of ${t.escalateQcMins} minutes before escalation`}>
+                        <span className={cx('block h-full rounded-full', pct >= 100 ? 'bg-critical' : 'bg-brand')} style={{ width: `${pct}%` }} />
+                      </span>
+                    )}
+                    <span className="flex items-center justify-between gap-2">
+                      {owner ? (
+                        <span className="t-small flex items-center gap-1.5">
+                          <span className="grid size-5 place-items-center rounded-full bg-brand-soft text-[9px] font-semibold text-brand">{userName(s, owner).split(' ').map((p) => p[0]).join('')}</span>
+                          {userName(s, owner).split(' ')[0]}
+                        </span>
+                      ) : (
+                        <span className="t-small text-muted">Not seen yet</span>
+                      )}
+                      {esc ? <span className="t-label rounded-[4px] bg-critical-soft px-1.5 text-[10px] text-critical">Escalated</span> : <span className={cx('t-label text-[10px]', t.severity === 'critical' ? 'text-critical' : t.severity === 'major' ? 'text-major' : 'text-muted')}>{SEVERITY[t.severity].word}</span>}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        );
+      })}
+    </div>
   );
 }
