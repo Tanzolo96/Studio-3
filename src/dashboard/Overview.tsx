@@ -804,6 +804,10 @@ function ShiftOverview() {
   const myDone = s.tickets.filter((t) => t.seenBy === user.id && t.createdAt >= since30 && t.createdAt <= now);
   const myMedian = median(seenTimes(myDone));
   const notes = live.filter((t) => t.handover);
+  const recentMine = s.tickets
+    .filter((t) => (t.status === 'closed' || t.status === 'fixed') && t.shift === shift && t.createdAt <= now)
+    .sort((x, y) => (y.closedAt ?? y.createdAt) - (x.closedAt ?? x.createdAt))
+    .slice(0, 4);
   const weekday = WEEKDAYS[new Date(now + 5.5 * 3600000).getUTCDay()];
   return (
     <div className="mx-auto flex max-w-[1240px] flex-col gap-5">
@@ -835,7 +839,7 @@ function ShiftOverview() {
       </section>
 
       <div className="anim-in grid gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]" style={{ '--i': 4 } as CSSProperties}>
-        <AttentionPanel s={s} now={now} tickets={mine} title="Needs attention on my shift" />
+        <AttentionPanel s={s} now={now} tickets={mine} title="Needs attention on my shift" recent={recentMine} />
         <div className="flex min-w-0 flex-col gap-5">
           <Panel title="With fitters" sub={withFitters.length ? `${withFitters.length} frame${withFitters.length > 1 ? 's' : ''} being repaired` : 'No repair jobs out'}>
             {withFitters.length ? (
@@ -854,7 +858,7 @@ function ShiftOverview() {
               <p className="t-small text-muted">Frames you send to a fitter appear here until the repair is done.</p>
             )}
           </Panel>
-          <Panel title="For the next shift" sub={live.length ? `${live.length} ticket${live.length > 1 ? 's' : ''} still open` : 'Nothing to hand over'}>
+          <Panel className="flex-1" title="For the next shift" sub={live.length ? `${live.length} ticket${live.length > 1 ? 's' : ''} still open` : 'Nothing to hand over'}>
             {notes.length ? (
               <ul className="flex flex-col gap-2">
                 {notes.map((t) => (
@@ -1046,7 +1050,7 @@ function PlantOverview() {
 }
 
 // ---------- the black attention panel, shared ----------
-function AttentionPanel({ s, now, tickets, title }: { s: MillState; now: number; tickets: Ticket[]; title: string }) {
+function AttentionPanel({ s, now, tickets, title, recent = [] }: { s: MillState; now: number; tickets: Ticket[]; title: string; recent?: Ticket[] }) {
   const nav = useNavigate();
   return (
     <section data-theme="night" className="flex flex-col rounded-[12px] bg-surface p-5 text-ink">
@@ -1074,7 +1078,7 @@ function AttentionPanel({ s, now, tickets, title }: { s: MillState; now: number;
                       <div className={cx('anim-grow-x h-full rounded-full', pct >= 100 ? 'bg-critical' : 'bg-brand')} style={{ width: `${pct}%`, '--i': n } as CSSProperties} />
                     </div>
                     <span className="t-data whitespace-nowrap text-[12px] text-muted">
-                      {Math.round(mins)} / {t.escalateQcMins} min
+                      {mins > t.escalateQcMins ? `open ${ago(now - t.alertAt)}` : `${Math.round(mins)} / ${t.escalateQcMins} min`}
                     </span>
                   </div>
                 </button>
@@ -1084,6 +1088,24 @@ function AttentionPanel({ s, now, tickets, title }: { s: MillState; now: number;
         </ul>
       ) : (
         <p className="t-body mt-6 pb-4 text-muted">Nothing needs attention. {s.frames.length} frames are covered.</p>
+      )}
+      {recent.length > 0 && (
+        <div className="mt-auto pt-5">
+          <h3 className="t-label border-t border-line pt-4 text-muted">Recently resolved</h3>
+          <ul className="mt-2 flex flex-col">
+            {recent.map((t) => (
+              <li key={t.id}>
+                <button type="button" onClick={() => nav(`/dashboard/tickets/${t.id}`)} className="flex w-full items-center gap-3 py-2 text-left hover:opacity-90">
+                  <span className="t-data">{t.frameId}</span>
+                  <span className="t-small min-w-0 flex-1 truncate text-muted">{t.title}</span>
+                  <span className="t-data text-[12px] text-muted">
+                    {dayMonth(t.closedAt ?? t.createdAt)}, {hhmm(t.closedAt ?? t.createdAt)}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </section>
   );
