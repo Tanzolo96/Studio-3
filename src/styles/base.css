@@ -98,6 +98,8 @@ p { margin: 0; text-wrap: pretty; }
 .breathe { animation: breathe 2.4s ease-in-out infinite; animation-delay: calc(var(--i, 0) * -110ms); }
 @keyframes pulse-dot { 0% { transform: scale(1); opacity: 0.55; } 100% { transform: scale(3.2); opacity: 0; } }
 .pulse-dot { transform-box: fill-box; transform-origin: center; animation: pulse-dot 1.8s var(--ease-out) infinite; animation-delay: 1.4s; }
+@keyframes needle { from { transform: rotate(-90deg); } to { transform: rotate(var(--a)); } }
+.anim-needle { transform: rotate(var(--a)); animation: needle 1400ms cubic-bezier(0.34, 1.4, 0.64, 1) both; animation-delay: calc(250ms + var(--i, 0) * 90ms); }
 .lift { transition: transform 220ms var(--ease-out), box-shadow 220ms var(--ease-out), border-color 220ms var(--ease-out); }
 .lift:hover { transform: translateY(-2px); box-shadow: var(--shadow-sheet); }
 .anim-fade { animation: fade 200ms var(--ease-out) both; }

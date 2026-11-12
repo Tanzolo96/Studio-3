@@ -10,6 +10,7 @@ import { ago, dateTime, dayMonth, hhmm, hmm } from '../engine/time';
 import { Button, Choice, cx, Empty, SeverityBadge, StatusChip } from '../ui/primitives';
 import { ReadingGauge, ResponseTimer, readingLine, ticketChip, ticketMeta } from '../ui/cards';
 import { Timeline } from '../ui/timeline';
+import { SegmentMeter } from '../ui/charts';
 import { PageHead } from './DashShell';
 
 function Section({ title, children, aside, className }: { title: string; children: ReactNode; aside?: ReactNode; className?: string }) {
@@ -590,11 +591,14 @@ function HoldSummary({ now, open, decided }: { now: number; open: Hold[]; decide
         </p>
         {open.length > 0 && (
           <>
-            <div className="mt-4 flex h-4 gap-1 overflow-hidden rounded-full" role="img" aria-label={open.map((h) => `${h.frameId} ${roundKg(holdKg(h, now))} kg`).join(', ')}>
-              {open.map((h, i) => (
-                <div key={h.id} className="anim-grow-x h-full first:rounded-l-full last:rounded-r-full" style={{ width: `${(holdKg(h, now) / total) * 100}%`, background: HOLD_COLORS[i % HOLD_COLORS.length], '--i': i } as CSSProperties} />
-              ))}
+            <div className="mt-4 flex flex-wrap gap-[3px]" role="img" aria-label={`${open.map((h) => `${h.frameId} ${roundKg(holdKg(h, now))} kg`).join(', ')}. Each square is 10 kg.`}>
+              {open.flatMap((h, i) =>
+                Array.from({ length: Math.max(1, Math.round(holdKg(h, now) / 10)) }, (_, k) => (
+                  <span key={`${h.id}-${k}`} className="anim-pop size-4 rounded-[3px]" title={`${h.frameId} · Lot ${h.lotId}`} style={{ background: HOLD_COLORS[i % HOLD_COLORS.length], '--i': k + i * 3 } as CSSProperties} />
+                )),
+              )}
             </div>
+            <p className="t-small mt-2 text-muted">Each square is 10 kg</p>
             <ul className="mt-4 grid gap-2 sm:grid-cols-2">
               {open.map((h, i) => (
                 <li key={h.id} className="t-small flex items-center gap-2">
@@ -732,9 +736,7 @@ function TicketBoard({ s, tickets, now }: { s: MillState; tickets: Ticket[]; now
                       <span className="t-small -mt-1.5 text-muted">{t.kind === 'drift' ? 'Winding drift' : t.test ? `${TEST[t.test].name} test` : t.title}</span>
                       <span className="t-data text-[12px]">{readingLine(s, t)}</span>
                       {(t.status === 'open' || t.status === 'seen') && (
-                        <span className="h-1 overflow-hidden rounded-full bg-sunken" role="img" aria-label={`${Math.round(mins)} of ${t.escalateQcMins} minutes before escalation`}>
-                          <span className={cx('block h-full rounded-full', pct >= 100 ? 'bg-critical' : 'bg-brand')} style={{ width: `${pct}%` }} />
-                        </span>
+                        <SegmentMeter pct={pct} segments={10} height={6} color={pct >= 100 ? 'var(--critical)' : 'var(--brand)'} label={`${Math.round(mins)} of ${t.escalateQcMins} minutes before escalation`} />
                       )}
                       {t.fitterId && t.status === 'working' && (
                         <span className={cx('t-small', t.repairDoneAt ? 'text-ok' : 'text-major')}>

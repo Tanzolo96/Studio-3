@@ -10,7 +10,7 @@ import { BASELINE_KG, alertHeat, dailyAlerts, frameStateCounts, seenTrend, shift
 import { DAY, ago, dayMonth, hhmm, mill, millDayKey, shiftAt, shiftEndsAt, timer } from '../engine/time';
 import { cx, Empty, SeverityBadge, StatusChip } from '../ui/primitives';
 import { InsightCard, readingLine, ticketChip } from '../ui/cards';
-import { BarList, CountUp, Ring, Sparkline, SeverityLegend, ShiftBars, StackedColumns, TrendArea } from '../ui/charts';
+import { BarList, Dial, SegmentMeter, CountUp, Ring, Sparkline, SeverityLegend, ShiftBars, StackedColumns, TrendArea } from '../ui/charts';
 import { PageHead } from './DashShell';
 
 export function Panel({ title, sub, aside, children, className }: { title: string; sub?: string; aside?: ReactNode; children: ReactNode; className?: string }) {
@@ -160,7 +160,7 @@ function QcOverview() {
           </header>
           {live.length ? (
             <ul className="mt-3 flex flex-col divide-y divide-[var(--line)]">
-              {live.slice(0, 4).map((t, n) => {
+              {live.slice(0, 4).map((t) => {
                 const mins = (now - t.alertAt) / 60000;
                 const pct = Math.min(100, Math.round((mins / t.escalateQcMins) * 100));
                 return (
@@ -172,9 +172,7 @@ function QcOverview() {
                         <SeverityBadge level={t.severity} />
                       </div>
                       <div className="mt-2.5 flex items-center gap-3">
-                        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-sunken" role="img" aria-label={`${Math.round(mins)} of ${t.escalateQcMins} minutes before escalation`}>
-                          <div className={cx('anim-grow-x h-full rounded-full', pct >= 100 ? 'bg-critical' : 'bg-brand')} style={{ width: `${pct}%`, '--i': n } as CSSProperties} />
-                        </div>
+                        <SegmentMeter className="flex-1" pct={pct} segments={10} height={7} color={pct >= 100 ? 'var(--critical)' : 'var(--brand)'} label={`${Math.round(mins)} of ${t.escalateQcMins} minutes before escalation`} />
                         <span className="t-data whitespace-nowrap text-[12px] text-muted">
                           {mins > t.escalateQcMins ? `open ${ago(now - t.alertAt)}` : `${Math.round(mins)} / ${t.escalateQcMins} min`}
                         </span>
@@ -256,42 +254,28 @@ function Goal({ i = 0, label, value, unit, goal, badge, note, chart }: { i?: num
 
 function TargetBar({ pct, target }: { pct: number; target?: number }) {
   const ok = target !== undefined && pct >= target;
-  return (
-    <div role="img" aria-label={target !== undefined ? `${pct}% against a ${target}% target` : `${pct}% of the old amount`}>
-      <div className="relative h-3 rounded-full bg-sunken">
-        <div className={cx('anim-grow-x h-full rounded-full', ok ? 'bg-ok' : 'bg-brand')} style={{ width: `${pct}%` }} />
-        {target !== undefined && <span className="absolute -top-1 -bottom-1 w-0.5 rounded-full bg-ink" style={{ left: `${target}%` }} title={`Target ${target}%`} />}
-      </div>
-    </div>
-  );
+  return <SegmentMeter pct={pct} target={target} color={ok ? 'var(--ok)' : 'var(--brand)'} label={target !== undefined ? `${pct}% against a ${target}% target` : `${pct}% of the old amount`} />;
 }
 
 function GaugeRow({ i = 0, label, value, goal, pct, invert }: { i?: number; label: string; value: string; goal: string; pct: number; invert?: boolean }) {
   const p = Math.max(0, Math.min(100, pct));
   const tone = invert ? 'var(--ink)' : p >= 80 ? 'var(--ok)' : p >= 40 ? 'var(--major-fill)' : 'var(--critical)';
-  const len = Math.PI * 44;
   return (
-    <div className="flex items-center justify-between gap-3 px-5 py-3.5 transition-colors hover:bg-sunken">
+    <div className="flex items-center justify-between gap-3 px-5 py-3 transition-colors hover:bg-sunken">
       <div className="min-w-0">
         <p className="t-label text-[10px] text-muted">{label}</p>
         <p className="mt-1 flex items-baseline gap-1">
           <span className="t-stat !text-[24px] !leading-[28px]">{value}</span>
           <span className="t-body text-neutral">/ {goal}</span>
         </p>
-      </div>
-      <div className="relative h-[60px] w-[104px] shrink-0" role="img" aria-label={`${label}: ${p}%`}>
-        <svg viewBox="0 0 104 58" className="h-full w-full">
-          <path d="M8 52 A44 44 0 0 1 96 52" fill="none" stroke="var(--grid)" strokeWidth="9" strokeLinecap="round" />
-          <path d="M8 52 A44 44 0 0 1 96 52" fill="none" stroke={tone} strokeWidth="9" strokeLinecap="round" strokeDasharray={`${(len * p) / 100} ${len}`} className="anim-gauge" style={{ '--i': i } as CSSProperties} />
-        </svg>
-        <span className="absolute inset-x-0 bottom-0 text-center text-[17px] font-semibold leading-none tabular-nums">
+        <p className="t-small-strong mt-0.5 tabular-nums" style={{ color: tone }}>
           <CountUp value={p} format={(v) => `${Math.round(v)}%`} ms={1300} />
-        </span>
+        </p>
       </div>
+      <Dial pct={p} color={tone} i={i} label={`${label}: ${p}%`} />
     </div>
   );
 }
-
 const TILE: Record<FrameStateKind, string> = {
   running: 'bg-[var(--tile-run)] text-ink border-transparent hover:border-[var(--ok)]',
   warning: 'bg-major-soft text-major border-[var(--major-fill)]',
@@ -1029,7 +1013,7 @@ function AttentionPanel({ s, now, tickets, title, recent = [] }: { s: MillState;
       </header>
       {tickets.length ? (
         <ul className="mt-3 flex flex-col divide-y divide-[var(--line)]">
-          {tickets.slice(0, 5).map((t, n) => {
+          {tickets.slice(0, 5).map((t) => {
             const mins = (now - t.alertAt) / 60000;
             const pct = Math.min(100, Math.round((mins / t.escalateQcMins) * 100));
             return (
@@ -1041,9 +1025,7 @@ function AttentionPanel({ s, now, tickets, title, recent = [] }: { s: MillState;
                     <SeverityBadge level={t.severity} />
                   </div>
                   <div className="mt-2.5 flex items-center gap-3">
-                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-sunken" role="img" aria-label={`${Math.round(mins)} of ${t.escalateQcMins} minutes before escalation`}>
-                      <div className={cx('anim-grow-x h-full rounded-full', pct >= 100 ? 'bg-critical' : 'bg-brand')} style={{ width: `${pct}%`, '--i': n } as CSSProperties} />
-                    </div>
+                    <SegmentMeter className="flex-1" pct={pct} segments={10} height={7} color={pct >= 100 ? 'var(--critical)' : 'var(--brand)'} label={`${Math.round(mins)} of ${t.escalateQcMins} minutes before escalation`} />
                     <span className="t-data whitespace-nowrap text-[12px] text-muted">
                       {mins > t.escalateQcMins ? `open ${ago(now - t.alertAt)}` : `${Math.round(mins)} / ${t.escalateQcMins} min`}
                     </span>

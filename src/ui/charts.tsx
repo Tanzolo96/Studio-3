@@ -50,6 +50,7 @@ export function Sparkline({ values, color = 'var(--data)', height = 36, label, l
               <stop offset="100%" stopColor={color} stopOpacity={0} />
             </linearGradient>
           </defs>
+          {limit !== undefined && <rect x={0} y={0} width={w} height={Math.max(0, y(limit))} fill="var(--critical)" opacity={0.08} />}
           {limit !== undefined && <line x1={0} x2={w} y1={y(limit)} y2={y(limit)} stroke="var(--critical)" strokeWidth={1} strokeDasharray="3 3" opacity={0.6} />}
           <path d={`${line}L${x(last!.i)},${height}L${x(pts[0].i)},${height}Z`} fill={`url(#${gid})`} className="anim-fade" />
           <path d={line} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" pathLength={100} strokeDasharray={100} className="anim-draw" />
@@ -120,6 +121,7 @@ export function TrendArea({
               </text>
             </g>
           ))}
+          {limit !== undefined && <rect x={padL} y={padT} width={iw} height={Math.max(0, y(limit) - padT)} fill="var(--critical)" opacity={0.07} className="anim-fade" />}
           {limit !== undefined && (
             <g>
               <line x1={padL} x2={w - padR} y1={y(limit)} y2={y(limit)} stroke="var(--critical)" strokeWidth={1} strokeDasharray="4 4" className="anim-grow-x" style={{ transformBox: 'fill-box' } as CSSProperties} />
@@ -235,17 +237,8 @@ export function StackedColumns({
                   const y0 = y(acc);
                   acc += d[s];
                   const y1 = y(acc);
-                  const isTop = k === segs.length - 1;
                   const hgt = Math.max(1, y0 - y1 - (k > 0 ? 2 : 0));
-                  return isTop ? (
-                    <path
-                      key={s}
-                      d={`M${cx0},${y0 - (k > 0 ? 2 : 0)}V${y1 + 4}a4,4 0 0 1 4,-4H${cx0 + bw - 4}a4,4 0 0 1 4,4V${y0 - (k > 0 ? 2 : 0)}Z`}
-                      fill={SEV_FILL[s]}
-                      className="anim-grow-y"
-                      style={{ '--i': i } as CSSProperties}
-                    />
-                  ) : (
+                  return (
                     <rect key={s} x={cx0} y={y1} width={bw} height={hgt} fill={SEV_FILL[s]} className="anim-grow-y" style={{ '--i': i } as CSSProperties} />
                   );
                 })}
@@ -286,8 +279,10 @@ export function BarList({ items, max: maxIn, format = (v) => String(v), onPick }
             <span className="t-small truncate">{it.name}</span>
             <span className="t-data text-[13px]">{format(it.value)}</span>
           </div>
-          <div className="mt-1 h-2 rounded-full bg-sunken">
-            <div className="anim-grow-x h-full rounded-full bg-data transition-[width] duration-500 group-hover:opacity-80" style={{ width: `${(it.value / max) * 100}%` }} />
+          <div className="relative mt-1.5 h-3">
+            <span className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 border-t border-dashed border-[var(--grid)]" />
+            <span className="anim-grow-x absolute left-0 top-1/2 h-[2px] -translate-y-1/2 bg-[var(--data)]" style={{ width: `calc(${(it.value / max) * 100}% - 6px)` }} />
+            <span className="anim-pop absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-[var(--surface-raised)] bg-brand shadow-[0_0_0_1px_var(--brand)] transition-transform group-hover:scale-125" style={{ left: `calc(${(it.value / max) * 100}% - 6px)`, '--i': 40 } as CSSProperties} />
           </div>
         </li>
       ))}
@@ -342,8 +337,10 @@ export function ShiftBars({ rows, limit, label }: { rows: { shift: string; mins:
       {rows.map((r) => (
         <div key={r.shift} className="grid grid-cols-[52px_1fr_44px] items-center gap-3" title={`${r.shift} shift: ${r.n} alerts`}>
           <span className="t-small-strong">{r.shift} shift</span>
-          <div className="h-6 rounded-r-[4px] bg-transparent">
-            <div className="anim-grow-x h-full rounded-r-[4px]" style={{ width: `${((r.mins ?? 0) / max) * 100}%`, background: (r.mins ?? 0) > limit ? 'var(--chart-critical)' : 'var(--data)' }} />
+          <div className="relative h-6">
+            <span className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 border-t border-dashed border-[var(--grid)]" />
+            <span className="anim-grow-x absolute left-0 top-1/2 h-[2px] -translate-y-1/2" style={{ width: `${((r.mins ?? 0) / max) * 100}%`, background: (r.mins ?? 0) > limit ? 'var(--chart-critical)' : 'var(--data)' }} />
+            <span className="anim-pop absolute top-1/2 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-[var(--surface-raised)]" style={{ left: `${((r.mins ?? 0) / max) * 100}%`, background: (r.mins ?? 0) > limit ? 'var(--chart-critical)' : 'var(--data)', '--i': 40 } as CSSProperties} />
           </div>
           <span className="t-data text-right">{r.mins === null ? '–' : `${r.mins.toFixed(1)}m`}</span>
         </div>
@@ -397,4 +394,50 @@ export function CountUp({ value, format = (v) => String(Math.round(v)), ms = 900
     };
   }, [value, ms]);
   return <>{format(v)}</>;
+}
+
+
+/** Segmented meter: square cells that light up one by one, like a machine LED meter. */
+export function SegmentMeter({ pct, target, segments = 20, color = 'var(--brand)', height = 12, className, label }: { pct: number; target?: number; segments?: number; color?: string; height?: number; className?: string; label?: string }) {
+  const p = Math.max(0, Math.min(100, pct));
+  const on = Math.round((p / 100) * segments);
+  return (
+    <div className={cx('relative', className)} role={label ? 'img' : undefined} aria-label={label}>
+      <div className="flex gap-[2px]" style={{ height }}>
+        {Array.from({ length: segments }, (_, i) => (
+          <span key={i} className={cx('flex-1 rounded-[2px]', i < on && 'anim-pop')} style={{ background: i < on ? color : 'var(--grid)', '--i': i } as CSSProperties} />
+        ))}
+      </div>
+      {target !== undefined && <span className="absolute -top-1.5 -bottom-1.5 w-[2px] bg-ink" style={{ left: `calc(${target}% - 1px)` }} title={`Target ${target}%`} />}
+    </div>
+  );
+}
+
+/** Instrument dial: a half dial with ticks and a needle that swings to the value. */
+export function Dial({ pct, color, i = 0, label }: { pct: number; color: string; i?: number; label: string }) {
+  const p = Math.max(0, Math.min(100, pct));
+  const cx0 = 52, cy0 = 52, r = 42;
+  const len = Math.PI * r;
+  const ticks = Array.from({ length: 11 }, (_, k) => {
+    const a = Math.PI * (1 - k / 10);
+    const outer = r - 9, inner = k % 5 === 0 ? r - 17 : r - 13;
+    return { x1: cx0 + Math.cos(a) * outer, y1: cy0 - Math.sin(a) * outer, x2: cx0 + Math.cos(a) * inner, y2: cy0 - Math.sin(a) * inner, major: k % 5 === 0 };
+  });
+  const angle = -90 + (p / 100) * 180;
+  return (
+    <div className="relative shrink-0" role="img" aria-label={label}>
+      <svg viewBox="0 0 104 60" width={104} height={60}>
+        <path d={`M${cx0 - r} ${cy0} A${r} ${r} 0 0 1 ${cx0 + r} ${cy0}`} fill="none" stroke="var(--grid)" strokeWidth={5} />
+        <path d={`M${cx0 - r} ${cy0} A${r} ${r} 0 0 1 ${cx0 + r} ${cy0}`} fill="none" stroke={color} strokeWidth={5} strokeDasharray={`${(len * p) / 100} ${len}`} className="anim-gauge" style={{ '--i': i } as CSSProperties} />
+        {ticks.map((t, k) => (
+          <line key={k} x1={t.x1} y1={t.y1} x2={t.x2} y2={t.y2} stroke="var(--line-strong)" strokeWidth={t.major ? 1.6 : 1} />
+        ))}
+        <g className="anim-needle" style={{ '--a': `${angle}deg`, '--i': i, transformOrigin: `${cx0}px ${cy0}px` } as CSSProperties}>
+          <line x1={cx0} y1={cy0} x2={cx0} y2={cy0 - r + 12} stroke="var(--ink)" strokeWidth={2.2} strokeLinecap="round" />
+        </g>
+        <circle cx={cx0} cy={cy0} r={4.5} fill="var(--ink)" />
+        <circle cx={cx0} cy={cy0} r={1.8} fill="var(--surface-raised)" />
+      </svg>
+    </div>
+  );
 }
