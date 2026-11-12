@@ -14,6 +14,8 @@ A quality alert system for yarn spinning mills. Interaction Design, UID Gandhina
 
 ## Live prototype
 
+**https://tanzolo96.github.io/Studio-3/** (public). GitHub Actions tests, builds and republishes it on every push to `main`. Start views: `#demo`, `#dashboard`, `#app`.
+
 https://claude.ai/artifact/FBhCsz6xKZ9Fjhb5VoenBG (claude.ai artifact; share it from the page's Share menu). Rebuild it with `npm run build:standalone`, which writes one self-contained `dist-standalone/qc-alert.html`.
 
 ## Run it

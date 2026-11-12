@@ -14,6 +14,7 @@ The prototype is judged on UX quality, clarity and craft, not backend scale.
 | --- | --- |
 | Code | https://github.com/Tanzolo96/Studio-3 |
 | Branches | `main` is the shared, up-to-date branch. Work on your own branch and open a pull request into `main` |
+| Live website (public) | https://tanzolo96.github.io/Studio-3/ : rebuilt by GitHub Actions on every push to `main` (`.github/workflows/pages.yml`). Add `#demo`, `#dashboard` or `#app` |
 | Live prototype | https://claude.ai/artifact/FBhCsz6xKZ9Fjhb5VoenBG (private until shared from its Share menu) |
 | Figma (source of truth for the design system) | https://www.figma.com/design/qDZNbHwEKUBhFapp3osR8I |
 | IA map (FigJam) | https://www.figma.com/board/mYtDukXXBa4H6pnzcpQq6Y |

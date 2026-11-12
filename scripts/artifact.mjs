@@ -15,3 +15,33 @@ const out = `<title>QC Alert</title>
 `;
 writeFileSync(process.argv[2] ?? 'dist-standalone/qc-alert.html', out);
 console.log('wrote', process.argv[2] ?? 'dist-standalone/qc-alert.html', (out.length / 1024).toFixed(0), 'KB');
+
+// Full web page for GitHub Pages (or any static host): dist-standalone/site/index.html.
+// Everything is inlined and routing uses #app / #dashboard / #demo, so it works under any sub-path.
+import { mkdirSync, copyFileSync } from 'node:fs';
+const icon = readFileSync('public/icon.svg', 'utf8');
+mkdirSync('dist-standalone/site', { recursive: true });
+const [head, body] = out.split('<div id="root"></div>');
+writeFileSync(
+  'dist-standalone/site/index.html',
+  `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#161616">
+<link rel="icon" href="data:image/svg+xml,${encodeURIComponent(icon)}">
+<link rel="manifest" href="manifest.webmanifest">
+${head}</head>
+<body>
+<div id="root"></div>${body}</body>
+</html>
+`,
+);
+const manifest = JSON.parse(readFileSync('public/manifest.webmanifest', 'utf8'));
+manifest.start_url = './#app';
+manifest.icons = [{ src: 'icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' }];
+writeFileSync('dist-standalone/site/manifest.webmanifest', JSON.stringify(manifest, null, 2));
+copyFileSync('public/icon.svg', 'dist-standalone/site/icon.svg');
+writeFileSync('dist-standalone/site/.nojekyll', '');
+console.log('wrote dist-standalone/site/ (web page for GitHub Pages)');
