@@ -223,11 +223,11 @@ function QcOverview() {
         >
           <FloorMap s={s} now={now} onOpen={(id) => nav(`/dashboard/machines/${id}`)} />
           <ul className="t-small mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-line pt-3 text-muted" aria-label="Legend">
-            <li className="flex items-center gap-1.5"><span className="size-2.5 rounded-[3px] bg-surface ring-1 ring-[var(--line-strong)]" />Running {states.running}</li>
-            {states.warning > 0 && <li className="flex items-center gap-1.5"><span className="size-2.5 rounded-[3px] bg-major-fill" />Warning {states.warning}</li>}
-            {states.fault > 0 && <li className="flex items-center gap-1.5"><span className="size-2.5 rounded-[3px] bg-critical" />Failed {states.fault}</li>}
-            {states.held > 0 && <li className="flex items-center gap-1.5"><span className="size-2.5 rounded-[3px] bg-held-soft ring-1 ring-[var(--line-strong)]" />On hold {states.held}</li>}
-            {states.stopped > 0 && <li className="flex items-center gap-1.5"><span className="size-2.5 rounded-[3px] border border-dashed border-line-strong" />Stopped {states.stopped}</li>}
+            <li className="flex items-center gap-1.5"><span className="size-2.5 rounded-full bg-ok" />Running {states.running}</li>
+            {states.warning > 0 && <li className="flex items-center gap-1.5"><span className="size-2.5 rounded-full bg-major-fill" />Warning {states.warning}</li>}
+            {states.fault > 0 && <li className="flex items-center gap-1.5"><span className="size-2.5 rounded-full bg-critical" />Failed {states.fault}</li>}
+            {states.held > 0 && <li className="flex items-center gap-1.5"><span className="size-2.5 rounded-full bg-brand" />On hold {states.held}</li>}
+            {states.stopped > 0 && <li className="flex items-center gap-1.5"><span className="size-2.5 rounded-full bg-[var(--line-strong)]" />Stopped {states.stopped}</li>}
           </ul>
         </Panel>
         <CalendarPanel s={s} now={now} onOpen={(id) => nav(`/dashboard/tickets/${id}`)} />
@@ -293,10 +293,10 @@ function GaugeRow({ i = 0, label, value, goal, pct, invert }: { i?: number; labe
 }
 
 const TILE: Record<FrameStateKind, string> = {
-  running: 'bg-surface text-ink border-transparent hover:border-line-strong',
+  running: 'bg-ok-soft text-ink border-transparent hover:border-[var(--ok)]',
   warning: 'bg-major-soft text-major border-[var(--major-fill)]',
   fault: 'bg-critical text-on-critical border-critical pulse-critical',
-  held: 'bg-held-soft text-held border-line-strong',
+  held: 'bg-brand-soft text-brand border-[var(--brand)]',
   stopped: 'bg-transparent text-muted border-dashed border-line-strong',
 };
 const SHORT: Record<FrameStateKind, string> = { running: 'Run', warning: 'Warning', fault: 'Failed', held: 'On hold', stopped: 'Stopped' };
