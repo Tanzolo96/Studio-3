@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Asleep, Chip, Dashboard, Idea, Light, Locked, Notification, Report, Rule, Search, Task, UserAvatar } from '@carbon/icons-react';
 import { useMillState, useNow, useSession, useTheme, useUser } from '../store/store';
@@ -51,6 +51,15 @@ export function DashShell() {
   const user = useUser('dash');
   const { theme, setTheme, setUser } = useSession();
   const [picker, setPicker] = useState(false);
+  const pickerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!picker) return;
+    const away = (e: MouseEvent) => { if (!pickerRef.current?.contains(e.target as Node)) setPicker(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setPicker(false); };
+    document.addEventListener('mousedown', away);
+    document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc); };
+  }, [picker]);
   const live = s.tickets.filter((t) => t.status !== 'closed' && t.status !== 'fixed');
   const urgent = live.some((t) => t.severity === 'critical' || isEscalated(t, now));
   const kg = roundKg(heldKg(s, now));
@@ -103,12 +112,14 @@ export function DashShell() {
               </button>
             ))}
           </div>
-          <button type="button" onClick={() => setPicker((p) => !p)} aria-expanded={picker} className="w-full rounded-[10px] px-2 py-2 text-left hover:bg-raised">
+          <div ref={pickerRef} className="relative">
+          <button type="button" onClick={() => setPicker((p) => !p)} aria-expanded={picker} aria-haspopup="listbox" className="w-full rounded-[10px] px-2 py-2 text-left hover:bg-raised">
             <span className="t-body-strong block">{user.name}</span>
             <span className="t-small text-muted">{ROLE_WORD[user.role]} · switch</span>
           </button>
           {picker && (
-            <ul className="anim-fade mt-1 flex flex-col rounded-[10px] border border-line bg-raised py-1 shadow-sheet">
+            <ul className="anim-fade absolute inset-x-0 bottom-full z-[var(--z-sheet)] mb-2 flex flex-col rounded-[10px] border border-line bg-raised py-1 shadow-sheet">
+              <li className="t-label px-3 pb-1 pt-2 text-[10px] text-muted">Switch person</li>
               {['priya', 'mohit', 'krish'].map((id) => {
                 const u = s.users.find((x) => x.id === id)!;
                 return (
@@ -119,16 +130,20 @@ export function DashShell() {
                         setUser('dash', id);
                         setPicker(false);
                       }}
-                      className={cx('t-small flex w-full justify-between px-3 py-2 text-left hover:bg-sunken', u.id === user.id && 'font-semibold')}
+                      className={cx('flex w-full items-center justify-between gap-2 px-3 py-2 text-left hover:bg-sunken', u.id === user.id && 'bg-brand-soft')}
                     >
-                      {u.name}
-                      <span className="text-muted">{ROLE_WORD[u.role]}</span>
+                      <span className="min-w-0">
+                        <span className="t-small-strong block truncate">{u.name}</span>
+                        <span className="t-small block text-muted">{ROLE_WORD[u.role]}</span>
+                      </span>
+                      {u.id === user.id && <span className="t-small-strong shrink-0 text-brand">Current</span>}
                     </button>
                   </li>
                 );
               })}
             </ul>
           )}
+          </div>
         </div>
         </div>
       </aside>
