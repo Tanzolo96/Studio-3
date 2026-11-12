@@ -1,6 +1,6 @@
 import { useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowRight, ChevronLeft, ChevronRight, Locked } from '@carbon/icons-react';
+import { ArrowRight, Checkmark, ChevronLeft, ChevronRight, Locked } from '@carbon/icons-react';
 import type { MillState, Ticket } from '../engine/types';
 import { useMillState, useNow, useTheme, useUser } from '../store/store';
 import { bySeverityThenAge, escalation, frameView, holdNeedsApproval, isEscalated, median, pendingRequests, seenTimes, type FrameStateKind } from '../engine/selectors';
@@ -863,44 +863,72 @@ function WaitingForYou({ s, now }: { s: MillState; now: number }) {
   const holds = s.holds.filter((h) => h.status === 'on_hold' && !holdNeedsApproval(h));
   const tests = pendingRequests(s);
   const n = holds.length + tests.length;
+  const kg = holds.reduce((t, h) => t + holdKg(h, now), 0);
+  if (!n)
+    return (
+      <section className="anim-in flex items-center gap-3 rounded-[12px] border border-line bg-raised px-5 py-4">
+        <span className="grid size-8 place-items-center rounded-full bg-ok-soft text-ok">
+          <Checkmark size={16} />
+        </span>
+        <p className="t-small">
+          <span className="t-small-strong">Nothing waiting for you.</span> <span className="text-muted">Held yarn decisions and lab tests appear here.</span>
+        </p>
+      </section>
+    );
   return (
-    <Panel title="Waiting for you" sub={n ? `${n} thing${n > 1 ? 's' : ''} need the QC manager` : 'Nothing waiting'} className="anim-in">
-      {n ? (
-        <ul className="grid gap-x-4 gap-y-1 md:grid-cols-2">
-          {holds.map((h) => (
-            <li key={h.id}>
-              <button type="button" onClick={() => nav('/dashboard/held')} className="flex w-full items-center gap-3 rounded-[10px] px-3 py-2.5 transition-colors hover:bg-sunken text-left hover:bg-sunken">
-                <span className="grid size-8 shrink-0 place-items-center rounded-full bg-held-soft text-held">
-                  <Locked size={16} />
+    <section className="anim-in rounded-[12px] border p-5" style={{ background: 'var(--brand-soft)', borderColor: 'color-mix(in srgb, var(--brand) 35%, transparent)' }} aria-label="Waiting for you">
+      <header className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <span className="grid size-8 place-items-center rounded-full bg-brand text-[13px] font-bold text-on-brand tabular-nums">{n}</span>
+          <div>
+            <h2 className="t-body-strong">Waiting for you</h2>
+            <p className="t-small text-muted">
+              {holds.length ? `${roundKg(kg)} kg of yarn can't move until you decide` : `${tests.length} lab test${tests.length > 1 ? 's' : ''} waiting`}
+            </p>
+          </div>
+        </div>
+        {holds.length > 0 && (
+          <Link to="/dashboard/held" className="t-small-strong flex items-center gap-1 text-brand hover:underline">
+            Open held yarn <ArrowRight size={14} />
+          </Link>
+        )}
+      </header>
+      <ul className="grid gap-2.5 md:grid-cols-2">
+        {holds.map((h, i) => (
+          <li key={h.id} className="anim-pop" style={{ '--i': i * 4 } as CSSProperties}>
+            <div className="flex items-center gap-3 rounded-[10px] border border-line bg-raised px-3.5 py-3 shadow-raised">
+              <span className="grid size-9 shrink-0 place-items-center rounded-full bg-brand-soft text-brand">
+                <Locked size={16} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="t-small-strong block">Decide on held yarn · {h.frameId}</span>
+                <span className="t-small block truncate text-muted">
+                  Lot {h.lotId} · {roundKg(holdKg(h, now))} kg · waiting <span className={cx(now - h.from > 86_400_000 && 'font-semibold text-critical')}>{ago(now - h.from)}</span>
                 </span>
-                <span className="min-w-0 flex-1">
-                  <span className="t-small-strong block">Decide on held yarn · {h.frameId}</span>
-                  <span className="t-small block truncate text-muted">
-                    Lot {h.lotId} · {roundKg(holdKg(h, now))} kg · waiting {ago(now - h.from)}
-                  </span>
-                </span>
-                <ArrowRight size={16} className="text-muted" />
+              </span>
+              <button type="button" onClick={() => nav('/dashboard/held')} className="t-small-strong h-8 shrink-0 rounded-full bg-brand px-4 text-on-brand transition-colors hover:bg-[var(--brand-hover)]">
+                Decide
               </button>
-            </li>
-          ))}
-          {tests.map((r) => (
-            <li key={r.id}>
-              <div className="flex items-center gap-3 rounded-[10px] px-3 py-2.5 transition-colors hover:bg-sunken">
-                <span className={cx('grid size-8 shrink-0 place-items-center rounded-full text-[11px] font-semibold', r.urgent ? 'bg-major-soft text-major' : 'bg-sunken text-muted')}>Lab</span>
-                <span className="min-w-0 flex-1">
-                  <span className="t-small-strong block">
-                    {r.urgent ? 'Urgent ' : ''}lab test · {r.frameId}
-                  </span>
-                  <span className="t-small block text-muted">{now > r.dueAt ? `Late by ${ago(now - r.dueAt)}` : `Due ${hhmm(r.dueAt)}`} · enter it from the phone</span>
+            </div>
+          </li>
+        ))}
+        {tests.map((r, i) => (
+          <li key={r.id} className="anim-pop" style={{ '--i': (holds.length + i) * 4 } as CSSProperties}>
+            <div className="flex items-center gap-3 rounded-[10px] border border-line bg-raised px-3.5 py-3 shadow-raised">
+              <span className={cx('grid size-9 shrink-0 place-items-center rounded-full text-[11px] font-semibold', r.urgent ? 'bg-major-soft text-major' : 'bg-sunken text-muted')}>Lab</span>
+              <span className="min-w-0 flex-1">
+                <span className="t-small-strong block">
+                  {r.urgent ? 'Urgent ' : ''}lab test · {r.frameId}
                 </span>
-              </div>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="t-small text-muted">Held yarn decisions and lab tests that are waiting appear here.</p>
-      )}
-    </Panel>
+                <span className="t-small block text-muted">
+                  <span className={cx(now > r.dueAt && 'font-semibold text-critical')}>{now > r.dueAt ? `Late by ${ago(now - r.dueAt)}` : `Due ${hhmm(r.dueAt)}`}</span> · enter it from the phone
+                </span>
+              </span>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
