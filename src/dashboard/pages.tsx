@@ -637,7 +637,7 @@ function HoldSummary({ now, open, decided }: { now: number; open: Hold[]; decide
 // ---------- tickets as a board: one column per step ----------
 const BOARD_COLS: { key: Ticket['status']; word: string; dot: string }[] = [
   { key: 'open', word: 'Open', dot: 'bg-critical' },
-  { key: 'seen', word: 'Seen', dot: 'bg-brand' },
+  { key: 'seen', word: 'Seen', dot: 'bg-data' },
   { key: 'working', word: 'Working on it', dot: 'bg-major-fill' },
   { key: 'fixed', word: 'Fixed, waiting to close', dot: 'bg-ok' },
 ];
@@ -645,64 +645,151 @@ const SEV_STRIPE: Record<Severity, string> = { critical: 'bg-critical', major: '
 
 function TicketBoard({ s, tickets, now }: { s: MillState; tickets: Ticket[]; now: number }) {
   const nav = useNavigate();
+  const since = now - 30 * 86_400_000;
+  const done = s.tickets.filter((t) => t.status === 'closed' && t.createdAt >= since && t.createdAt <= now);
+  const med = (xs: number[]) => {
+    const v = xs.filter((x) => x >= 0).sort((a, b) => a - b);
+    return v.length ? v[Math.floor(v.length / 2)] : null;
+  };
+  const dwell: Record<string, number | null> = {
+    open: med(done.filter((t) => t.seenAt).map((t) => t.seenAt! - t.alertAt)),
+    seen: med(done.filter((t) => t.seenAt && t.workingAt).map((t) => t.workingAt! - t.seenAt!)),
+    working: med(done.filter((t) => t.workingAt && t.fixedAt).map((t) => t.fixedAt! - t.workingAt!)),
+    fixed: med(done.filter((t) => t.fixedAt && t.closedAt).map((t) => t.closedAt! - t.fixedAt!)),
+  };
+  const recent = s.tickets
+    .filter((t) => t.status === 'closed' && (t.closedAt ?? 0) <= now)
+    .sort((a, b) => (b.closedAt ?? 0) - (a.closedAt ?? 0))
+    .slice(0, 4);
+  const closedWeek = s.tickets.filter((t) => t.status === 'closed' && (t.closedAt ?? 0) > now - 7 * 86_400_000 && (t.closedAt ?? 0) <= now).length;
+  const EMPTY: Record<string, string> = {
+    open: 'Nothing waiting to be seen',
+    seen: 'Everything seen is being worked on',
+    working: 'Nobody is repairing right now',
+    fixed: 'Nothing waiting for a re-test',
+  };
+  const total = BOARD_COLS.reduce((n, c) => n + (dwell[c.key] ?? 0), 0);
   return (
-    <div className="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-4">
-      {BOARD_COLS.map((col, ci) => {
-        const items = tickets.filter((t) => t.status === col.key);
-        return (
-          <section key={col.key} className="anim-in flex min-w-0 flex-col rounded-[12px] bg-sunken p-2.5" style={{ '--i': ci } as CSSProperties} aria-label={`${col.word}, ${items.length}`}>
-            <header className="flex items-center justify-between px-1.5 pb-2.5 pt-1">
-              <span className="t-small-strong flex items-center gap-2">
-                <span className={cx('size-2 rounded-full', col.dot)} />
-                {col.word}
-              </span>
-              <span className="t-data rounded-full bg-raised px-2 text-[12px] text-muted">{items.length}</span>
-            </header>
-            <div className="flex flex-col gap-2">
-              {items.length === 0 && <p className="t-small rounded-[10px] border border-dashed border-line-strong px-3 py-6 text-center text-muted">Nothing here</p>}
-              {items.map((t, i) => {
-                const owner = t.seenBy ?? (t.raisedBy && s.users.find((u) => u.id === t.raisedBy)?.role === 'supervisor' ? t.raisedBy : undefined);
-                const esc = isEscalated(t, now);
-                const mins = (now - t.alertAt) / 60000;
-                const pct = Math.min(100, (mins / t.escalateQcMins) * 100);
-                return (
-                  <button
-                    key={t.id}
-                    type="button"
-                    onClick={() => nav(`/dashboard/tickets/${t.id}`)}
-                    className="anim-pop relative flex flex-col gap-2 overflow-hidden rounded-[10px] border border-line bg-raised p-3 pl-4 text-left transition-[transform,box-shadow] hover:-translate-y-0.5 hover:shadow-sheet"
-                    style={{ '--i': i + ci * 3 } as CSSProperties}
-                  >
-                    <span className={cx('absolute inset-y-0 left-0 w-1', SEV_STRIPE[t.severity])} aria-hidden />
-                    <span className="flex items-center justify-between gap-2">
-                      <span className="t-body-strong">{t.frameId}</span>
-                      <span className="t-data text-[12px] text-muted">{ago(now - t.createdAt)}</span>
-                    </span>
-                    <span className="t-small -mt-1.5 text-muted">{t.kind === 'drift' ? 'Winding drift' : t.test ? `${TEST[t.test].name} test` : t.title}</span>
-                    <span className="t-data text-[12px]">{readingLine(s, t)}</span>
-                    {(t.status === 'open' || t.status === 'seen') && (
-                      <span className="h-1 overflow-hidden rounded-full bg-sunken" role="img" aria-label={`${Math.round(mins)} of ${t.escalateQcMins} minutes before escalation`}>
-                        <span className={cx('block h-full rounded-full', pct >= 100 ? 'bg-critical' : 'bg-brand')} style={{ width: `${pct}%` }} />
+    <div className="flex flex-col gap-4">
+      {total > 0 && (
+        <section className="anim-in rounded-[12px] border border-line bg-raised p-4" aria-label="Where the time goes">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <p className="t-small-strong">Where the time goes</p>
+            <p className="t-small text-muted">
+              A typical ticket takes <span className="t-small-strong text-ink">{ago(total)}</span> from alert to closed, last 30 days
+            </p>
+          </div>
+          <div className="mt-3 flex h-3 gap-1 overflow-hidden rounded-full" role="img" aria-label={BOARD_COLS.map((c) => `${c.word}: ${dwell[c.key] ? ago(dwell[c.key]!) : 'no data'}`).join(', ')}>
+            {BOARD_COLS.map((c, i) =>
+              dwell[c.key] ? <div key={c.key} className={cx('anim-grow-x h-full first:rounded-l-full last:rounded-r-full', c.dot)} style={{ width: `${(dwell[c.key]! / total) * 100}%`, '--i': i } as CSSProperties} /> : null,
+            )}
+          </div>
+          <ul className="t-small mt-2.5 flex flex-wrap gap-x-5 gap-y-1 text-muted">
+            {BOARD_COLS.map((c) => (
+              <li key={c.key} className="flex items-center gap-1.5">
+                <span className={cx('size-2 rounded-full', c.dot)} />
+                {c.word} <span className="t-small-strong text-ink">{dwell[c.key] ? ago(dwell[c.key]!) : '–'}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      <div className="grid items-start gap-3 md:grid-cols-3 xl:grid-cols-5">
+        {BOARD_COLS.map((col, ci) => {
+          const items = tickets.filter((t) => t.status === col.key);
+          return (
+            <section key={col.key} className="anim-in flex min-w-0 flex-col rounded-[12px] bg-sunken p-2.5" style={{ '--i': ci } as CSSProperties} aria-label={`${col.word}, ${items.length}`}>
+              <header className="px-1.5 pb-2.5 pt-1">
+                <div className="flex items-center justify-between">
+                  <span className="t-small-strong flex items-center gap-2">
+                    <span className={cx('size-2 rounded-full', col.dot)} />
+                    {col.word}
+                  </span>
+                  <span className="t-data rounded-full bg-raised px-2 text-[12px] text-muted">{items.length}</span>
+                </div>
+                <p className="t-small mt-0.5 text-muted">{dwell[col.key] ? `Usually ${ago(dwell[col.key]!)} here` : 'No history yet'}</p>
+              </header>
+              <div className="flex flex-col gap-2">
+                {items.length === 0 && <p className="t-small rounded-[10px] border border-dashed border-line-strong px-3 py-5 text-center text-muted">{EMPTY[col.key]}</p>}
+                {items.map((t, i) => {
+                  const owner = t.seenBy ?? (t.raisedBy && s.users.find((u) => u.id === t.raisedBy)?.role === 'supervisor' ? t.raisedBy : undefined);
+                  const esc = isEscalated(t, now);
+                  const mins = (now - t.alertAt) / 60000;
+                  const pct = Math.min(100, (mins / t.escalateQcMins) * 100);
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => nav(`/dashboard/tickets/${t.id}`)}
+                      className="anim-pop relative flex flex-col gap-2 overflow-hidden rounded-[10px] border border-line bg-raised p-3 pl-4 text-left transition-[transform,box-shadow] hover:-translate-y-0.5 hover:shadow-sheet"
+                      style={{ '--i': i + ci * 3 } as CSSProperties}
+                    >
+                      <span className={cx('absolute inset-y-0 left-0 w-1', SEV_STRIPE[t.severity])} aria-hidden />
+                      <span className="flex items-center justify-between gap-2">
+                        <span className="t-body-strong">{t.frameId}</span>
+                        <span className="t-data text-[12px] text-muted">{ago(now - t.createdAt)}</span>
                       </span>
-                    )}
-                    <span className="flex items-center justify-between gap-2">
-                      {owner ? (
-                        <span className="t-small flex items-center gap-1.5">
-                          <span className="grid size-5 place-items-center rounded-full bg-brand-soft text-[9px] font-semibold text-brand">{userName(s, owner).split(' ').map((p) => p[0]).join('')}</span>
-                          {userName(s, owner).split(' ')[0]}
+                      <span className="t-small -mt-1.5 text-muted">{t.kind === 'drift' ? 'Winding drift' : t.test ? `${TEST[t.test].name} test` : t.title}</span>
+                      <span className="t-data text-[12px]">{readingLine(s, t)}</span>
+                      {(t.status === 'open' || t.status === 'seen') && (
+                        <span className="h-1 overflow-hidden rounded-full bg-sunken" role="img" aria-label={`${Math.round(mins)} of ${t.escalateQcMins} minutes before escalation`}>
+                          <span className={cx('block h-full rounded-full', pct >= 100 ? 'bg-critical' : 'bg-brand')} style={{ width: `${pct}%` }} />
                         </span>
-                      ) : (
-                        <span className="t-small text-muted">Not seen yet</span>
                       )}
-                      {esc ? <span className="t-label rounded-[4px] bg-critical-soft px-1.5 text-[10px] text-critical">Escalated</span> : <span className={cx('t-label text-[10px]', t.severity === 'critical' ? 'text-critical' : t.severity === 'major' ? 'text-major' : 'text-muted')}>{SEVERITY[t.severity].word}</span>}
-                    </span>
-                  </button>
-                );
-              })}
+                      {t.fitterId && t.status === 'working' && (
+                        <span className={cx('t-small', t.repairDoneAt ? 'text-ok' : 'text-major')}>
+                          {userName(s, t.fitterId).split(' ')[0]} {t.repairDoneAt ? 'finished the repair' : 'is repairing'}
+                        </span>
+                      )}
+                      <span className="flex items-center justify-between gap-2">
+                        {owner ? (
+                          <span className="t-small flex items-center gap-1.5">
+                            <span className="grid size-5 place-items-center rounded-full bg-brand-soft text-[9px] font-semibold text-brand">{userName(s, owner).split(' ').map((p) => p[0]).join('')}</span>
+                            {userName(s, owner).split(' ')[0]}
+                          </span>
+                        ) : (
+                          <span className="t-small text-muted">Not seen yet</span>
+                        )}
+                        {esc ? (
+                          <span className="t-label rounded-[4px] bg-critical-soft px-1.5 text-[10px] text-critical">Escalated</span>
+                        ) : (
+                          <span className={cx('t-label text-[10px]', t.severity === 'critical' ? 'text-critical' : t.severity === 'major' ? 'text-major' : 'text-muted')}>{SEVERITY[t.severity].word}</span>
+                        )}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          );
+        })}
+        <section className="anim-in flex min-w-0 flex-col rounded-[12px] border border-dashed border-line p-2.5" style={{ '--i': 4 } as CSSProperties} aria-label="Recently closed">
+          <header className="px-1.5 pb-2.5 pt-1">
+            <div className="flex items-center justify-between">
+              <span className="t-small-strong flex items-center gap-2 text-muted">
+                <span className="size-2 rounded-full bg-[var(--line-strong)]" />
+                Closed
+              </span>
+              <span className="t-data rounded-full bg-sunken px-2 text-[12px] text-muted">{closedWeek}</span>
             </div>
-          </section>
-        );
-      })}
+            <p className="t-small mt-0.5 text-muted">{closedWeek} closed in the last 7 days</p>
+          </header>
+          <ul className="flex flex-col gap-1.5">
+            {recent.map((t) => (
+              <li key={t.id}>
+                <button type="button" onClick={() => nav(`/dashboard/tickets/${t.id}`)} className="flex w-full flex-col gap-0.5 rounded-[8px] px-2 py-2 text-left opacity-80 transition-opacity hover:bg-sunken hover:opacity-100">
+                  <span className="flex items-center justify-between gap-2">
+                    <span className="t-small-strong">{t.frameId}</span>
+                    <span className="t-data text-[11px] text-muted">{t.closedAt ? `${ago(now - t.closedAt)} ago` : ''}</span>
+                  </span>
+                  <span className="t-small truncate text-muted">{t.cause ?? t.title}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      </div>
     </div>
   );
 }
+
