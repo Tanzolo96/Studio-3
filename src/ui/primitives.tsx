@@ -5,15 +5,12 @@ import { SEVERITY } from '../engine/vocab';
 export const cx = (...c: (string | false | undefined | null)[]) => c.filter(Boolean).join(' ');
 
 // ---------- severity: shape + word + colour, never colour alone ----------
-/** Severity as a small signal meter: 3 bars critical, 2 major, 1 minor. Reads by count, so it works without colour. */
-export function SeverityShape({ level, size = 12, className }: { level: Severity; size?: number; className?: string }) {
+/** Severity is one plain dot, coloured: red critical, amber major, grey minor. The word always sits next to it. */
+export function SeverityShape({ level, size = 8, className }: { level: Severity; size?: number; className?: string }) {
   const fill = level === 'critical' ? 'var(--critical)' : level === 'major' ? 'var(--major-fill)' : 'var(--neutral-state)';
-  const lit = level === 'critical' ? 3 : level === 'major' ? 2 : 1;
   return (
-    <svg width={size} height={size} viewBox="0 0 12 12" aria-hidden className={cx('shrink-0', className)}>
-      {[0, 1, 2].map((i) => (
-        <rect key={i} x={i * 4.2} y={8 - i * 3} width="3" height={4 + i * 3} rx="1" fill={i < lit ? fill : 'var(--line-strong)'} />
-      ))}
+    <svg width={size} height={size} viewBox="0 0 10 10" aria-hidden className={cx('shrink-0', className)}>
+      <circle cx="5" cy="5" r="5" fill={fill} />
     </svg>
   );
 }
@@ -171,7 +168,7 @@ export function Choice({ selected, onClick, children, className }: { selected: b
 export function AiSpark({ size = 14 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" aria-hidden>
-      <path d="M8 1.5 9.4 6.6 14.5 8 9.4 9.4 8 14.5 6.6 9.4 1.5 8 6.6 6.6Z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+      <circle cx="8" cy="8" r="3" fill="currentColor" />
     </svg>
   );
 }

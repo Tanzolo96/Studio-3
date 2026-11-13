@@ -195,9 +195,9 @@ export function SeverityLegend() {
 const LED: Record<Severity, string> = { critical: 'var(--led-critical)', major: 'var(--led-major)', minor: 'var(--led-minor)' };
 
 function LedShape({ s, x, y, r, fill }: { s: Severity; x: number; y: number; r: number; fill: string }) {
-  if (s === 'critical') return <path d={`M${x} ${y - r * 1.15}L${x + r} ${y + r * 0.75}L${x - r} ${y + r * 0.75}Z`} fill={fill} />;
-  if (s === 'major') return <path d={`M${x} ${y - r}L${x + r} ${y}L${x} ${y + r}L${x - r} ${y}Z`} fill={fill} />;
-  return <circle cx={x} cy={y} r={r * 0.85} fill={fill} />;
+  // One plain dot per severity, colour-coded like the lit dots on the board.
+  void s;
+  return <circle cx={x} cy={y} r={r * 0.8} fill={fill} />;
 }
 
 /** Alerts per day as a shop-floor LED board: one lane per severity, one column per day. */
