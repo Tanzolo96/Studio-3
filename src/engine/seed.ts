@@ -225,7 +225,6 @@ const HISTORY: Incident[] = [
   { d: '2026-11-03', t: '21:10', frame: 'RF-09', kind: 'twist', value: 20.6, seen: 4, fix: 25, cause: 'Traveller or spindle fault' },
   { d: '2026-11-04', t: '13:20', frame: 'RF-06', kind: 'count', value: 40.9, seen: 4, fix: 47, cause: 'Draft setting slipped', outcome: 'open' },
   { d: '2026-11-04', t: '22:30', frame: 'RF-11', kind: 'drift_ok', value: 2.3, seen: 5 },
-  { d: '2026-11-05', t: '08:40', frame: 'RF-03', kind: 'twist', value: 19.3, seen: 12 },
 ];
 
 let eid = 0;

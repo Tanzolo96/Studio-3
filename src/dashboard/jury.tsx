@@ -1,7 +1,9 @@
 // Jury setup: put two phones and this laptop in one live room, show who is connected, reset between runs.
 import { useMemo, useState } from 'react';
 import qrcode from 'qrcode-generator';
-import { useMill, useMillState } from '../store/store';
+import { Link } from 'react-router-dom';
+import { ArrowLeft } from '@carbon/icons-react';
+import { useMill, useMillState, useTheme } from '../store/store';
 import { currentRoom, liveReady, useLive } from '../store/live';
 import { ROLE_WORD } from '../app/Person';
 import { cx } from '../ui/primitives';
@@ -43,7 +45,28 @@ const switchRoom = (room: string | null) => {
   location.reload();
 };
 
+/** The jury page stands apart from the dashboard: its own plain page, with a way into the dashboard and back to the start. */
 export function JuryPage() {
+  const theme = useTheme('dash');
+  return (
+    <div data-theme={theme} className="min-h-dvh bg-surface text-ink">
+      <header className="flex items-center justify-between gap-3 border-b border-line px-6 py-4">
+        <Link to="/" className="t-small-strong flex items-center gap-2 text-muted hover:text-ink">
+          <ArrowLeft size={16} /> Start screen
+        </Link>
+        <span className="t-body-strong">QC Alert · Jury demo</span>
+        <Link to="/dashboard" className="t-small-strong h-10 rounded-full bg-brand px-5 leading-10 text-on-brand hover:bg-[var(--brand-hover)]">
+          Open dashboard
+        </Link>
+      </header>
+      <main className="px-6 py-8">
+        <JuryBody />
+      </main>
+    </div>
+  );
+}
+
+function JuryBody() {
   const s = useMillState();
   const reset = useMill((x) => x.reset);
   const live = useLive();

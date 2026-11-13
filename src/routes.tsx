@@ -27,7 +27,7 @@ function Home() {
         </p>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
-        <Link to="/dashboard/jury" className={card}>
+        <Link to="/jury" className={card}>
           <span className="t-body-strong">Live jury demo</span>
           <span className="t-small text-muted">Two phones and this laptop, live (QR codes to scan)</span>
         </Link>
@@ -84,13 +84,14 @@ export const dashRoutes: RouteObject = {
     { path: 'case/:id', element: <CasePage /> },
     { path: 'rules', element: <RulesPage /> },
     { path: 'account', element: <AccountPage /> },
-    { path: 'jury', element: <JuryPage /> },
+    { path: 'jury', element: <Navigate to="/jury" replace /> },
   ],
 };
 
 export const routes: RouteObject[] = [
   { path: '/', element: <Home /> },
   { path: '/kit', element: <Kit /> },
+  { path: '/jury', element: <JuryPage /> },
   appRoutes,
   dashRoutes,
   { path: '*', element: <Navigate to="/" replace /> },

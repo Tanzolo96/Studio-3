@@ -624,7 +624,7 @@ export function AccountPage() {
           {(
             [
               ['/', 'Start screen', 'Choose dashboard, phone app or a demo'],
-              ['/dashboard/jury', 'Live jury demo', 'Two phones and this laptop, with QR codes'],
+              ['/jury', 'Live jury demo', 'Two phones and this laptop, with QR codes'],
               [DEMO_HREF, 'Side-by-side demo', 'Dashboard and phone on one screen'],
               ['/app', 'Phone app', 'The alert app, as a phone'],
             ] as const

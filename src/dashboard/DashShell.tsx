@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Asleep, Chat, Dashboard, Light, Notification, QrCode, Report, Rule, Search, Task, UserAvatar } from '@carbon/icons-react';
+import { ArrowLeft, ArrowRight, Asleep, Chat, Dashboard, Light, Notification, Report, Rule, Search, Task, UserAvatar } from '@carbon/icons-react';
 import { useMillState, useNow, useSession, useTheme, useUser } from '../store/store';
 import { isEscalated } from '../engine/selectors';
 import { useLive } from '../store/live';
@@ -19,7 +19,6 @@ const ICON: Record<string, ReactNode> = {
   'Monthly review': <Report size={18} />,
   Rules: <Rule size={18} />,
   Account: <UserAvatar size={18} />,
-  'Jury demo': <QrCode size={18} />,
 };
 
 type Role = 'supervisor' | 'qc' | 'plant';
@@ -39,7 +38,6 @@ const NAV: { group: string; items: { to: string; label: string; end?: boolean; r
       { to: '/dashboard/rules', label: 'Rules' },
       { to: '/dashboard/report', label: 'Monthly report', roles: ['qc', 'plant'] },
       { to: '/dashboard/account', label: 'Account' },
-      { to: '/dashboard/jury', label: 'Jury demo' },
     ],
   },
 ];
@@ -199,7 +197,6 @@ const TITLES: [string, string][] = [
   ['/dashboard/case', 'Decision'],
   ['/dashboard/rules', 'Rules'],
   ['/dashboard/account', 'Account'],
-  ['/dashboard/jury', 'Jury demo'],
 ];
 
 /** Shows when this laptop is in a jury room, and how many devices are with it. */
@@ -207,7 +204,7 @@ function LivePill() {
   const { room, state, peers } = useLive();
   if (!room) return null;
   return (
-    <NavLink to="/dashboard/jury" className={cx('t-small-strong flex h-10 shrink-0 items-center gap-2 rounded-full px-4', state === 'live' ? 'bg-ok-soft text-ok' : 'bg-critical-soft text-critical')}>
+    <NavLink to="/jury" className={cx('t-small-strong flex h-10 shrink-0 items-center gap-2 rounded-full px-4', state === 'live' ? 'bg-ok-soft text-ok' : 'bg-critical-soft text-critical')}>
       <span className={cx('size-2 rounded-full', state === 'live' ? 'bg-ok' : 'bg-critical')} />
       {state === 'live' ? `Live · ${peers.length} device${peers.length === 1 ? '' : 's'}` : state === 'connecting' ? 'Connecting' : 'Offline'}
     </NavLink>

@@ -9,7 +9,7 @@ import { DemoPage } from './demo/DemoPage';
 
 // Standalone build: the page lives in a plain #name so a refresh lands on the same page.
 // '/dashboard/report' is stored as '#dashboard--report' (the viewer only passes plain #names).
-const SECTIONS = ['app', 'dashboard', 'kit'];
+const SECTIONS = ['app', 'dashboard', 'kit', 'jury'];
 const valid = (path: string | null) => {
   if (!path || path === '/') return null;
   const parts = path.split('/').filter(Boolean);
