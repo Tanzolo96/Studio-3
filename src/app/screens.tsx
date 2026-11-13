@@ -1009,7 +1009,7 @@ export function PreviousScreen() {
       {user.role === 'supervisor' && (
         <div className="mb-4 grid grid-cols-2 gap-2">
           <div className="rounded-[16px] bg-raised p-3 shadow-raised">
-            <p className="t-small text-muted">Your median to Seen</p>
+            <p className="t-small text-muted">Your median time to “I’m fixing”</p>
             <p className="t-stat">{myMedian ? timer(myMedian) : '–'}</p>
           </div>
           <div className="rounded-[16px] bg-raised p-3 shadow-raised">

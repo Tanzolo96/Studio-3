@@ -426,7 +426,7 @@ export function Report() {
     const byFrame = new Map<string, number>();
     for (const t of serious) byFrame.set(t.frameId, (byFrame.get(t.frameId) ?? 0) + 1);
     const frames = [...byFrame.entries()].sort((x, y) => y[1] - x[1]).slice(0, 6).map(([name, value]) => ({ name, value }));
-    const holds = s.holds.filter((h) => h.from >= since30 && h.from <= now);
+    const fixing = serious.filter((t) => t.fixedAt && t.workingAt).map((t) => t.fixedAt! - t.workingAt!).sort((x, y) => x - y);
     return {
       daily: dailyAlerts(s, now, 30),
       trend: seenTrend(s, now, 30),
@@ -436,8 +436,8 @@ export function Report() {
       serious,
       crit: serious.filter((t) => t.severity === 'critical').length,
       frames,
-      heldKg: holds.reduce((n, h) => n + holdKg(h, now), 0),
-      holds: holds.length,
+      fixingMedian: fixing.length ? fixing[Math.floor(fixing.length / 2)] : 0,
+      reports: fixing.length,
     };
     // recompute once a mill minute
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -458,8 +458,8 @@ export function Report() {
 
       <section className="anim-in grid grid-cols-2 divide-x divide-y divide-[var(--line)] overflow-hidden rounded-[12px] border border-line bg-raised lg:grid-cols-4 lg:divide-y-0" aria-label="Month in numbers">
         <ReportStat label="Critical and major alerts" value={<CountUp value={a.serious.length} />} note={`${a.crit} critical`} />
-        <ReportStat label="Median time to Seen" value={seenNow !== null ? <CountUp value={seenNow * 60} format={(v) => timer(v * 1000)} /> : '–'} note="Limit 5:00" tone={seenNow !== null && seenNow > 5 ? 'bad' : 'good'} />
-        <ReportStat label="Yarn held" value={<CountUp value={a.heldKg} format={(v) => `${Math.round(v).toLocaleString('en-IN')} kg`} />} note={`${a.holds} hold${a.holds === 1 ? '' : 's'}, about ${a.holds ? Math.round(a.heldKg / a.holds) : 0} kg each`} />
+        <ReportStat label="Median time to I’m fixing" value={seenNow !== null ? <CountUp value={seenNow * 60} format={(v) => timer(v * 1000)} /> : '–'} note="Limit 5:00" tone={seenNow !== null && seenNow > 5 ? 'bad' : 'good'} />
+        <ReportStat label="Median fixing time" value={a.fixingMedian ? <CountUp value={a.fixingMedian / 60000} format={(v) => `${Math.round(v)} min`} /> : '–'} note={`From ${a.reports} fix report${a.reports === 1 ? '' : 's'}`} />
         <ReportStat label="Frame with most alerts" value={top ? top.name : '–'} note={top ? `${top.value} alert${top.value === 1 ? '' : 's'} this month` : 'No alerts'} tone={top && top.value >= 3 ? 'bad' : undefined} />
       </section>
 
@@ -481,12 +481,12 @@ export function Report() {
       </div>
 
       <div className="anim-in grid gap-4 xl:grid-cols-3" style={{ '--i': 3 } as CSSProperties}>
-        <Panel className="xl:col-span-2" title="How fast alerts are seen" sub="Median minutes from alert to Seen, rolling 7 days">
+        <Panel className="xl:col-span-2" title="How fast someone starts fixing" sub="Median minutes from alert to “I’m fixing”, rolling 7 days">
           <TrendArea
             points={a.trend}
             limit={5}
             limitLabel="5 min limit"
-            format={(v) => `${v.toFixed(1)} min to Seen`}
+            format={(v) => `${v.toFixed(1)} min to I’m fixing`}
             dayLabel={dayMonth}
             label="Median minutes to Seen over the last 30 days, against the 5 minute limit"
           />

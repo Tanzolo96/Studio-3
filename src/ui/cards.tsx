@@ -224,14 +224,14 @@ export function ReadingGauge({
 export function ResponseTimer({ elapsed, limitMins, state, level, frozen }: { elapsed: number; limitMins: number; state: TimerState; level: number; frozen?: boolean }) {
   const pct = Math.min(100, (elapsed / (limitMins * 60_000)) * 100);
   const note = frozen
-    ? `to Seen · limit ${limitMins}:00`
+    ? `to “I’m fixing” · limit ${limitMins}:00`
     : level >= 2
       ? 'not seen · plant head told'
       : level === 1
         ? 'not seen · escalated to QC manager'
         : state === 'over'
           ? 'overdue, escalating'
-          : `to Seen · limit ${limitMins}:00`;
+          : `to “I’m fixing” · limit ${limitMins}:00`;
   return (
     <div className="flex flex-col gap-2" role="timer" aria-live="off">
       <div className="flex items-baseline gap-2">

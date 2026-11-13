@@ -79,7 +79,7 @@ export function ruleLines(text: string): string[] {
   // A short fragment ("Critical.") belongs to the sentence before it.
   const out: string[] = [];
   for (const p of parts) {
-    if (out.length && p.split(' ').length <= 2) out[out.length - 1] += ` ${p}`;
+    if (out.length && p.split(' ').length <= 2 && /[.!]$/.test(p)) out[out.length - 1] += ` ${p}`;
     else out.push(p);
   }
   return out.filter((l) => l.length > 8);
@@ -149,7 +149,7 @@ export function readRules(text: string, s: MillState): FoundRule[] {
       out.push({ text: line, kind: 'builtin', meaning: 'Already how QC Alert works: the frame’s supervisor is alerted first' });
       continue;
     }
-    if (/\d/.test(line) || /\b(must|should|always|never|shall)\b/i.test(line)) {
+    if (/\d/.test(line) || /\b(must|should|always|never|shall|keep|do not|don.t)\b/i.test(line)) {
       out.push({ text: line, kind: 'note', meaning: 'Not understood automatically. Kept with the document for people to read.' });
     }
   }
