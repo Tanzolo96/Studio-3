@@ -469,7 +469,7 @@ export function Report() {
       </div>
 
       <div className="anim-in grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]" style={{ '--i': 2 } as CSSProperties}>
-        <Panel title="How fast alerts were fixed" sub="Each bar is one critical or major alert, newest at the top: waiting for someone to start, then fixing">
+        <Panel title="How fast alerts were fixed" sub="Every critical and major alert, newest first: how long until someone started, then how long the fix took">
           <FixTimeline s={s} now={now} />
         </Panel>
         <Panel title="Top causes" sub="What fixed frames had in common">
@@ -490,16 +490,11 @@ function FixTimeline({ s, now }: { s: MillState; now: number }) {
   const rows = all.slice(0, 12).map((t) => {
     const wait = Math.max(0, (t.workingAt! - t.alertAt) / 60000);
     const fix = (t.fixedAt! - t.workingAt!) / 60000;
-    return { t, wait, fix, done: true };
+    return { t, wait, fix };
   });
-  const max = Math.min(240, Math.max(60, ...rows.map((r) => r.wait + r.fix)));
-  const step = max > 120 ? 60 : 30;
-  const scale = Math.ceil(max / step) * step;
-  const pct = (m: number) => `${(Math.min(m, scale) / scale) * 100}%`;
   const onTime = all.filter((t) => (t.workingAt! - t.alertAt) / 60000 <= 5).length;
   const fixes = all.filter((t) => t.fixedAt).map((t) => (t.fixedAt! - t.workingAt!) / 60000);
   const medFix = median(fixes);
-  const ticks = Array.from({ length: scale / step + 1 }, (_, i) => i * step);
   if (!rows.length) return <p className="t-small text-muted">No alerts were fixed in the last 30 days.</p>;
   return (
     <div>
@@ -515,41 +510,39 @@ function FixTimeline({ s, now }: { s: MillState; now: number }) {
           <p className="t-small text-muted">typical fixing time (median)</p>
         </div>
       </div>
-      <div className="relative">
-        <ul className="flex flex-col gap-1.5">
-          {rows.map(({ t, wait, fix, done }, i) => (
+      {/* A plain row per alert: how long until someone started (on time or late), then how long the fix took. */}
+      <div className="grid grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)_64px] gap-x-3 border-b border-line pb-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-muted">
+        <span>Alert</span>
+        <span>Started after</span>
+        <span>Fixed in</span>
+        <span className="text-right">Total</span>
+      </div>
+      <ul className="divide-y divide-[var(--line)]">
+        {rows.map(({ t, wait, fix }) => {
+          const late = wait > 5;
+          return (
             <li key={t.id}>
-              <Link to={`/dashboard/tickets/${t.id}`} className="group grid grid-cols-[92px_minmax(0,1fr)_64px] items-center gap-3 rounded-[6px] py-0.5 hover:bg-sunken">
+              <Link to={`/dashboard/tickets/${t.id}`} className="grid grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)_64px] items-center gap-x-3 py-2.5 hover:bg-sunken">
                 <span className="t-small truncate">
-                  <span className="t-small-strong">{t.frameId}</span> <span className="text-muted">{dayMonth(t.createdAt).split(' ')[0]}</span>
+                  <span className="t-small-strong">{t.frameId}</span> <span className="text-muted">· {dayMonth(t.createdAt)}, {hhmm(t.createdAt)}</span>
                 </span>
-                <span className="relative flex h-4 items-center">
-                  <span className="anim-grow-x flex h-3 w-full" style={{ '--i': i } as CSSProperties}>
-                    <span className={cx('h-full rounded-l-[3px]', wait > 5 ? 'bg-critical' : 'bg-ok')} style={{ width: pct(Math.max(wait, 0.6)) }} title={`Waited ${wait.toFixed(1)} min`} />
-                    <span className={cx('h-full rounded-r-[3px]', done ? 'bg-[var(--data)]' : 'bg-[var(--data)] opacity-40')} style={{ width: pct(fix) }} title={`Fixing ${Math.round(fix)} min`} />
+                <span className="flex items-center gap-2">
+                  <span className={cx('t-small-strong inline-flex h-6 items-center gap-1.5 rounded-full px-2.5', late ? 'bg-critical-soft text-critical' : 'bg-ok-soft text-ok')}>
+                    <span className={cx('size-1.5 rounded-full', late ? 'bg-critical' : 'bg-ok')} />
+                    {wait < 1 ? '<1' : Math.round(wait)} min
                   </span>
+                  <span className="t-small text-muted">{late ? 'late' : 'on time'}</span>
                 </span>
+                <span className="t-small">{Math.round(fix)} min</span>
                 <span className="t-data text-right text-[12px] text-muted">{Math.round(wait + fix)} min</span>
               </Link>
             </li>
-          ))}
-        </ul>
-        <div className="pointer-events-none absolute inset-y-0 left-[104px] right-[76px]" aria-hidden>
-          <span className="absolute inset-y-0 border-l border-dashed border-critical" style={{ left: pct(5) }} />
-        </div>
-      </div>
-      <div className="ml-[104px] mr-[76px] mt-1 flex justify-between">
-        {ticks.map((m) => (
-          <span key={m} className="t-data text-[10px] text-muted">{m}</span>
-        ))}
-      </div>
-      <div className="t-small mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-muted">
-        <span className="flex items-center gap-1.5"><span className="h-2.5 w-4 rounded-[2px] bg-ok" /> Started within 5 min</span>
-        <span className="flex items-center gap-1.5"><span className="h-2.5 w-4 rounded-[2px] bg-critical" /> Started late</span>
-        <span className="flex items-center gap-1.5"><span className="h-2.5 w-4 rounded-[2px] bg-[var(--data)]" /> Fixing</span>
-        <span className="flex items-center gap-1.5"><span className="h-3 border-l border-dashed border-critical" /> 5 min limit</span>
-        <span>Minutes from the alert{all.length > rows.length ? ` · last ${rows.length} of ${all.length}` : ''}</span>
-      </div>
+          );
+        })}
+      </ul>
+      <p className="t-small mt-3 text-muted">
+        Started after: minutes from the alert to “I’m fixing” (limit 5). Fixed in: from “I’m fixing” to Fixed.{all.length > rows.length ? ` Last ${rows.length} of ${all.length}.` : ''}
+      </p>
     </div>
   );
 }
