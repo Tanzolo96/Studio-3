@@ -627,9 +627,9 @@ export function AccountPage() {
                     aria-checked={on}
                     aria-label={label}
                     onClick={() => setPrefs({ ...prefs, [k]: !on })}
-                    className={cx('relative h-6 w-11 shrink-0 rounded-full transition-colors', on ? 'bg-brand' : 'bg-[var(--cell-off)]')}
+                    className={cx('relative inline-block h-6 w-11 shrink-0 rounded-full p-0 transition-colors duration-200', on ? 'bg-brand' : 'bg-[var(--line-strong)]')}
                   >
-                    <span className={cx('absolute top-0.5 size-5 rounded-full bg-raised shadow-raised transition-transform', on ? 'translate-x-[22px]' : 'translate-x-0.5')} />
+                    <span aria-hidden className={cx('absolute left-0.5 top-0.5 size-5 rounded-full bg-white shadow-[0_1px_2px_rgba(0,0,0,0.25)] transition-transform duration-200', on ? 'translate-x-5' : 'translate-x-0')} />
                   </button>
                 </li>
               );
