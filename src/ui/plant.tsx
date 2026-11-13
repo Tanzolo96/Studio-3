@@ -2,12 +2,11 @@
 // Instrument language: fixed scales, one target line, grey for normal, colour only when something is wrong.
 
 import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import type { MillState, ShiftId, Ticket } from '../engine/types';
-import { frameAlerts, type ResponseDot } from '../engine/plant';
+import type { MillState, Ticket } from '../engine/types';
+import { frameAlerts } from '../engine/plant';
 import { escalation } from '../engine/selectors';
 import { holdKg, roundKg, userName } from '../engine/reducer';
 import { DAY, HOUR, MIN, dayMonth, hhmm, timer } from '../engine/time';
-import { SHIFTS } from '../engine/vocab';
 import { cx } from './primitives';
 
 /** Draw SVG charts at their real pixel width, so labels stay the same size on a wall screen and a laptop. */
@@ -178,124 +177,6 @@ export function CauseStrip({ s, frameIds, since, now, onPick, width = 640 }: { s
       </div>
       <p className="t-small min-h-[18px] text-ink" aria-live="polite">
         {read ?? ''}
-      </p>
-    </div>
-  );
-}
-
-// ---------- shift dots: every alert as a dot, minutes to Seen and to fixed ----------
-const SHIFT_HOURS: Record<ShiftId, string> = { A: SHIFTS.A.hours.replace(/:00/g, ''), B: SHIFTS.B.hours.replace(/:00/g, ''), C: SHIFTS.C.hours.replace(/:00/g, '') };
-const median = (v: number[]) => {
-  if (!v.length) return null;
-  const a = [...v].sort((p, q) => p - q);
-  const k = Math.floor(a.length / 2);
-  return a.length % 2 ? a[k] : (a[k - 1] + a[k]) / 2;
-};
-
-export function ShiftDots({ dots, limit = 5, width = 640 }: { dots: ResponseDot[]; limit?: number; width?: number }) {
-  const [box, W] = useWidth(width);
-  const L = 70, gap = 28, colW = (W - L - gap) / 2, rowH = 46, top = 22;
-  const xs = (m: number) => L + (Math.min(m, 12) / 12) * colW;
-  const xf = (m: number) => L + colW + gap + (Math.min(m, 120) / 120) * colW;
-  const [pick, setPick] = useState<ResponseDot | null>(null);
-  const shifts: ShiftId[] = ['A', 'B', 'C'];
-  const H = top + rowH * 3 + 18;
-  return (
-    <div ref={box} className="flex min-w-0 flex-col gap-2">
-      <svg viewBox={`0 0 ${W} ${H}`} className="block h-auto w-full overflow-visible" role="img" aria-label="Minutes to Seen and to fixed for every alert, by shift">
-        <text x={L} y={10} className="fill-[var(--ink-muted)] text-[11px] font-medium tracking-[0.06em]">
-          MINUTES TO SEEN
-        </text>
-        <text x={L + colW + gap} y={10} className="fill-[var(--ink-muted)] text-[11px] font-medium tracking-[0.06em]">
-          MINUTES TO FIXED
-        </text>
-        <rect x={xs(0)} y={top - 4} width={xs(limit) - xs(0)} height={rowH * 3 - 8} rx={3} fill="var(--ok-soft)" />
-        <line x1={xs(limit)} x2={xs(limit)} y1={top - 8} y2={top + rowH * 3 - 10} stroke="var(--ink)" strokeWidth={1.5} />
-        {shifts.map((sh, r) => {
-          const cy = top + r * rowH + rowH / 2 - 6;
-          const rows = dots.filter((d) => d.shift === sh);
-          const ms = median(rows.map((d) => d.seenMins));
-          const fixes = rows.filter((d) => d.fixMins !== undefined).map((d) => d.fixMins!);
-          const mf = median(fixes);
-          const stack = new Map<number, number>();
-          return (
-            <g key={sh}>
-              <text x={0} y={cy - 2} className="fill-[var(--ink)] text-[13px] font-semibold">
-                {sh} shift
-              </text>
-              <text x={0} y={cy + 12} className="fill-[var(--ink-muted)] font-mono text-[10px]">
-                {SHIFT_HOURS[sh]} · {rows.length}
-              </text>
-              <line x1={xs(0)} x2={xs(12)} y1={cy} y2={cy} stroke="var(--line)" />
-              <line x1={xf(0)} x2={xf(120)} y1={cy} y2={cy} stroke="var(--line)" />
-              {ms !== null && (
-                <>
-                  <line x1={xs(ms)} x2={xs(ms)} y1={cy - 12} y2={cy + 12} stroke="var(--ink)" strokeWidth={2} />
-                  <text x={xs(12)} y={cy - 13} textAnchor="end" className={cx('font-mono text-[10px] font-semibold', ms > limit ? 'fill-[var(--critical)]' : 'fill-[var(--ink-muted)]')}>
-                    median {ms.toFixed(1)}
-                  </text>
-                </>
-              )}
-              {mf !== null && (
-                <>
-                  <line x1={xf(mf)} x2={xf(mf)} y1={cy - 12} y2={cy + 12} stroke="var(--ink)" strokeWidth={2} />
-                  <text x={xf(120)} y={cy - 13} textAnchor="end" className="fill-[var(--ink-muted)] font-mono text-[10px] font-semibold">
-                    median {Math.round(mf)}
-                  </text>
-                </>
-              )}
-              {rows.map((d) => {
-                const k = Math.round(d.seenMins);
-                const n = stack.get(k) ?? 0;
-                stack.set(k, n + 1);
-                const dy = (n % 2 ? 1 : -1) * Math.ceil(n / 2) * 7;
-                const over = d.seenMins > limit;
-                const on = pick?.id === d.id;
-                return (
-                  <g key={d.id} onMouseEnter={() => setPick(d)} onMouseLeave={() => setPick(null)}>
-                    <circle
-                      cx={xs(d.seenMins)}
-                      cy={cy + dy}
-                      r={on ? 6.5 : 4.5}
-                      tabIndex={0}
-                      onFocus={() => setPick(d)}
-                      onBlur={() => setPick(null)}
-                      aria-label={`${d.frameId}, ${dayMonth(d.at)}, seen in ${d.seenMins.toFixed(1)} minutes`}
-                      fill={over ? 'var(--critical)' : 'var(--data)'}
-                      stroke="var(--surface-raised)"
-                      strokeWidth={1.5}
-                      className="anim-fade transition-[r] duration-150"
-                    />
-                    {d.fixMins !== undefined && <circle cx={xf(d.fixMins)} cy={cy + dy} r={on ? 6.5 : 4.5} fill="var(--neutral-state)" stroke="var(--surface-raised)" strokeWidth={1.5} className="anim-fade transition-[r] duration-150" />}
-                  </g>
-                );
-              })}
-            </g>
-          );
-        })}
-        {[0, limit, 10].map((m) => (
-          <text key={`s${m}`} x={xs(m)} y={H - 2} textAnchor="middle" className="fill-[var(--ink-muted)] font-mono text-[10px]">
-            {m === limit ? `${m} limit` : m}
-          </text>
-        ))}
-        {[0, 60, 120].map((m) => (
-          <text key={`f${m}`} x={xf(m)} y={H - 2} textAnchor="middle" className="fill-[var(--ink-muted)] font-mono text-[10px]">
-            {m === 120 ? '120+' : m}
-          </text>
-        ))}
-      </svg>
-      <p className="t-small min-h-[18px] text-muted" aria-live="polite">
-        {pick ? (
-          <>
-            <span className="font-semibold text-ink">
-              {pick.frameId} · {dayMonth(pick.at)} · {pick.shift} shift
-            </span>{' '}
-            · seen in {pick.seenMins.toFixed(1)} min{pick.seenMins > limit ? ', over the limit' : ''}
-            {pick.fixMins !== undefined ? `, fixed ${Math.round(pick.fixMins)} min after the alert` : ', not fixed yet'}
-          </>
-        ) : (
-          'Each dot is one alert. Point at a dot for the frame and the day.'
-        )}
       </p>
     </div>
   );

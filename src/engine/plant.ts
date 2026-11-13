@@ -1,7 +1,7 @@
 // Plant head views of the mill: the decisions only he makes, and the outcomes he judges.
 // Pure selectors over MillState. Nothing here changes state.
 
-import type { FrameDecision, Hold, Lot, MillState, Product, ShiftId, Ticket } from './types';
+import type { FrameDecision, Hold, Lot, MillState, Product, Ticket } from './types';
 import { holdNeedsApproval } from './selectors';
 import { holdKg } from './reducer';
 import { DAY, HOUR } from './time';
@@ -137,27 +137,3 @@ export function holdOutcomes(s: MillState, since: number, now: number) {
   return { holds, fine, kg: holds.map((h) => holdKg(h, now)) };
 }
 
-export interface ResponseDot {
-  id: string;
-  frameId: string;
-  shift: ShiftId;
-  at: number;
-  seenMins: number;
-  fixMins?: number;
-  toWorkMins?: number;
-}
-
-/** One dot per serious alert that was seen, for the shift comparison. */
-export function responseDots(s: MillState, since: number, now: number): ResponseDot[] {
-  return s.tickets
-    .filter((t) => serious(t) && t.alertAt >= since && t.alertAt <= now && t.seenAt && t.raisedBy === undefined)
-    .map((t) => ({
-      id: t.id,
-      frameId: t.frameId,
-      shift: t.shift,
-      at: t.alertAt,
-      seenMins: (t.seenAt! - t.alertAt) / 60000,
-      fixMins: t.fixedAt ? (t.fixedAt - t.alertAt) / 60000 : undefined,
-      toWorkMins: t.workingAt ? (t.workingAt - t.seenAt!) / 60000 : undefined,
-    }));
-}

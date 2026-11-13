@@ -442,11 +442,6 @@ export function Report() {
   }, [s, nowMin]);
   const seenNow = [...a.trend].reverse().find((p) => p.mins !== null)?.mins ?? null;
   const top = a.frames[0];
-  // Day cards; the picked day's critical and major alerts show below them. Opens on today.
-  const [dayKey, setDayKey] = useState(millDayKey(now));
-  const dayStart0 = mill(dayKey);
-  const dayList = s.tickets.filter((x) => x.createdAt >= dayStart0 && x.createdAt < dayStart0 + DAY && x.createdAt <= now).sort((x, y) => x.createdAt - y.createdAt);
-  const isToday = dayKey === millDayKey(now);
   return (
     <div className="mx-auto flex max-w-[1240px] flex-col gap-5">
       <PageHead
@@ -466,37 +461,8 @@ export function Report() {
         <ReportStat label="Frame with most alerts" value={top ? top.name : '–'} note={top ? `${top.value} alert${top.value === 1 ? '' : 's'} this month` : 'No alerts'} tone={top && top.value >= 3 ? 'bad' : undefined} />
       </section>
 
-      <div className="anim-in grid gap-4 xl:grid-cols-2" style={{ '--i': 1 } as CSSProperties}>
-        <CalendarPanel s={s} now={now} onOpen={() => {}} pickedKey={dayKey} onPick={setDayKey} />
-        <Panel
-          title={`${isToday ? 'Today' : DAYS_FULL[(new Date(dayStart0 + 5.5 * 3600000).getUTCDay() + 6) % 7]}, ${dayMonth(dayStart0)}`}
-          sub={`${dayList.length} alert${dayList.length === 1 ? '' : 's'} · click a day on the calendar`}
-        >
-          {dayList.length ? (
-            <ul className="flex flex-col divide-y divide-[var(--line)]">
-              {dayList.map((x) => (
-                <li key={x.id}>
-                  <Link to={`/dashboard/tickets/${x.id}`} className="flex items-start gap-3 py-3 hover:bg-sunken">
-                    <span className="t-data w-12 shrink-0 pt-0.5 text-[13px] text-muted">{hhmm(x.createdAt)}</span>
-                    <SeverityBadge level={x.severity} />
-                    <span className="min-w-0 flex-1">
-                      <span className="t-small-strong block">
-                        {x.frameId} · {x.title}
-                      </span>
-                      <span className="t-small block text-muted">
-                        {x.cause ? x.cause : 'Cause not reported yet'}
-                        {x.workingAt ? ` · fixing after ${Math.max(0, Math.round((x.workingAt - x.alertAt) / 60000))} min` : ''}
-                      </span>
-                    </span>
-                    <StatusChip kind={ticketChip(x, now)} />
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="t-small text-muted">No alerts on this day.</p>
-          )}
-        </Panel>
+      <div className="anim-in" style={{ '--i': 1 } as CSSProperties}>
+        <DayCalendar s={s} now={now} />
       </div>
 
       <div className="anim-in grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]" style={{ '--i': 2 } as CSSProperties}>
@@ -619,6 +585,49 @@ export function InsightsPage() {
 const DAYS_FULL = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+/** Calendar of alerts per day; click a day to list its alerts on the right. Opens on today. Used on the Monthly report and the plant head's home. */
+export function DayCalendar({ s, now }: { s: MillState; now: number }) {
+  // Day cards; the picked day's critical and major alerts show below them. Opens on today.
+  const [dayKey, setDayKey] = useState(millDayKey(now));
+  const dayStart0 = mill(dayKey);
+  const dayList = s.tickets.filter((x) => x.createdAt >= dayStart0 && x.createdAt < dayStart0 + DAY && x.createdAt <= now).sort((x, y) => x.createdAt - y.createdAt);
+  const isToday = dayKey === millDayKey(now);
+  return (
+      <div className="grid gap-4 xl:grid-cols-2">
+        <CalendarPanel s={s} now={now} onOpen={() => {}} pickedKey={dayKey} onPick={setDayKey} />
+        <Panel
+          title={`${isToday ? 'Today' : DAYS_FULL[(new Date(dayStart0 + 5.5 * 3600000).getUTCDay() + 6) % 7]}, ${dayMonth(dayStart0)}`}
+          sub={`${dayList.length} alert${dayList.length === 1 ? '' : 's'} · click a day on the calendar`}
+        >
+          {dayList.length ? (
+            <ul className="flex flex-col divide-y divide-[var(--line)]">
+              {dayList.map((x) => (
+                <li key={x.id}>
+                  <Link to={`/dashboard/tickets/${x.id}`} className="flex items-start gap-3 py-3 hover:bg-sunken">
+                    <span className="t-data w-12 shrink-0 pt-0.5 text-[13px] text-muted">{hhmm(x.createdAt)}</span>
+                    <SeverityBadge level={x.severity} />
+                    <span className="min-w-0 flex-1">
+                      <span className="t-small-strong block">
+                        {x.frameId} · {x.title}
+                      </span>
+                      <span className="t-small block text-muted">
+                        {x.cause ? x.cause : 'Cause not reported yet'}
+                        {x.workingAt ? ` · fixing after ${Math.max(0, Math.round((x.workingAt - x.alertAt) / 60000))} min` : ''}
+                      </span>
+                    </span>
+                    <StatusChip kind={ticketChip(x, now)} />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="t-small text-muted">No alerts on this day.</p>
+          )}
+        </Panel>
+      </div>
+  );
+}
 
 /** Month calendar. With onPick, the parent owns the picked day and shows its alerts elsewhere. */
 function CalendarPanel({ s, now, onOpen, pickedKey, onPick }: { s: MillState; now: number; onOpen: (id: string) => void; pickedKey?: string; onPick?: (k: string) => void }) {

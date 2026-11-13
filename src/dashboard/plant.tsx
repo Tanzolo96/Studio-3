@@ -1,21 +1,21 @@
 // Plant head (Mohit) on the dashboard: information only (no decisions here): the top alerts of the last week,
 // who answers how fast, and what is live now; then the same monthly report the QC manager sees. Priya's and Krish's screens are elsewhere and untouched.
 
-import { useMemo, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, ArrowRight } from '@carbon/icons-react';
 import type { MillState, Ticket } from '../engine/types';
 import { useDispatch, useMillState, useNow, useUser } from '../store/store';
-import { escalation } from '../engine/selectors';
 import { frameWord, roundKg, limitFor, userName } from '../engine/reducer';
 import { insights } from '../engine/insights';
-import { frameAlerts, frameCase, lastFrameDecision, plantCases, releaseCase, responseDots, type FrameCase, type PlantCase, type ReleaseCase } from '../engine/plant';
+import { frameAlerts, frameCase, lastFrameDecision, plantCases, releaseCase, type FrameCase, type PlantCase, type ReleaseCase } from '../engine/plant';
 import { TEST } from '../engine/vocab';
 import { DAY, HOUR, ago, dateTime, dayMonth, hhmm, mill, millDayKey, millHour } from '../engine/time';
 import { cx, SeverityBadge } from '../ui/primitives';
 import { ReadingGauge, readingLine } from '../ui/cards';
 import { CountUp } from '../ui/charts';
-import { CauseStrip, DeadlineCells, DecisionPanel, KgBlocks, ShiftDots, stagger } from '../ui/plant';
+import { CauseStrip, DeadlineCells, DecisionPanel, KgBlocks, stagger } from '../ui/plant';
+import { DayCalendar } from './Overview';
 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const weekday = (t: number) => WEEKDAYS[new Date(t + 5.5 * HOUR).getUTCDay()];
@@ -49,50 +49,10 @@ export function caseQuestion(c: PlantCase) {
   return `${c.frameId} keeps failing. Overhaul it, or fix how it's run?`;
 }
 
-function RightNow({ s, now, i }: { s: MillState; now: number; i: number }) {
-  const live = s.tickets.filter((t) => t.status !== 'closed' && t.severity !== 'minor' && t.createdAt <= now).sort((a, b) => a.alertAt - b.alertAt);
-  const WHO = ['the supervisor', 'the QC manager', 'you'];
-  return (
-    <Section i={i} title="Right now" sub="Live alerts and who QC Alert is waiting on" aside={<TextLink to="/dashboard/tickets">History</TextLink>}>
-      {live.length ? (
-        <ul className="flex flex-col divide-y divide-[var(--line)]">
-          {live.map((t) => {
-            const esc = escalation(t, now);
-            const line =
-              t.status === 'open'
-                ? `Nobody fixing yet · ${Math.floor((now - t.alertAt) / 60000)} min · waiting on ${WHO[esc.level]}`
-                : t.status === 'fixed'
-                  ? `Fixed by ${userName(s, t.fixedBy).split(' ')[0]} · waiting for the lab re-test`
-                  : `${userName(s, t.seenBy).split(' ')[0]} is fixing it${t.waitingPart ? ` · waiting for ${t.waitingPart.toLowerCase()}` : ''}`;
-            return (
-              <li key={t.id} className="flex items-center gap-3 py-2.5">
-                <SeverityBadge level={t.severity} />
-                <span className="min-w-0 flex-1">
-                  <span className="t-small-strong block">
-                    {frameWord(t.frameId)} · {t.title}
-                  </span>
-                  <span className={cx('t-small block', t.status === 'open' && esc.level > 0 ? 'text-critical' : 'text-muted')}>{line}</span>
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-      ) : (
-        <p className="t-body text-muted">No live alerts. Every frame passed its last test or has been fixed.</p>
-      )}
-    </Section>
-  );
-}
-
 export function PlantHome() {
   const s = useMillState();
   const now = useNow();
   const user = useUser('dash');
-  const hour = Math.floor(now / HOUR);
-  const dots = useMemo(() => responseDots(s, now - 14 * DAY, now),
-    // recompute once a mill hour
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [s, hour]);
   const week = s.tickets.filter((t) => t.createdAt > now - 7 * DAY && t.createdAt <= now);
   const crit = week.filter((t) => t.severity === 'critical');
   const major = week.filter((t) => t.severity === 'major');
@@ -118,12 +78,7 @@ export function PlantHome() {
 
       <TopAlerts s={s} now={now} week={week} />
 
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
-        <Section title="Response by shift" sub="Every critical and major alert, last 14 days">
-          <ShiftDots dots={dots} />
-        </Section>
-        <RightNow s={s} now={now} i={0} />
-      </div>
+      <DayCalendar s={s} now={now} />
     </div>
   );
 }
