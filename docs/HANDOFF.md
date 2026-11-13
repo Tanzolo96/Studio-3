@@ -3,6 +3,8 @@
 Everything we decided, what is built, how it works, and what to build next.
 Read this first, then `README.md` for run commands.
 
+> **Update 13 Nov 2026: read [`WORKFLOW.md`](WORKFLOW.md) first.** We simplified to one loop: the lab tester reports a failed test, the supervisor owns it, a re-test confirms the fix, the QC manager decides on the held yarn. No machine integration, no sensors, no machine grid. Where this handoff disagrees (winding-sensor early warning, automatic sister frames, floor map, Machines page, AI insights page), `WORKFLOW.md` wins.
+
 Interaction Design, UID Gandhinagar · Team 11 · Entrepreneurs Products module.
 The prototype is judged on UX quality, clarity and craft, not backend scale.
 
@@ -213,15 +215,7 @@ Updating the hosted page: run `npm run build:standalone` and republish `dist-sta
 
 ## 10. Jury demo (about 3 minutes)
 
-1. Open `#demo`. Dashboard is calm, "Floor is calm". Phone shows Rohan (lab).
-2. Simulator (dashboard sidebar) → **Winding sensor drift** on RF-12. Rohan gets an urgent count test.
-3. Rohan enters **28.9** (limit 29.4–30.6) → critical. Switch the phone to Krish: full-screen takeover. Dashboard: incident card, RF-12 red on the floor map, 13 and 14 flagged, yarn since 08:01 on hold and growing.
-4. Nobody taps: Simulator → Skip 10 min. Escalated: switch to Priya, she gets the takeover. Skip 10 more for Mohit.
-5. Krish: Seen → Start work → Send to a fitter. Switch to Suresh: Mark repair done. Krish: Mark fixed, cause "Draft setting slipped". The ticket shows **Resolved**.
-6. Dashboard → Held yarn → Ask for re-test (RF-12 card). Rohan enters 30.0. Priya: Release with a reason. Ticket closes.
-7. Overview: AI insight "RF-12 failed count 5 times in October", yarn saved estimate, charts.
-
-Reset any time: Simulator → Reset demo.
+See the step-by-step script at the end of [`WORKFLOW.md`](WORKFLOW.md). Reset any time: Simulator → Reset demo.
 
 ---
 

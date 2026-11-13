@@ -29,13 +29,11 @@ const NAV: { group: string; items: { to: string; label: string; end?: boolean; r
       { to: '/dashboard', label: 'Overview', end: true },
       { to: '/dashboard/tickets', label: 'Tickets' },
       { to: '/dashboard/held', label: 'Held yarn' },
-      { to: '/dashboard/machines', label: 'Machines', roles: ['supervisor', 'qc'] },
     ],
   },
   {
     group: 'Insight',
     items: [
-      { to: '/dashboard/insights', label: 'AI insights', roles: ['qc', 'plant'] },
       { to: '/dashboard/report', label: 'Monthly report', roles: ['qc', 'plant'] },
       { to: '/dashboard/rules', label: 'Rules', roles: ['qc'] },
       { to: '/dashboard/account', label: 'Account' },
@@ -208,7 +206,7 @@ function TopBar({ live, urgent }: { live: number; urgent: boolean }) {
   const title = TITLES.find(([p]) => pathname.startsWith(p))?.[1] ?? (user.role === 'supervisor' ? 'My shift' : 'Overview');
   const go = () => {
     const n = q.trim().replace(/\D/g, '');
-    if (n) nav(`/dashboard/machines/RF-${n.padStart(2, '0')}`);
+    if (n) nav(`/dashboard/tickets?frame=RF-${n.padStart(2, '0')}&tab=all`);
     setQ('');
   };
   const iconBtn = 'grid size-10 place-items-center rounded-full text-muted hover:bg-raised hover:text-ink';
@@ -228,7 +226,7 @@ function TopBar({ live, urgent }: { live: number; urgent: boolean }) {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && go()}
-          placeholder="Go to frame, for example 12"
+          placeholder="Find a frame's tickets, for example 12"
           className="t-small h-full w-full rounded-full bg-raised pr-4 pl-10 outline-none placeholder:text-[var(--neutral-state)] focus-visible:outline-2 focus-visible:outline-[var(--brand)]"
         />
       </label>

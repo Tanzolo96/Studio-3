@@ -1,9 +1,9 @@
-import { useMemo, useState, type CSSProperties, type ReactNode } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Checkmark } from '@carbon/icons-react';
 import type { Hold, MillState, Severity, ShiftId, Ticket, User } from '../engine/types';
 import { useDispatch, useMillState, useNow, useUser } from '../store/store';
-import { bySeverityThenAge, escalation, frameView, holdNeedsApproval, isEscalated, openHolds, type FrameStateKind } from '../engine/selectors';
+import { bySeverityThenAge, escalation, frameView, holdNeedsApproval, holdNudge, isEscalated, openHolds, type FrameStateKind } from '../engine/selectors';
 import { frameWord, holdKg, lotOf, roundKg, ruleFor, userName } from '../engine/reducer';
 import { MAKES, OFFLINE_NOTE, OUTCOME_WORD, SEVERITY, STATUS_WORD, TEST, frameSources } from '../engine/vocab';
 import { ago, dateTime, dayMonth, hhmm, hmm } from '../engine/time';
@@ -61,7 +61,7 @@ export function TicketTable({ s, tickets, now, empty }: { s: MillState; tickets:
                   <SeverityBadge level={t.severity} className={crit ? 'bg-transparent' : ''} />
                 </td>
                 <td className="t-data px-3">{t.frameId}</td>
-                <td className="t-small px-3">{t.kind === 'drift' ? 'Winding drift' : t.test ? TEST[t.test].name : t.title}</td>
+                <td className="t-small px-3">{t.test ? TEST[t.test].name : t.title}</td>
                 <td className={cx('t-data px-3', crit ? 'text-critical' : '')}>{readingLine(s, t)}</td>
                 <td className="px-3">
                   <StatusChip kind={ticketChip(t, now)} />
@@ -91,10 +91,18 @@ export function TicketTable({ s, tickets, now, empty }: { s: MillState; tickets:
 export function Tickets() {
   const s = useMillState();
   const now = useNow();
+  const [params] = useSearchParams();
   const [shift, setShift] = useState<'all' | ShiftId>('all');
-  const [frame, setFrame] = useState('all');
+  const [frame, setFrame] = useState(params.get('frame') ?? 'all');
   const [sev, setSev] = useState<'all' | Severity>('all');
-  const [status, setStatus] = useState<'live' | 'all' | 'escalated' | 'closed'>('live');
+  const [status, setStatus] = useState<'live' | 'all' | 'escalated' | 'closed'>(params.get('tab') === 'all' ? 'all' : 'live');
+  useEffect(() => {
+    const f = params.get('frame');
+    if (f) {
+      setFrame(f);
+      setStatus(params.get('tab') === 'all' ? 'all' : 'live');
+    }
+  }, [params]);
   type St = 'live' | 'all' | 'escalated' | 'closed';
   const inStatus = (t: Ticket, st: St) => (st === 'all' ? true : st === 'live' ? t.status !== 'closed' : st === 'closed' ? t.status === 'closed' : isEscalated(t, now));
   const base = useMemo(
@@ -114,7 +122,7 @@ export function Tickets() {
   const showBoard = boardOk && view === 'board';
   return (
     <div className="max-w-[1180px]">
-      <PageHead title="Tickets" sub={`${list.length} shown · ${s.tickets.length} since 01 Oct`} />
+      <PageHead title="Tickets" sub={`Every failed test, open and past · ${list.length} shown${frame !== 'all' ? ` for ${frame}` : ''} · ${s.tickets.length} since 01 Oct`} />
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3 border-b border-line">
         <div role="tablist" aria-label="Status" className="flex gap-1">
           {TABS.map(([k, label]) => {
@@ -193,11 +201,15 @@ export function TicketDetailPage() {
   const reading = t.readings.at(-1);
   const rule = reading && t.kind === 'test_fail' ? ruleFor(s, t.productId, reading.test) : undefined;
   const hold = t.holdId ? s.holds.find((h) => h.id === t.holdId) : undefined;
-  const steps = [
-    { label: 'Alert sent', at: t.alertAt },
+  // The nine steps, as the people involved see them.
+  const steps: { label: string; at?: number; who?: string }[] = [
+    { label: 'Reported', at: t.createdAt, who: t.readings[0] ? s.results.find((r) => r.id === t.readings[0].resultId)?.by : t.raisedBy },
     { label: 'Seen', at: t.seenAt, who: t.seenBy },
-    { label: 'Working on it', at: t.workingAt },
+    ...(hold ? [{ label: 'Held', at: hold.taggedAt, who: hold.taggedBy }] : []),
+    { label: t.lineAction === 'stopped' ? 'Line stopped' : t.lineAction === 'corrected' ? 'Corrected' : 'Line', at: t.lineActionAt },
     { label: 'Fixed', at: t.fixedAt, who: t.fixedBy },
+    { label: 'Re-test passed', at: t.fixConfirmedAt },
+    ...(hold ? [{ label: 'Yarn decided', at: hold.closedAt }] : []),
     { label: 'Closed', at: t.closedAt },
   ];
   return (
@@ -219,9 +231,9 @@ export function TicketDetailPage() {
       />
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="flex flex-col gap-6">
-          <ol className="grid grid-cols-5 overflow-hidden rounded-[14px] border border-line bg-raised shadow-raised" aria-label="Progress">
+          <ol className="grid grid-cols-4 overflow-hidden rounded-[14px] border border-line bg-raised shadow-raised md:grid-cols-8" aria-label="Progress" style={{ gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))` }}>
             {steps.map((st, i) => (
-              <li key={st.label} className={cx('border-line p-3', i > 0 && 'border-l', st.at ? '' : 'text-muted')}>
+              <li key={st.label + i} className={cx('min-w-0 border-line p-3', i > 0 && 'border-l', st.at ? '' : 'text-muted')}>
                 <p className="t-small-strong flex items-center gap-1.5">
                   {st.at ? <Checkmark size={16} className="text-ok" /> : <span className="size-4 rounded-full border border-line-strong" />}
                   {st.label}
@@ -241,7 +253,7 @@ export function TicketDetailPage() {
         <aside className="flex flex-col gap-4">
           {reading && (
             <div className="rounded-[14px] border border-line bg-raised shadow-raised p-4">
-              <ReadingGauge test={reading.test} value={reading.value} min={rule?.min} max={t.kind === 'test_fail' ? rule?.max : reading.max} drift={t.kind !== 'test_fail' && reading.test === 'cv'} />
+              <ReadingGauge test={reading.test} value={reading.value} min={rule?.min} max={rule?.max ?? reading.max} />
             </div>
           )}
           {t.severity !== 'minor' && (
@@ -249,14 +261,14 @@ export function TicketDetailPage() {
               <p className="t-small-strong mb-2 text-muted">Response</p>
               <ResponseTimer elapsed={esc.elapsed} limitMins={t.seenMins} state={esc.timer} level={esc.level} frozen={!!t.seenAt || t.status === 'closed'} />
               <p className="t-small mt-3 text-muted">
-                Escalation: QC manager at {t.escalateQcMins} min, plant head at {t.escalatePhMins} min.
+                Not seen: backup supervisor at {t.seenMins} min, QC manager at {t.escalateQcMins}, plant head at {t.escalatePhMins}.
               </p>
             </div>
           )}
           {hold && <HoldCard s={s} h={hold} now={now} compact />}
           {t.sisterFrames.length > 0 && (
             <div className="rounded-[14px] border border-line bg-raised shadow-raised p-4">
-              <p className="t-small-strong mb-2 text-muted">Sister frames</p>
+              <p className="t-small-strong mb-2 text-muted">Other frames on Lot {t.lotId} (ticked by the supervisor)</p>
               <ul className="flex flex-col gap-1.5">
                 {t.sisterFrames.map((f) => {
                   const r = s.requests.find((q) => q.ticketId === t.id && q.frameId === f && q.reason === 'sister');
@@ -370,6 +382,10 @@ function HoldCard({ s, h, now, user, compact }: { s: MillState; h: Hold; now: nu
           <p className="t-small-strong flex items-center gap-2 text-held">
             <StatusChip kind={h.status as never} />
             {pendingApproval && <StatusChip kind="escalated" label="Waiting for plant head" />}
+            {h.status === 'on_hold' && !h.taggedAt && <StatusChip kind="working" label="Not tagged on the floor yet" />}
+            {h.status === 'on_hold' && holdNudge(s, h, now) !== 'none' && (
+              <StatusChip kind="escalated" label={holdNudge(s, h, now) === 'plant' ? 'Past end of shift: plant head told' : 'Undecided 2 h: reminder sent'} />
+            )}
           </p>
           <h3 className="t-section mt-2">
             {h.frameId} · Lot {h.lotId}
@@ -420,7 +436,7 @@ function HoldCard({ s, h, now, user, compact }: { s: MillState; h: Hold; now: nu
           {!fixed && <p className="t-small text-muted">The frame is not fixed yet, so this hold is still growing. You can still decide now.</p>}
           <div className="flex flex-wrap gap-2">
             <Button variant="secondary" disabled={h.retest === 'pending'} onClick={() => dispatch({ type: 'hold/retest', holdId: h.id, by: user!.id })}>
-              {h.retest === 'pending' ? 'Re-test in the lab' : 'Ask for re-test'}
+              {h.retest === 'pending' ? 'Re-test in the lab' : h.retest ? 'Re-test more' : 'Ask for re-test'}
             </Button>
           </div>
           <div role="radiogroup" aria-label="Decision" className="grid grid-cols-3 gap-2">
@@ -766,7 +782,7 @@ function TicketBoard({ s, tickets, now }: { s: MillState; tickets: Ticket[]; now
                         <span className="t-body-strong">{t.frameId}</span>
                         <span className="t-data text-[12px] text-muted">{ago(now - t.createdAt)}</span>
                       </span>
-                      <span className="t-small -mt-1.5 text-muted">{t.kind === 'drift' ? 'Winding drift' : t.test ? `${TEST[t.test].name} test` : t.title}</span>
+                      <span className="t-small -mt-1.5 text-muted">{t.test ? `${TEST[t.test].name} test` : t.title}</span>
                       <span className="t-data text-[12px]">{readingLine(s, t)}</span>
                       {(t.status === 'open' || t.status === 'seen') && (
                         <SegmentMeter pct={pct} segments={10} height={6} color={pct >= 100 ? 'var(--critical)' : 'var(--brand)'} label={`${Math.round(mins)} of ${t.escalateQcMins} minutes before escalation`} />

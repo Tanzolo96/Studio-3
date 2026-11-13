@@ -1,6 +1,6 @@
 # QC Alert
 
-> **New here? Read [`docs/HANDOFF.md`](docs/HANDOFF.md) first.** It has every decision, how the system works, the jury demo script and the milestone checklist with owners. Pick a milestone there before you start coding.
+> **New here? Read [`docs/WORKFLOW.md`](docs/WORKFLOW.md) (current direction), then [`docs/HANDOFF.md`](docs/HANDOFF.md).** It has every decision, how the system works, the jury demo script and the milestone checklist with owners. Pick a milestone there before you start coding.
 
 A quality alert system for yarn spinning mills. Interaction Design, UID Gandhinagar, Team 11 (Entrepreneurs Products).
 

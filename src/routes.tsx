@@ -2,9 +2,9 @@ import { Link, Navigate, type RouteObject } from 'react-router-dom';
 import { AppShell } from './app/AppShell';
 import { AlertsScreen, FailScreen, PreviousScreen, RaiseScreen, TestEntryScreen, TicketScreen } from './app/screens';
 import { DashShell } from './dashboard/DashShell';
-import { HeldYarn, MachinesGrid, TicketDetailPage, Tickets } from './dashboard/pages';
-import { Overview, Report } from './dashboard/Overview';
-import { InsightsHub, MachineDetail } from './dashboard/machine';
+import { HeldYarn, TicketDetailPage, Tickets } from './dashboard/pages';
+import { Report } from './dashboard/Overview';
+import { Overview } from './dashboard/Live';
 import { AccountPage, RulesPage } from './dashboard/settings';
 import { Kit } from './demo/Kit';
 
@@ -64,9 +64,10 @@ export const dashRoutes: RouteObject = {
     { path: 'tickets', element: <Tickets /> },
     { path: 'tickets/:id', element: <TicketDetailPage /> },
     { path: 'held', element: <HeldYarn /> },
-    { path: 'machines', element: <MachinesGrid /> },
-    { path: 'machines/:id', element: <MachineDetail /> },
-    { path: 'insights', element: <InsightsHub /> },
+    // Machines are not connected, so there are no machine pages: a frame is a field on a ticket.
+    { path: 'machines', element: <Navigate to="/dashboard/tickets" replace /> },
+    { path: 'machines/:id', element: <Navigate to="/dashboard/tickets" replace /> },
+    { path: 'insights', element: <Navigate to="/dashboard/report" replace /> },
     { path: 'report', element: <Report /> },
     { path: 'rules', element: <RulesPage /> },
     { path: 'account', element: <AccountPage /> },
