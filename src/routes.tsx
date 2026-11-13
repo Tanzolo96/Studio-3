@@ -33,7 +33,7 @@ function Home() {
         </Link>
         <Link to="/app" className={card}>
           <span className="t-body-strong">Alert app</span>
-          <span className="t-small text-muted">Supervisor, lab tester, fitter (phone)</span>
+          <span className="t-small text-muted">Operator, supervisor, lab tester, fitter (phone)</span>
         </Link>
       </div>
       <Link to="/kit" className="t-small text-brand-text hover:underline">

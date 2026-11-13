@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { ArrowRight, ChevronLeft, ChevronRight, Locked } from '@carbon/icons-react';
 import type { MillState, Ticket } from '../engine/types';
 import { useMillState, useNow, useTheme, useUser } from '../store/store';
-import { bySeverityThenAge, escalation, frameView, holdNeedsApproval, isEscalated, median, pendingRequests, seenTimes, type FrameStateKind } from '../engine/selectors';
+import { bySeverityThenAge, escalation, frameView, holdNeedsApproval, isEscalated, labBacklog, median, pendingRequests, seenTimes, type FrameStateKind } from '../engine/selectors';
 import { frameWord, holdKg, roundKg, userName } from '../engine/reducer';
 import { insights } from '../engine/insights';
 import { BASELINE_KG, alertHeat, dailyAlerts, frameStateCounts, seenTrend, shiftResponse, ticketsSince, topCauses, yarnSaved } from '../engine/analytics';
@@ -108,13 +108,13 @@ function QcOverview() {
         />
         <Goal
           i={3}
-          label="Held per incident"
+          label="Yarn held per incident"
           value={<CountUp value={saved.avgHeld} />}
           chart={<TargetBar pct={Math.round((saved.avgHeld / BASELINE_KG) * 100)} />}
           unit="kg"
           goal={`${BASELINE_KG} kg`}
           badge={{ text: `${lessLost}% less`, tone: 'good' }}
-          note={`${roundKg(saved.saved).toLocaleString('en-IN')} kg saved in 30 days against the old ${BASELINE_KG} kg`}
+          note={`Held from the last good test, so some is still good yarn. Before: about ${BASELINE_KG} kg of bad yarn per frame. ${roundKg(saved.saved).toLocaleString('en-IN')} kg saved in 30 days.`}
         />
       </section>
 
@@ -445,7 +445,15 @@ export function Report() {
   const top = a.frames[0];
   return (
     <div className="mx-auto flex max-w-[1240px] flex-col gap-5">
-      <PageHead title="Monthly report" sub="Last 30 days" />
+      <PageHead
+        title="Monthly report"
+        sub="Last 30 days"
+        actions={
+          <button type="button" onClick={() => window.print()} className="no-print t-small-strong h-9 rounded-full border border-line bg-raised px-4 hover:bg-sunken">
+            Download PDF
+          </button>
+        }
+      />
 
       <section className="anim-in grid grid-cols-2 divide-x divide-y divide-[var(--line)] overflow-hidden rounded-[12px] border border-line bg-raised lg:grid-cols-4 lg:divide-y-0" aria-label="Month in numbers">
         <ReportStat label="Critical and major alerts" value={<CountUp value={a.serious.length} />} note={`${a.crit} critical`} />
@@ -486,7 +494,7 @@ export function Report() {
           <div className="pt-6">
             <ShiftBars rows={a.shifts} limit={5} label="Median minutes to Seen for shifts A, B and C" />
           </div>
-          <p className="t-small mt-4 text-muted">A 00–08 · B 08–16 · C 16–24</p>
+          <p className="t-small mt-4 text-muted">A 06–14 · B 14–22 · C 22–06</p>
         </Panel>
       </div>
     </div>
@@ -733,7 +741,7 @@ export function Overview() {
   return <QcOverview />;
 }
 
-const SHIFT_HOURS: Record<string, string> = { A: '00:00–08:00', B: '08:00–16:00', C: '16:00–24:00' };
+const SHIFT_HOURS: Record<string, string> = { A: '06:00–14:00', B: '14:00–22:00', C: '22:00–06:00' };
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 // ---------- supervisor: running the shift ----------
@@ -846,9 +854,15 @@ function WaitingForYou({ s, now }: { s: MillState; now: number }) {
   const nav = useNavigate();
   const holds = s.holds.filter((h) => h.status === 'on_hold' && !holdNeedsApproval(h));
   const tests = pendingRequests(s);
+  const late = labBacklog(s, now).length;
   const n = holds.length + tests.length;
   return (
     <Panel title="Waiting for you" sub={n ? `${n} thing${n > 1 ? 's' : ''} need the QC manager` : 'Nothing waiting'} className="anim-in">
+      {late >= 3 && (
+        <p className="t-small-strong mb-3 rounded-[10px] bg-major-soft px-3 py-2.5 text-major">
+          The lab is behind: {late} urgent tests are late. They are ranked by risk; consider a second tester.
+        </p>
+      )}
       {n ? (
         <ul className="grid gap-x-4 gap-y-1 md:grid-cols-2">
           {holds.map((h) => (
@@ -976,7 +990,7 @@ function PlantOverview() {
       <section className="grid gap-5 md:grid-cols-3" aria-label="Key numbers">
         <Goal i={1} label="Yarn saved" value={<CountUp value={a.saved.saved} format={(v) => Math.round(v).toLocaleString('en-IN')} />} unit="kg" goal="30 days" badge={{ text: 'Estimate', tone: 'good' }} note={`${a.saved.incidents} holds against about ${BASELINE_KG} kg per incident before`} />
         <Goal i={2} label="Alerts this month" value={<CountUp value={alerts} />} goal={`${before} before`} badge={alerts <= before ? { text: 'Fewer', tone: 'good' } : { text: `${alerts - before} more`, tone: 'bad' }} note="Critical and major, against the 30 days before" />
-        <Goal i={3} label="Held per incident" value={<CountUp value={a.saved.avgHeld} />} unit="kg" goal={`${BASELINE_KG} kg`} badge={{ text: `${Math.max(0, Math.round(100 - (a.saved.avgHeld / BASELINE_KG) * 100))}% less`, tone: 'good' }} note="Yarn held per incident against the old amount" />
+        <Goal i={3} label="Yarn held per incident" value={<CountUp value={a.saved.avgHeld} />} unit="kg" goal={`${BASELINE_KG} kg`} badge={{ text: `${Math.max(0, Math.round(100 - (a.saved.avgHeld / BASELINE_KG) * 100))}% less`, tone: 'good' }} note={`Held from the last good test. Before: about ${BASELINE_KG} kg of bad yarn per frame.`} />
       </section>
 
       <div className="anim-in grid gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]" style={{ '--i': 4 } as CSSProperties}>

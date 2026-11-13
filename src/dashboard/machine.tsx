@@ -7,7 +7,7 @@ import { frameView } from '../engine/selectors';
 import { lotOf, productOfFrame, ruleFor } from '../engine/reducer';
 import { predictAll, predictFrame, PARTS, type Part, type FramePrediction } from '../engine/predict';
 import { insights } from '../engine/insights';
-import { TEST } from '../engine/vocab';
+import { OFFLINE_NOTE, TEST, frameSources } from '../engine/vocab';
 import { dayMonth, hhmm } from '../engine/time';
 import { useMillState, useNow } from '../store/store';
 import { cx, SeverityBadge, StatusChip } from '../ui/primitives';
@@ -23,9 +23,30 @@ const STATE_COLOR: Record<FrameStateKind, string> = {
   stopped: 'var(--line-strong)',
 };
 const STATE_WORD: Record<FrameStateKind, string> = { running: 'Running', warning: 'Warning', fault: 'Failed', held: 'Yarn on hold', stopped: 'Stopped' };
-const riskColor = (pct: number) => (pct >= 60 ? 'var(--critical)' : pct >= 35 ? 'var(--major-fill)' : 'var(--ok)');
+type Level = 'low' | 'watch' | 'high';
+const LEVEL_FILL: Record<Level, string> = { high: 'var(--critical)', watch: 'var(--major-fill)', low: 'var(--ok)' };
 /** Same scale, but dark enough to read as text in both themes. */
-const riskText = (pct: number) => (pct >= 60 ? 'var(--critical)' : pct >= 35 ? 'var(--major)' : 'var(--ok)');
+const LEVEL_TEXT: Record<Level, string> = { high: 'var(--critical)', watch: 'var(--major)', low: 'var(--ok)' };
+const LEVEL_WORD: Record<Level, string> = { high: 'High', watch: 'Watch', low: 'Low' };
+const LEVEL_PCT: Record<Level, number> = { high: 100, watch: 66, low: 33 };
+
+function LevelChip({ level }: { level: Level }) {
+  return (
+    <span className="t-small-strong inline-flex items-center gap-1.5" style={{ color: LEVEL_TEXT[level] }}>
+      <span className="size-2 rounded-full" style={{ background: LEVEL_FILL[level] }} />
+      {LEVEL_WORD[level]}
+    </span>
+  );
+}
+
+/** The zone of the machine each part covers on the drawing. The whole zone glows: we know the area, not the exact roller or spindle. */
+const ZONE: Record<Part, { x: number; y: number; w: number; h: number }> = {
+  creel: { x: 112, y: 18, w: 380, h: 44 },
+  drafting: { x: 112, y: 102, w: 196, h: 34 },
+  apron: { x: 300, y: 102, w: 212, h: 34 },
+  spindles: { x: 112, y: 182, w: 400, h: 74 },
+  environment: { x: 500, y: 24, w: 38, h: 34 },
+};
 
 /** Where each part sits on the drawing (viewBox 0 0 560 300). */
 const SPOT: Record<Part, { x: number; y: number; label: string }> = {
@@ -37,7 +58,7 @@ const SPOT: Record<Part, { x: number; y: number; label: string }> = {
 };
 
 /** A side view of a ring frame: creel of roving bobbins, drafting rollers, spindles with cops. */
-export function RingFrameArt({ state, risks, focus }: { state: FrameStateKind; risks?: Partial<Record<Part, number>>; focus?: Part | null }) {
+export function RingFrameArt({ state, risks, focus }: { state: FrameStateKind; risks?: Partial<Record<Part, Level>>; focus?: Part | null }) {
   const spin = state !== 'stopped';
   const cop = STATE_COLOR[state];
   const spindles = Array.from({ length: 12 }, (_, i) => 120 + i * 32);
@@ -100,17 +121,21 @@ export function RingFrameArt({ state, risks, focus }: { state: FrameStateKind; r
       {/* risk hotspots */}
       {risks &&
         (Object.keys(SPOT) as Part[]).map((p) => {
-          const pct = risks[p] ?? 0;
+          const lv = risks[p] ?? 'low';
           const on = focus === p;
-          const c = riskColor(pct);
+          const c = LEVEL_FILL[lv];
           const { x, y, label } = SPOT[p];
+          const z = ZONE[p];
+          const text = `${label} · ${LEVEL_WORD[lv].toLowerCase()}`;
+          const w = text.length * 6.2 + 30;
+          if (lv === 'low' && !on) return null;
           return (
-            <g key={p} opacity={focus && !on ? 0.45 : 1}>
-              {pct >= 35 && <circle cx={x} cy={y} r="10" fill={c} className="pulse-dot" />}
-              <circle cx={x} cy={y} r={on ? 11 : 9} fill={c} stroke="var(--surface-raised)" strokeWidth="3" />
-              <rect x={x > 450 ? x - 14 - (label.length * 6.6 + 34) : x + 14} y={y - 11} width={label.length * 6.6 + 34} height="22" rx="6" fill="var(--surface-raised)" stroke={on ? c : 'var(--line)'} />
-              <text x={x > 450 ? x - 6 - (label.length * 6.6 + 34) : x + 22} y={y + 4} className="fill-[var(--ink)] text-[11px] font-semibold">
-                {label} {pct}%
+            <g key={p} opacity={focus && !on ? 0.4 : 1}>
+              <rect x={z.x} y={z.y} width={z.w} height={z.h} rx="8" fill={c} fillOpacity={lv === 'high' ? 0.18 : 0.12} stroke={c} strokeOpacity={0.7} strokeDasharray="5 4" className={lv === 'high' ? 'breathe' : undefined} />
+              <circle cx={x} cy={y} r={on ? 8 : 6} fill={c} stroke="var(--surface-raised)" strokeWidth="2.5" />
+              <rect x={x > 450 ? x - 12 - w : x + 12} y={y - 11} width={w} height="22" rx="6" fill="var(--surface-raised)" stroke={on ? c : 'var(--line)'} />
+              <text x={x > 450 ? x - 4 - w : x + 20} y={y + 4} className="fill-[var(--ink)] text-[11px] font-semibold">
+                {text}
               </text>
             </g>
           );
@@ -167,13 +192,12 @@ function RiskList({ p, focus, setFocus }: { p: FramePrediction; focus: Part | nu
               <span className="t-small-strong">
                 {i + 1}. {x.name}
               </span>
-              <span className="t-data text-[13px]" style={{ color: riskText(x.pct) }}>
-                {x.pct}%
-              </span>
+              <LevelChip level={x.level} />
             </div>
-            <SegmentMeter className="mt-2" pct={x.pct} segments={20} height={6} color={riskColor(x.pct)} />
+            <SegmentMeter className="mt-2" pct={LEVEL_PCT[x.level]} segments={3} height={6} color={LEVEL_FILL[x.level]} />
             <p className="t-small mt-2 text-muted">{x.how}</p>
-            <ul className="t-small mt-1.5 flex flex-col gap-0.5">
+            <p className="t-label mt-2 text-[10px] text-muted">Pointed out by</p>
+            <ul className="t-small mt-1 flex flex-col gap-0.5">
               {x.evidence.map((e) => (
                 <li key={e} className="flex gap-1.5">
                   <span className="text-muted">·</span>
@@ -206,7 +230,7 @@ export function MachineDetail() {
   const passPct = tests30.length ? Math.round((tests30.filter((r) => r.pass).length / tests30.length) * 100) : 100;
   const history = s.tickets.filter((t) => t.frameId === frame.id && t.createdAt <= now).sort((a, b) => b.createdAt - a.createdAt);
   const sisters = s.frames.filter((f) => f.lotId === frame.lotId && f.id !== frame.id);
-  const risks = Object.fromEntries(p.parts.map((x) => [x.part, x.pct])) as Record<Part, number>;
+  const risks = Object.fromEntries(p.parts.map((x) => [x.part, x.level])) as Record<Part, Level>;
   const hero = v.kind === 'fault' ? 'bg-critical text-on-critical' : v.kind === 'warning' ? 'bg-major-fill text-ink' : v.kind === 'held' ? 'bg-brand text-on-brand' : v.kind === 'stopped' ? 'bg-sunken text-ink' : 'bg-ok text-on-brand';
   return (
     <div className="mx-auto flex max-w-[1240px] flex-col gap-5">
@@ -217,11 +241,11 @@ export function MachineDetail() {
           </Link>
           <h1 className="t-page">{frame.id} · Ring frame</h1>
           <p className="t-small mt-0.5 text-muted">
-            {product.name} · Lot {lot.id} · {v.label}
+            {frame.make} · {product.name} · Lot {lot.id} · {v.label}
           </p>
         </div>
         <Link to={`/dashboard/insights?frame=${frame.id}`} className="t-small-strong flex items-center gap-1 text-brand-text hover:underline">
-          Breakdown forecast <ArrowRight size={14} />
+          Breakdown watch <ArrowRight size={14} />
         </Link>
       </header>
 
@@ -234,27 +258,28 @@ export function MachineDetail() {
             {[
               { k: 'Tests passed', v: `${passPct}%`, pct: passPct },
               { k: 'Faults, 90 days', v: `${p.faults90}`, pct: Math.min(100, p.faults90 * 15) },
-              { k: 'Health', v: `${p.health}%`, pct: p.health },
+              { k: 'Breakdown watch', v: LEVEL_WORD[p.level], pct: LEVEL_PCT[p.level], seg: 3 },
             ].map((x) => (
               <div key={x.k} className="p-4">
                 <p className="t-label text-[10px] opacity-80">{x.k}</p>
                 <p className="t-stat mt-1">{x.v}</p>
-                <SegmentMeter className="mt-2" pct={x.pct} segments={12} height={6} color="currentColor" />
+                <SegmentMeter className="mt-2" pct={x.pct} segments={'seg' in x ? x.seg : 12} height={6} color="currentColor" />
               </div>
             ))}
           </div>
         </section>
 
         <div className="flex min-w-0 flex-col gap-5">
-          <Panel title="Health" sub={p.horizon}>
+          <Panel title="Breakdown watch" sub="An early warning, not a measured fault">
             <div className="flex items-center justify-between gap-4">
               <div>
-                <p className="t-stat !text-[40px] !leading-[44px]" style={{ color: riskText(100 - p.health) }}>
-                  {p.health}%
+                <p className="t-stat !text-[40px] !leading-[44px]" style={{ color: LEVEL_TEXT[p.level] }}>
+                  {LEVEL_WORD[p.level]}
                 </p>
-                <p className="t-small text-muted">Breakdown risk {p.risk}% · {p.level === 'high' ? 'act now' : p.level === 'watch' ? 'keep an eye on it' : 'all good'}</p>
+                <p className="t-body-strong mt-1">{p.horizon}</p>
+                <p className="t-small mt-1 text-muted">Likely zone: {p.parts[0].name.toLowerCase()}. A fitter confirms on the spot.</p>
               </div>
-              <Dial pct={p.health} color={riskColor(100 - p.health)} label={`Health ${p.health}%`} />
+              <Dial pct={LEVEL_PCT[p.level]} color={LEVEL_FILL[p.level]} label={`Breakdown watch ${LEVEL_WORD[p.level]}`} />
             </div>
           </Panel>
           <Panel title="Latest lab readings" sub="Green band is the limit for this yarn">
@@ -297,6 +322,20 @@ export function MachineDetail() {
               <p className="t-small text-muted">No faults on this frame yet.</p>
             )}
           </Panel>
+          <Panel title="Where this frame's data comes from" sub={`${frame.make} · the same list for every brand`}>
+            <ul className="flex flex-col divide-y divide-[var(--line)]">
+              {frameSources(frame.make).map((d) => (
+                <li key={d.what} className="flex items-start justify-between gap-3 py-2.5">
+                  <span className="min-w-0">
+                    <span className="t-small-strong block">{d.what}</span>
+                    <span className="t-small block text-muted">{d.from}</span>
+                  </span>
+                  <span className="t-small shrink-0 rounded-full bg-sunken px-2 py-0.5 text-ink">{d.how}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="t-small mt-3 text-muted">{OFFLINE_NOTE}</p>
+          </Panel>
           <Panel title="Sister frames" sub={`Also spinning lot ${lot.id}`}>
             <div className="flex flex-wrap gap-2">
               {sisters.map((f) => {
@@ -333,10 +372,10 @@ export function InsightsHub() {
   const [dismissed, setDismissed] = useState<string[]>([]);
   const p = all.find((x) => x.frameId === picked)!;
   const v = frameView(s, picked, now);
-  const risks = Object.fromEntries(p.parts.map((x) => [x.part, x.pct])) as Record<Part, number>;
+  const risks = Object.fromEntries(p.parts.map((x) => [x.part, x.level])) as Record<Part, Level>;
   const high = all.filter((x) => x.level === 'high').length;
   const watch = all.filter((x) => x.level === 'watch').length;
-  const avg = Math.round(all.reduce((n, x) => n + x.health, 0) / all.length);
+  const ok = all.length - high - watch;
   const list = insights(s, now).filter((i) => !dismissed.includes(i.id));
   const product = productOfFrame(s, picked);
   return (
@@ -344,12 +383,12 @@ export function InsightsHub() {
       <header className="anim-in flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="t-page">AI insights hub</h1>
-          <p className="t-small mt-0.5 text-muted">Pick a frame to see where and how it is likely to break next. Suggestions only, people decide.</p>
+          <p className="t-small mt-0.5 text-muted">Breakdown watch: pick a frame to see which zone to check first, and why. An early warning from fault history and lab tests, not a measured fault. People decide.</p>
         </div>
         <dl className="flex gap-6">
           <div>
-            <dt className="t-label text-[10px] text-muted">Average health</dt>
-            <dd className="t-stat !text-[24px]">{avg}%</dd>
+            <dt className="t-label text-[10px] text-muted">No action</dt>
+            <dd className="t-stat !text-[24px] text-ok">{ok}</dd>
           </div>
           <div>
             <dt className="t-label text-[10px] text-muted">High risk</dt>
@@ -364,7 +403,7 @@ export function InsightsHub() {
 
       <div className="grid items-start gap-5 lg:grid-cols-[230px_minmax(0,1fr)] xl:grid-cols-[250px_minmax(0,1fr)_minmax(0,0.9fr)]">
         <section className="anim-in rounded-[12px] border border-line bg-raised p-3 lg:row-span-2 xl:row-span-1" aria-label="Pick a frame">
-          <p className="t-label px-2 pb-2 text-[10px] text-muted">Frames by breakdown risk</p>
+          <p className="t-label px-2 pb-2 text-[10px] text-muted">Frames, check these first</p>
           <ul className="flex max-h-[620px] flex-col gap-1 overflow-y-auto pr-1">
             {all.map((x) => (
               <li key={x.frameId}>
@@ -376,11 +415,9 @@ export function InsightsHub() {
                 >
                   <span className="flex items-center justify-between gap-2">
                     <span className="t-small-strong">{x.frameId}</span>
-                    <span className="t-data text-[12px]" style={{ color: riskText(x.risk) }}>
-                      {x.risk}%
-                    </span>
+                    <LevelChip level={x.level} />
                   </span>
-                  <SegmentMeter className="mt-1.5" pct={x.risk} segments={16} height={4} color={riskColor(x.risk)} />
+                  <SegmentMeter className="mt-1.5" pct={LEVEL_PCT[x.level]} segments={3} height={4} color={LEVEL_FILL[x.level]} />
                 </button>
               </li>
             ))}
@@ -404,13 +441,13 @@ export function InsightsHub() {
           </div>
           <div className="grid grid-cols-3 gap-3 border-t border-line p-5">
             <div>
-              <p className="t-label text-[10px] text-muted">Breakdown risk</p>
-              <p className="t-stat" style={{ color: riskText(p.risk) }}>
-                {p.risk}%
+              <p className="t-label text-[10px] text-muted">Breakdown watch</p>
+              <p className="t-stat" style={{ color: LEVEL_TEXT[p.level] }}>
+                {LEVEL_WORD[p.level]}
               </p>
             </div>
             <div>
-              <p className="t-label text-[10px] text-muted">When</p>
+              <p className="t-label text-[10px] text-muted">What to do</p>
               <p className="t-body-strong mt-1">{p.horizon}</p>
             </div>
             <div>
@@ -446,7 +483,7 @@ export function InsightsHub() {
         )}
       </section>
       <p className="t-small text-muted">
-        How it works: each part's chance comes from the causes recorded when this frame and its sister frames were fixed, how close the latest lab readings are to the limits, and the winding-sensor drift. {Object.keys(PARTS).length} parts are watched per frame.
+        How it works: no sensor sits on these parts. The level comes from the causes recorded when this frame and its sister frames were fixed, which lab test is close to its limit (count points to drafting, CV to aprons, twist to spindles, CSP to humidity) and the winding-sensor drift. {Object.keys(PARTS).length} zones are watched per frame. Levels can become tested percentages once 6 to 12 months of fixes are recorded.
       </p>
     </div>
   );

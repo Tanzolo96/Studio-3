@@ -20,15 +20,18 @@ function rng(seed: number) {
 }
 
 export const USERS: User[] = [
-  { id: 'krish', name: 'Krish Patel', role: 'supervisor', shift: 'B' },
-  { id: 'vikram', name: 'Vikram Singh', role: 'supervisor', shift: 'A' },
+  // A shift runs two supervisors, 12 frames each (as on our role cards). B and C run one for the floor.
+  { id: 'krish', name: 'Krish Patel', role: 'supervisor', shift: 'A', frames: [1, 12] },
+  { id: 'farhan', name: 'Farhan Qureshi', role: 'supervisor', shift: 'A', frames: [13, 24] },
+  { id: 'vikram', name: 'Vikram Singh', role: 'supervisor', shift: 'B' },
   { id: 'anil', name: 'Anil Rathod', role: 'supervisor', shift: 'C' },
-  { id: 'rohan', name: 'Rohan Desai', role: 'tester', shift: 'B' },
-  { id: 'meena', name: 'Meena Joshi', role: 'tester', shift: 'A' },
+  { id: 'ramesh', name: 'Ramesh Yadav', role: 'operator', shift: 'A', frames: [1, 12] },
+  { id: 'rohan', name: 'Rohan Desai', role: 'tester', shift: 'A' },
+  { id: 'meena', name: 'Meena Joshi', role: 'tester', shift: 'B' },
   { id: 'deepak', name: 'Deepak Rao', role: 'tester', shift: 'C' },
-  { id: 'suresh', name: 'Suresh Kumar', role: 'fitter', shift: 'B' },
-  { id: 'imran', name: 'Imran Shaikh', role: 'fitter', shift: 'B' },
-  { id: 'ramesh', name: 'Ramesh Yadav', role: 'fitter', shift: 'A' },
+  { id: 'suresh', name: 'Suresh Kumar', role: 'fitter', shift: 'A' },
+  { id: 'imran', name: 'Imran Shaikh', role: 'fitter', shift: 'A' },
+  { id: 'raju', name: 'Raju Patil', role: 'fitter', shift: 'B' },
   { id: 'harish', name: 'Harish Mehta', role: 'fitter', shift: 'C' },
   { id: 'priya', name: 'Priya Shah', role: 'qc', shift: 'G' },
   { id: 'mohit', name: 'Mohit Maheshwari', role: 'plant', shift: 'G' },
@@ -61,7 +64,9 @@ function lotForFrame(n: number) {
 
 const FRAMES: Frame[] = Array.from({ length: 24 }, (_, i) => {
   const num = i + 1;
-  return { id: `RF-${String(num).padStart(2, '0')}`, num, lotId: lotForFrame(num), ...(num === 4 ? { stopped: 'Doffing' } : {}) };
+  // A mixed floor, as in most mid-size mills: three brands of ring frame bought over the years.
+  const make = num <= 8 ? 'LMW LR 9 AX' : num <= 16 ? 'Rieter G 38' : 'Toyota RX 300';
+  return { id: `RF-${String(num).padStart(2, '0')}`, num, lotId: lotForFrame(num), make, ...(num === 4 ? { stopped: 'Doffing' } : {}) };
 });
 
 const LIMITS: Record<string, Record<TestKind, [number | undefined, number | undefined, Severity]>> = {
@@ -90,9 +95,13 @@ const RULES: Rule[] = PRODUCTS.flatMap((p) =>
   }),
 );
 
-const supervisorAt = (t: number) => ({ A: 'vikram', B: 'krish', C: 'anil' })[shiftAt(t)];
-const testerAt = (t: number) => ({ A: 'meena', B: 'rohan', C: 'deepak' })[shiftAt(t)];
-const fitterAt = (t: number) => ({ A: 'ramesh', B: 'suresh', C: 'harish' })[shiftAt(t)];
+const supervisorAt = (t: number, frameId: string) => {
+  const sh = shiftAt(t);
+  if (sh === 'A') return Number(frameId.slice(3)) <= 12 ? 'krish' : 'farhan';
+  return sh === 'B' ? 'vikram' : 'anil';
+};
+const testerAt = (t: number) => ({ A: 'rohan', B: 'meena', C: 'deepak' })[shiftAt(t)];
+const fitterAt = (t: number) => ({ A: 'suresh', B: 'raju', C: 'harish' })[shiftAt(t)];
 
 function baseResults(): TestResult[] {
   const rand = rng(2417);
@@ -201,7 +210,7 @@ function run(s: MillState, at: number, e: MillEventInput) {
 
 function replay(s: MillState, inc: Incident) {
   const at = mill(inc.d, inc.t);
-  const sup = supervisorAt(at);
+  const sup = supervisorAt(at, inc.frame);
   const tester = testerAt(at);
   const fitter = fitterAt(at);
   if (inc.roving) s.rovingChanges.push({ frameId: inc.frame, at: at - 95 * MIN });
@@ -275,7 +284,7 @@ function finish(s: MillState, ticketId: string, at: number, inc: Incident, sup: 
 
 let cached: MillState | undefined;
 
-/** Fresh copy of the seeded mill at the demo start (05 Nov, 09:40, B shift). */
+/** Fresh copy of the seeded mill at the demo start (05 Nov, 09:40, A shift). */
 export function seedState(): MillState {
   if (!cached) {
     eid = 0;

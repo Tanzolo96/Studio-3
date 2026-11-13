@@ -5,7 +5,7 @@ import type { Hold, MillState, Severity, ShiftId, Ticket, User } from '../engine
 import { useDispatch, useMillState, useNow, useUser } from '../store/store';
 import { bySeverityThenAge, escalation, frameView, holdNeedsApproval, isEscalated, openHolds, type FrameStateKind } from '../engine/selectors';
 import { frameWord, holdKg, lotOf, roundKg, ruleFor, userName } from '../engine/reducer';
-import { OUTCOME_WORD, SEVERITY, STATUS_WORD, TEST } from '../engine/vocab';
+import { MAKES, OFFLINE_NOTE, OUTCOME_WORD, SEVERITY, STATUS_WORD, TEST, frameSources } from '../engine/vocab';
 import { ago, dateTime, dayMonth, hhmm, hmm } from '../engine/time';
 import { Button, Choice, cx, Empty, SeverityBadge, StatusChip } from '../ui/primitives';
 import { ReadingGauge, ResponseTimer, readingLine, ticketChip, ticketMeta } from '../ui/cards';
@@ -156,9 +156,9 @@ export function Tickets() {
         </select>
         <select aria-label="Shift" className={select} value={shift} onChange={(e) => setShift(e.target.value as never)}>
           <option value="all">All shifts</option>
-          <option value="A">A shift (00–08)</option>
-          <option value="B">B shift (08–16)</option>
-          <option value="C">C shift (16–24)</option>
+          <option value="A">A shift (06–14)</option>
+          <option value="B">B shift (14–22)</option>
+          <option value="C">C shift (22–06)</option>
         </select>
         <select aria-label="Frame" className={select} value={frame} onChange={(e) => setFrame(e.target.value)}>
           <option value="all">All frames</option>
@@ -566,7 +566,40 @@ export function MachinesGrid() {
           </section>
         ))}
       </div>
-      <p className="t-small mt-6 text-muted">Frame detail with test history and the winding sensor trend comes in the next milestone.</p>
+      <p className="t-small mt-4 text-muted">Click a frame for its test history, breakdown watch and where its data comes from.</p>
+
+      <section className="mt-8 rounded-[12px] border border-line bg-raised p-5" aria-label="Where the data comes from">
+        <h2 className="t-section">Where the data comes from</h2>
+        <p className="t-small mt-1 text-muted">Three brands on one floor. Each sends what it can, people fill in the rest, and every frame ends up with the same card.</p>
+        <div className="mt-4 grid gap-4 md:grid-cols-3">
+          {MAKES.map((make) => {
+            const frames = s.frames.filter((f) => f.make === make);
+            const status = frameSources(make)[0];
+            return (
+              <div key={make} className="rounded-[10px] border border-line p-4">
+                <p className="t-small-strong">{make}</p>
+                <p className="t-small text-muted">
+                  Frames {frames[0].num}–{frames.at(-1)!.num}
+                </p>
+                <p className="t-small mt-3">{status.what}</p>
+                <p className="t-small text-muted">{status.from}</p>
+                <span className="t-small mt-2 inline-block rounded-full bg-sunken px-2 py-0.5">{status.how}</span>
+              </div>
+            );
+          })}
+        </div>
+        <ul className="t-small mt-4 grid gap-2 md:grid-cols-2">
+          {frameSources(MAKES[0]).slice(1).map((d) => (
+            <li key={d.what} className="flex gap-2">
+              <span className="t-small-strong shrink-0">{d.what}:</span>
+              <span className="text-muted">
+                {d.from} ({d.how.toLowerCase()})
+              </span>
+            </li>
+          ))}
+        </ul>
+        <p className="t-small mt-3 text-muted">{OFFLINE_NOTE}</p>
+      </section>
     </div>
   );
 }
@@ -740,7 +773,7 @@ function TicketBoard({ s, tickets, now }: { s: MillState; tickets: Ticket[]; now
                       )}
                       {t.fitterId && t.status === 'working' && (
                         <span className={cx('t-small', t.repairDoneAt ? 'text-ok' : 'text-major')}>
-                          {userName(s, t.fitterId).split(' ')[0]} {t.repairDoneAt ? 'finished the repair' : 'is repairing'}
+                          {t.waitingPart ? `Waiting for ${t.waitingPart.toLowerCase()}` : `${userName(s, t.fitterId).split(' ')[0]} ${t.repairDoneAt ? 'finished the repair' : 'is repairing'}`}
                         </span>
                       )}
                       <span className="flex items-center justify-between gap-2">

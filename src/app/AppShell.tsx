@@ -42,7 +42,7 @@ export function AppShell() {
     return () => window.removeEventListener('pointerdown', on);
   }, [sound]);
 
-  const canRaise = user.role === 'supervisor' || user.role === 'qc';
+  const canRaise = user.role === 'supervisor' || user.role === 'qc' || user.role === 'operator';
   const count =
     user.role === 'tester' ? pendingRequests(s).length : user.role === 'fitter' ? fitterJobs(s, user.id).length : myTickets(s, user, now).filter((t) => t.status !== 'fixed').length;
 

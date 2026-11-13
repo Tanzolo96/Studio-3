@@ -21,10 +21,11 @@ export const STATUS_WORD: Record<TicketStatus, string> = {
   closed: 'Closed',
 };
 
-export const SHIFTS: Record<ShiftId, { start: number; end: number }> = {
-  A: { start: 0, end: 8 },
-  B: { start: 8, end: 16 },
-  C: { start: 16, end: 24 },
+/** Mill shifts. C runs over midnight (22:00 to 06:00). */
+export const SHIFTS: Record<ShiftId, { start: number; end: number; hours: string }> = {
+  A: { start: 6, end: 14, hours: '06:00–14:00' },
+  B: { start: 14, end: 22, hours: '14:00–22:00' },
+  C: { start: 22, end: 6, hours: '22:00–06:00' },
 };
 
 export const CAUSES = [
@@ -35,6 +36,7 @@ export const CAUSES = [
   'Humidity out of range',
   'Roving lot changeover',
   'Other',
+  'No cause found',
 ] as const;
 
 export const RAISE_PROBLEMS = [
@@ -52,3 +54,31 @@ export const OUTCOME_WORD = {
   reprocess: 'Reprocess',
   downgrade: 'Sell as lower grade',
 } as const;
+
+/** Where each piece of a frame's data comes from. One list for every brand, so the dashboard never cares which make a frame is. */
+export interface DataSource {
+  what: string;
+  from: string;
+  how: 'Live feed' | 'Hourly export' | 'Typed on the phone' | 'Tapped on the phone' | 'Daily plan';
+}
+
+const STATUS_SOURCE: Record<string, DataSource> = {
+  'LMW LR 9 AX': { what: 'Running or stopped', from: 'Motor current clamp fitted by the mill (same kit on any brand)', how: 'Live feed' },
+  'Rieter G 38': { what: 'Running, speed, end breaks', from: 'Rieter SPIDERweb, read by a small translator', how: 'Hourly export' },
+  'Toyota RX 300': { what: 'Running or stopped', from: 'Supervisor taps doffing and stops (no data link on this make)', how: 'Tapped on the phone' },
+};
+
+export function frameSources(make: string): DataSource[] {
+  return [
+    STATUS_SOURCE[make] ?? { what: 'Running or stopped', from: 'Supervisor taps doffing and stops', how: 'Tapped on the phone' },
+    { what: 'Count, CSP, twist, CV', from: `${TEST.count.instrument}, ${TEST.csp.instrument}, ${TEST.twist.instrument}, ${TEST.cv.instrument}`, how: 'Typed on the phone' },
+    { what: 'Yarn evenness (early warning)', from: 'Uster Quantum 3 yarn clearer on the winding machine. Cops traced back to this frame by tube colour, about 1 to 3 hours after spinning', how: 'Live feed' },
+    { what: 'Fault causes', from: 'Picked by the supervisor when a fault is fixed', how: 'Tapped on the phone' },
+    { what: 'Lot and yarn count', from: 'Planning office', how: 'Daily plan' },
+  ];
+}
+
+export const MAKES = ['LMW LR 9 AX', 'Rieter G 38', 'Toyota RX 300'] as const;
+
+/** If a feed goes quiet, the routine lab tests every 8 hours still run, so no frame goes unchecked. */
+export const OFFLINE_NOTE = 'If a feed goes offline, the routine lab tests every 8 hours still run, so no frame goes unchecked.';

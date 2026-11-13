@@ -154,9 +154,9 @@ export function AccountPage() {
   const user = useUser('dash');
   const here = shiftAt(now);
   const [prefs, setPrefs] = useState({ sound: true, escalations: true, daily: false, weekly: true });
-  const roles = ['supervisor', 'tester', 'fitter', 'qc', 'plant'] as const;
+  const roles = ['operator', 'supervisor', 'tester', 'fitter', 'qc', 'plant'] as const;
   const shifts: ShiftId[] = ['A', 'B', 'C'];
-  const HOURS: Record<ShiftId, string> = { A: '00:00–08:00', B: '08:00–16:00', C: '16:00–24:00' };
+  const HOURS: Record<ShiftId, string> = { A: '06:00–14:00', B: '14:00–22:00', C: '22:00–06:00' };
   return (
     <div className="mx-auto flex max-w-[1180px] flex-col gap-5">
       <PageHead title="Account" sub="Your profile, the people on the floor and how you get notified" />

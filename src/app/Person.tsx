@@ -5,6 +5,7 @@ import { Button, Choice, cx } from '../ui/primitives';
 import { Sheet } from './Sheet';
 
 export const ROLE_WORD: Record<RoleId, string> = {
+  operator: 'Machine operator',
   supervisor: 'Shift supervisor',
   tester: 'Lab tester',
   fitter: 'Fitter',
@@ -12,7 +13,7 @@ export const ROLE_WORD: Record<RoleId, string> = {
   plant: 'Plant head',
 };
 
-const DEMO_PEOPLE = ['krish', 'rohan', 'suresh', 'priya', 'mohit'];
+const DEMO_PEOPLE = ['ramesh', 'krish', 'rohan', 'suresh', 'priya', 'mohit'];
 
 function PeoplePicker({ value, onPick }: { value: string; onPick: (id: string) => void }) {
   const s = useMillState();
@@ -26,6 +27,7 @@ function PeoplePicker({ value, onPick }: { value: string; onPick: (id: string) =
             <span className="t-small text-muted">
               {ROLE_WORD[u.role]}
               {u.shift !== 'G' ? ` · ${u.shift} shift` : ''}
+              {u.frames ? ` · frames ${u.frames[0]}–${u.frames[1]}` : ''}
             </span>
           </span>
         </Choice>

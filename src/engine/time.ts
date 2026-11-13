@@ -45,13 +45,18 @@ export const millHour = (t: number) => parts(t).h + parts(t).mi / 60;
 
 export function shiftAt(t: number): ShiftId {
   const h = parts(t).h;
-  return (Object.keys(SHIFTS) as ShiftId[]).find((s) => h >= SHIFTS[s].start && h < SHIFTS[s].end) ?? 'A';
+  return (Object.keys(SHIFTS) as ShiftId[]).find((s) => {
+    const { start, end } = SHIFTS[s];
+    return start < end ? h >= start && h < end : h >= start || h < end;
+  }) ?? 'A';
 }
 
 export function shiftEndsAt(t: number): number {
   const s = SHIFTS[shiftAt(t)];
   const dayStart = mill(millDayKey(t));
-  return dayStart + s.end * HOUR;
+  const h = parts(t).h;
+  // C shift runs over midnight: before midnight it ends tomorrow morning
+  return dayStart + s.end * HOUR + (s.start > s.end && h >= s.start ? DAY : 0);
 }
 
 /** "1:12" style clock for timers (m:ss under an hour, h:mm:ss above). */

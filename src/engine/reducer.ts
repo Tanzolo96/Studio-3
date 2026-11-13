@@ -20,6 +20,16 @@ export const userName = (s: MillState, id?: string) =>
   !id ? '' : id === 'system' ? 'System' : s.users.find((u) => u.id === id)?.name ?? id;
 export const frameWord = (frameId: string) => `Frame ${Number(frameId.slice(3))}`;
 
+/** Does this person look after this frame? People with no frame range cover the whole floor. */
+export const covers = (u: { frames?: [number, number] }, frameId: string) => {
+  if (!u.frames) return true;
+  const n = Number(frameId.slice(3));
+  return n >= u.frames[0] && n <= u.frames[1];
+};
+/** The supervisor who owns a frame's alerts at a given time. */
+export const supervisorFor = (s: MillState, frameId: string, at: number) =>
+  s.users.find((u) => u.role === 'supervisor' && u.shift === shiftAt(at) && covers(u, frameId));
+
 export function withinRule(rule: Rule | undefined, value: number) {
   if (!rule) return true;
   if (rule.min !== undefined && value < rule.min) return false;
@@ -66,7 +76,10 @@ function log(t: Ticket, at: number, kind: TicketEvent['kind'], text: string, by 
   t.events.push({ at, kind, text, by });
 }
 
-const supervisorWord = (at: number) => `${shiftAt(at)} shift supervisor`;
+const supervisorWord = (s: MillState, frameId: string, at: number) => {
+  const sup = supervisorFor(s, frameId, at);
+  return sup ? `${sup.name} (${shiftAt(at)} shift supervisor)` : `the ${shiftAt(at)} shift supervisor`;
+};
 
 // ---------- id helpers ----------
 function nextTicketId(s: MillState) {
@@ -119,9 +132,9 @@ function newTicket(
   return t;
 }
 
-function announce(t: Ticket, at: number) {
+function announce(s: MillState, t: Ticket, at: number) {
   if (t.severity === 'minor') log(t, at, 'alerted', 'Shown on the dashboard. Minor faults do not ring phones.');
-  else log(t, at, 'alerted', `Alert sent to the ${supervisorWord(at)}${t.severity === 'critical' ? ' with sound' : ''}`);
+  else log(t, at, 'alerted', `Alert sent to ${supervisorWord(s, t.frameId, at)}${t.severity === 'critical' ? ' with sound' : ''}`);
 }
 
 /** Critical fail: hold yarn since the last good test, flag sister frames, ask the lab to test them. */
@@ -188,11 +201,11 @@ export function apply(s: MillState, e: MillEvent): void {
       }
       const t = newTicket(s, e.at, e.frameId, 'drift', 'major', 'Winding drift: urgent test asked');
       t.readings.push({ test: 'cv', value: e.cvPct, max: product.cvWarnPct, at: e.at });
-      log(t, e.at, 'created', `Winding sensor on ${e.frameId} yarn: CV up ${e.cvPct.toFixed(1)}%, past the ${product.cvWarnPct.toFixed(1)}% warning line`);
+      log(t, e.at, 'created', `Winding machine yarn clearer: cops from ${e.frameId} (traced by tube colour) show CV up ${e.cvPct.toFixed(1)}%, past the ${product.cvWarnPct.toFixed(1)}% warning line`);
       addRequest(s, { at: e.at, frameId: e.frameId, test: 'count', reason: 'drift', urgent: true, dueAt: e.at + 15 * MIN, ticketId: t.id });
       log(t, e.at, 'contained', 'Urgent count test requested from the lab');
       log(t, e.at, 'contained', 'No yarn held until the test result');
-      announce(t, e.at);
+      announce(s, t, e.at);
       return;
     }
 
@@ -278,7 +291,7 @@ export function apply(s: MillState, e: MillEvent): void {
         log(parent, e.at, 'note', `${frameWord(e.frameId)} sister check failed: ${withUnit(e.test, e.value)}. Opened ${t.id}.`, e.by);
       }
       if (severity === 'critical') contain(s, t, e.at, e.test);
-      announce(t, e.at);
+      announce(s, t, e.at);
       return;
     }
 
@@ -368,7 +381,12 @@ export function apply(s: MillState, e: MillEvent): void {
       t.cause = e.cause;
       t.note = e.note;
       t.photo = e.photo;
+      t.waitingPart = undefined;
       log(t, e.at, 'fixed', `Fixed. Cause: ${e.cause.toLowerCase()}${e.note ? `. ${e.note}` : ''}`, e.by);
+      if (e.cause === 'No cause found') {
+        t.rca = true;
+        log(t, e.at, 'note', 'Root-cause check opened. The frame is watched for a repeat of this fault.');
+      }
       const h = t.holdId ? s.holds.find((x) => x.id === t.holdId) : undefined;
       if (h && !h.to) {
         h.to = e.at;
@@ -391,7 +409,31 @@ export function apply(s: MillState, e: MillEvent): void {
         t.seenAt = e.at;
         t.seenBy = e.by;
         log(t, e.at, 'seen', 'Raised by the supervisor, so it starts as Seen', e.by);
-      } else announce(t, e.at);
+      } else announce(s, t, e.at);
+      return;
+    }
+
+    case 'ticket/waitPart': {
+      const t = s.tickets.find((x) => x.id === e.ticketId);
+      if (!t || t.status === 'closed' || t.status === 'fixed' || !e.part.trim()) return;
+      if (!t.seenAt) {
+        t.seenAt = e.at;
+        t.seenBy = e.by;
+      }
+      if (t.status !== 'working') {
+        t.status = 'working';
+        t.workingAt = e.at;
+      }
+      t.waitingPart = e.part.trim();
+      log(t, e.at, 'waiting_part', `Waiting for a spare part: ${t.waitingPart}`, e.by);
+      return;
+    }
+
+    case 'ticket/partArrived': {
+      const t = s.tickets.find((x) => x.id === e.ticketId);
+      if (!t || !t.waitingPart) return;
+      log(t, e.at, 'note', `Spare part arrived: ${t.waitingPart}`, e.by);
+      t.waitingPart = undefined;
       return;
     }
 

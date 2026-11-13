@@ -1,7 +1,7 @@
 import type { Hold, MillState, Ticket, TicketEvent, User } from './types';
 import { HOUR, MIN, hhmm, sameMillDay, shiftAt } from './time';
 import { SEVERITY } from './vocab';
-import { holdKg, roundKg } from './reducer';
+import { covers, holdKg, roundKg } from './reducer';
 
 export type TimerState = 'ok' | 'warn' | 'over';
 
@@ -49,7 +49,7 @@ export function takeoversFor(s: MillState, user: User | undefined, now: number):
     .filter((t) => t.status === 'open' && t.severity !== 'minor')
     .filter((t) => {
       const { level } = escalation(t, now);
-      if (user.role === 'supervisor') return user.shift === shiftAt(now);
+      if (user.role === 'supervisor') return user.shift === shiftAt(now) && covers(user, t.frameId);
       if (user.role === 'qc') return level >= 1;
       if (user.role === 'plant') return level >= 2;
       return false;
@@ -61,7 +61,8 @@ export function takeoversFor(s: MillState, user: User | undefined, now: number):
 export function myTickets(s: MillState, user: User, now: number): Ticket[] {
   const live = s.tickets.filter(isLive);
   let mine: Ticket[];
-  if (user.role === 'supervisor') mine = user.shift === shiftAt(now) ? live : live.filter((t) => t.seenBy === user.id);
+  if (user.role === 'supervisor') mine = live.filter((t) => (user.shift === shiftAt(now) && covers(user, t.frameId)) || t.seenBy === user.id);
+  else if (user.role === 'operator') mine = live.filter((t) => covers(user, t.frameId));
   else if (user.role === 'fitter') mine = live.filter((t) => t.fitterId === user.id);
   else if (user.role === 'qc') mine = live.filter((t) => t.severity !== 'minor' && (isEscalated(t, now) || t.holdId));
   else if (user.role === 'plant') mine = live.filter((t) => escalation(t, now).level >= 2);
@@ -69,10 +70,23 @@ export function myTickets(s: MillState, user: User, now: number): Ticket[] {
   return mine.sort(bySeverityThenAge);
 }
 
+/** Why a test is asked, most risky first: a drifting frame, then sister frames, then re-tests. */
+const REASON_RANK = { drift: 0, manual: 1, sister: 2, retest: 3 } as const;
+
+/** The lab's queue, ranked by risk so the tester knows whose yarn to test first. */
 export function pendingRequests(s: MillState) {
+  const sev = (ticketId?: string) => {
+    const t = ticketId ? s.tickets.find((x) => x.id === ticketId) : undefined;
+    return t ? SEVERITY[t.severity].rank : 3;
+  };
   return s.requests
     .filter((r) => r.status === 'pending')
-    .sort((a, b) => Number(b.urgent) - Number(a.urgent) || a.dueAt - b.dueAt);
+    .sort((a, b) => Number(b.urgent) - Number(a.urgent) || sev(a.ticketId) - sev(b.ticketId) || REASON_RANK[a.reason] - REASON_RANK[b.reason] || a.dueAt - b.dueAt);
+}
+
+/** The lab is behind when three or more urgent tests are past due. The QC manager is told. */
+export function labBacklog(s: MillState, now: number) {
+  return s.requests.filter((r) => r.status === 'pending' && r.urgent && r.dueAt < now);
 }
 
 export function fitterJobs(s: MillState, userId: string) {

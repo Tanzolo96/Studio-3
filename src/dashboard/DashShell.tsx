@@ -213,7 +213,7 @@ function TopBar({ live, urgent }: { live: number; urgent: boolean }) {
   };
   const iconBtn = 'grid size-10 place-items-center rounded-full text-muted hover:bg-raised hover:text-ink';
   return (
-    <div className="flex h-12 items-center gap-3 px-1">
+    <div className="no-print flex h-12 items-center gap-3 px-1">
       <button type="button" aria-label="Back" onClick={() => nav(-1)} className={iconBtn}>
         <ArrowLeft size={18} />
       </button>

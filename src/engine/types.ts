@@ -3,7 +3,7 @@
 export type Severity = 'critical' | 'major' | 'minor';
 export type TestKind = 'count' | 'csp' | 'twist' | 'cv';
 export type ShiftId = 'A' | 'B' | 'C';
-export type RoleId = 'supervisor' | 'tester' | 'fitter' | 'qc' | 'plant';
+export type RoleId = 'operator' | 'supervisor' | 'tester' | 'fitter' | 'qc' | 'plant';
 
 export interface User {
   id: string;
@@ -11,6 +11,8 @@ export interface User {
   role: RoleId;
   shift: ShiftId | 'G'; // G = general shift (office hours)
   phone?: string;
+  /** Frames this person looks after (by number, inclusive). Unset = the whole floor. */
+  frames?: [number, number];
 }
 
 export interface Product {
@@ -33,6 +35,7 @@ export interface Frame {
   num: number;
   lotId: string;
   stopped?: string; // reason, e.g. "Doffing"
+  make: string; // machine brand and model, e.g. "LMW LR 9 AX"
 }
 
 export interface Rule {
@@ -107,6 +110,7 @@ export type TicketEventKind =
   | 'escalated'
   | 'sample_error'
   | 'handover'
+  | 'waiting_part'
   | 'note';
 
 export interface TicketEvent {
@@ -149,6 +153,10 @@ export interface Ticket {
   sisterFrames: string[];
   raisedBy?: string;
   handover?: string;
+  /** Fixed and waiting for a spare part: escalation does not apply, the board shows the wait. */
+  waitingPart?: string;
+  /** Fixed without a known cause: a root-cause check is open and repeats are watched. */
+  rca?: boolean;
   events: TicketEvent[];
 }
 
@@ -217,6 +225,8 @@ export type MillEvent = Base &
     | { type: 'ticket/fixed'; ticketId: string; cause: string; note?: string; photo?: string }
     | { type: 'ticket/raise'; frameId: string; problem: string; severity: Severity; note?: string; photo?: string }
     | { type: 'ticket/handover'; ticketId: string; note: string }
+    | { type: 'ticket/waitPart'; ticketId: string; part: string }
+    | { type: 'ticket/partArrived'; ticketId: string }
     | { type: 'test/ask'; ticketId: string; test: TestKind }
     | { type: 'rule/set'; ruleId: string; min?: number; max?: number; severity: Severity; escalateQcMins: number; escalatePhMins: number }
     | { type: 'hold/retest'; holdId: string }

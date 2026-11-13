@@ -7,7 +7,7 @@ import { ROLE_WORD } from '../app/Person';
 import { appRoutes, dashRoutes } from '../routes';
 import { InDemo } from '../dashboard/DashShell';
 
-const PEOPLE = ['krish', 'rohan', 'suresh', 'priya', 'mohit'];
+const PEOPLE = ['ramesh', 'krish', 'rohan', 'suresh', 'priya', 'mohit'];
 
 /** One screen for the jury: dashboard on the left, a phone on the right, same live data. */
 export function DemoPage() {

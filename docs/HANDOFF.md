@@ -65,7 +65,7 @@ Machines and lab instruments are **simulated**. Everything else runs for real in
 | After Seen | No escalation after Seen in v1; elapsed time is shown | Brief only times Seen |
 | AI insights | Rules over the real data, worded from templates, labelled AI with confidence and evidence. No live LLM | Stable in front of a jury |
 | Language | English v1, all words in code so Hindi/Gujarati can be added later | |
-| Login | No real login. A person switcher (Krish, Rohan, Suresh, Priya, Mohit); permissions still apply | |
+| Login | No real login. A person switcher (Ramesh, Krish, Rohan, Suresh, Priya, Mohit); permissions still apply | |
 | Monthly report export | Planned via browser Save as PDF in the Vercel build. The claude.ai page cannot print, so it needs another route there | |
 
 **Changes after user review (keep these):**
@@ -78,13 +78,16 @@ Machines and lab instruments are **simulated**. Everything else runs for real in
 
 | Role | Person in the seed | Uses | Can do |
 | --- | --- | --- | --- |
-| Shift supervisor | Krish Patel (B), Vikram Singh (A), Anil Rathod (C) | App (main), dashboard (view) | Seen, Working on it, send to fitter, Mark fixed with cause, hand over, raise ticket |
-| Lab tester | Rohan Desai (B), Meena Joshi (A), Deepak Rao (C) | App | Urgent test requests, enter results, mark sample error |
-| Fitter | Suresh Kumar, Imran Shaikh (B), Ramesh Yadav (A), Harish Mehta (C) | App | Repair jobs, mark repair done |
+| Machine operator | Ramesh Yadav (A, frames 1–12) | App | Sees his frames and any fault on them (read-only), raises a ticket. His supervisor owns the alert |
+| Shift supervisor | Krish Patel (A, frames 1–12), Farhan Qureshi (A, frames 13–24), Vikram Singh (B), Anil Rathod (C) | App (main), dashboard (view) | Seen, Working on it, send to fitter, waiting for a spare part, Mark fixed with cause, hand over, raise ticket |
+| Lab tester | Rohan Desai (A), Meena Joshi (B), Deepak Rao (C) | App | Urgent test requests ranked by risk, enter results, mark sample error |
+| Fitter | Suresh Kumar, Imran Shaikh (A), Raju Patil (B), Harish Mehta (C) | App | Repair jobs, mark repair done |
 | QC manager | Priya Shah | Dashboard + app for escalations | Only role that edits Rules and decides on held yarn. Escalation at 10 min |
 | Plant head | Mohit Maheshwari | Dashboard | Sees everything, approves overrides, final escalation at 20 min |
 
-Shifts: **A 00:00–08:00, B 08:00–16:00, C 16:00–24:00** (matches the Figma examples, "B shift · 10:20"). Alerts go to the role on shift, not to names.
+Shifts: **A 06:00–14:00, B 14:00–22:00, C 22:00–06:00** (usual Indian mill shifts; matches the posters, where Krish is on A shift with 12 frames). Alerts go to the supervisor on shift who looks after that frame. People with no frame range cover the whole floor.
+
+Matching the posters (Nov 2026 check): one kg baseline everywhere, **250 kg of bad yarn per frame per incident** before QC Alert (middle of the plant head's 200–300 kg). The app reports **yarn held**, counted from the last good test, which is more than the bad yarn made because nobody knows the minute a fault started. The winding sensor is the **yarn clearer on the winding machine**; cops are traced to their ring frame by tube colour, so its warning comes 1 to 3 hours after spinning, not minutes. The breakdown watch shows **levels (High, Watch, Low) and an action**, not percentages, until months of recorded fixes can test them. Each frame has a **make** (LMW, Rieter, Toyota) and a "where the data comes from" list, the same for every brand.
 
 ---
 
@@ -121,7 +124,7 @@ Hold: `on_hold → released | reprocess | downgrade`. A release without a passed
 - Products: 30s combed Buyer B (29.4–30.6 Ne, 30 kg/h), 40s combed Buyer A (39.2–40.8), 20s carded Buyer C (19.6–20.4), 60s compact Buyer A (59–61).
 - Lots: RF-12, 13, 14 run Lot 2417, so a fail on RF-12 flags 13 and 14 (as in the brief). RF-04 is stopped for doffing.
 - About 5,000 routine results from 01 Oct to 05 Nov 2026, and 31 historic tickets **replayed through the real reducer**, including RF-12 failing count 5 times in October (4 of them within 2 h of a roving change) for the AI insight.
-- Demo starts **Thu 05 Nov 2026, 09:40, B shift**, calm, with 2 old lots on hold (RF-17, RF-06).
+- Demo starts **Thu 05 Nov 2026, 09:40, A shift**, calm, with 2 old lots on hold (RF-17, RF-06).
 
 ### Time
 All times are mill time (IST). The clock is an event (`clock/set`) with a speed: pause, 1×, 10×, 60×, and skip. Everyone computes `now` from it.
@@ -255,7 +258,8 @@ Legend: ✅ done · 🟡 partly done · ⬜ not started. Add an owner name when 
 - [x] **Monthly report**: summary (alerts, kg held, kg saved), response times by shift, top causes, worst frames, false alarms counted. Export as PDF (print stylesheet on Vercel; the claude.ai page cannot print).
 - [x] **Rules** (QC manager edits, others read-only), 6 steps: 1 product + test, 2 lower/upper limit, 3 severity, 4 who gets it + response times, 5 **preview impact on last month** ("would have raised 4 more alerts": re-run the rule over seeded results), 6 save, logged for everyone. New event `rule/save`. Plus sensor warning thresholds per product.
 - [x] **Account**: profile, people and roles, shifts and roster, notifications.
-- [ ] **Shift change**: auto-move open tickets to the next shift supervisor at 08/16/24 if not handed over (derive from time like escalation).
+- [ ] **Shift change**: auto-move open tickets to the next shift supervisor at 06/14/22 if not handed over (derive from time like escalation).
+- [x] **Poster check fixes**: machine operator role and phone view (Ramesh), supervisors own a frame range, shifts A 06–14 / B 14–22 / C 22–06, data sources per frame and brand on Machines and frame detail, breakdown watch as levels, one 250 kg baseline with "yarn held" labels, spare-part wait (`ticket/waitPart`, `ticket/partArrived`), "No cause found" opens a root-cause check, lab queue ranked by risk with a late-tests warning, Monthly report "Download PDF".
 - [x] Bring **Tickets** and **Held yarn** pages to the same visual style as the new Overview (panels, kg bars, friendlier cards).
 - [ ] App: friendlier Active issues cards (frame number large, plain issue line), matching the new ticket screen.
 

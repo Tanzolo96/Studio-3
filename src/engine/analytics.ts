@@ -5,7 +5,7 @@ import { DAY, mill, millDayKey, millHour, shiftAt } from './time';
 import { frameView, median, type FrameStateKind } from './selectors';
 import { holdKg } from './reducer';
 
-/** Before QC Alert: about 250 kg of bad yarn per frame per incident (plant head, validated). */
+/** Before QC Alert: about 250 kg of bad yarn per frame per incident, the middle of the plant head's 200 to 300 kg. Every screen and poster uses this one baseline. */
 export const BASELINE_KG = 250;
 
 const dayStart = (t: number) => mill(millDayKey(t));

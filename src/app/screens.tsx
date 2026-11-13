@@ -3,8 +3,8 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Camera, Checkmark, ChevronRight } from '@carbon/icons-react';
 import type { MillState, Severity, Ticket, User } from '../engine/types';
 import { useDispatch, useMill, useMillState, useNow, useUser } from '../store/store';
-import { escalation, fitterJobs, median, myTickets, pendingRequests, seenTimes, timeline } from '../engine/selectors';
-import { failWord, frameWord, holdKg, lotOf, productOfFrame, roundKg, ruleFor, userName, withinRule, withUnit } from '../engine/reducer';
+import { escalation, fitterJobs, frameView, labBacklog, median, myTickets, pendingRequests, seenTimes, timeline } from '../engine/selectors';
+import { covers, failWord, frameWord, holdKg, lotOf, productOfFrame, roundKg, ruleFor, supervisorFor, userName, withinRule, withUnit } from '../engine/reducer';
 import { CAUSES, RAISE_PROBLEMS, TEST } from '../engine/vocab';
 import { ago, dayMonth, hhmm, monthName, shiftAt, timer } from '../engine/time';
 import { Button, Choice, cx, Empty, Field, SeverityBadge, SeverityShape, TextField } from '../ui/primitives';
@@ -34,7 +34,50 @@ export function AlertsScreen() {
   const user = useUser('app');
   if (user.role === 'tester') return <TestRequests user={user} />;
   if (user.role === 'fitter') return <RepairJobs user={user} />;
+  if (user.role === 'operator') return <OperatorHome user={user} />;
   return <MyTickets user={user} />;
+}
+
+/** The machine operator: his own frames at a glance, and any fault on them. He reports, the supervisor owns the fix. */
+function OperatorHome({ user }: { user: User }) {
+  const s = useMillState();
+  const now = useNow();
+  const nav = useNavigate();
+  const mine = s.frames.filter((f) => covers(user, f.id));
+  const live = myTickets(s, user, now).filter((t) => t.status !== 'fixed');
+  const sup = mine[0] ? supervisorFor(s, mine[0].id, now) : undefined;
+  const DOT: Record<string, string> = { running: 'bg-ok', warning: 'bg-major-fill', fault: 'bg-critical', held: 'bg-brand', stopped: 'bg-[var(--line-strong)]' };
+  return (
+    <Page title="My frames" sub={`${user.shift} shift · ${first(user)} · frames ${user.frames?.[0]}–${user.frames?.[1]}`}>
+      <ul className="grid grid-cols-3 gap-2" aria-label="My frames">
+        {mine.map((f) => {
+          const v = frameView(s, f.id, now);
+          return (
+            <li key={f.id} className={cx('rounded-[10px] border bg-raised p-2.5', v.kind === 'running' ? 'border-line' : v.kind === 'fault' ? 'border-critical' : v.kind === 'stopped' ? 'border-dashed border-line-strong' : v.kind === 'held' ? 'border-brand' : 'border-major-fill')}>
+              <span className="flex items-center justify-between">
+                <span className="t-body-strong">{f.num}</span>
+                <span className={cx('size-2.5 rounded-full', DOT[v.kind])} aria-hidden />
+              </span>
+              <span className="t-small block truncate text-muted">{v.short?.label ?? v.label}</span>
+            </li>
+          );
+        })}
+      </ul>
+      <p className="t-small-strong mt-6 mb-2 text-muted">{live.length ? `${live.length} fault${live.length === 1 ? '' : 's'} on your frames` : 'No faults on your frames'}</p>
+      {live.length ? (
+        <div className="flex flex-col gap-3">
+          {live.map((t) => (
+            <TicketCard key={t.id} s={s} t={t} now={now} onOpen={() => nav(`/app/ticket/${t.id}`)} />
+          ))}
+        </div>
+      ) : (
+        <p className="t-small text-muted">If a test fails on one of your frames it shows here, so you know before anyone asks.</p>
+      )}
+      <p className="t-small mt-6 rounded-[10px] bg-sunken px-3 py-2.5 text-ink">
+        {sup ? `${sup.name} (supervisor) owns these alerts and gets them with sound.` : 'Your supervisor owns these alerts.'} Saw something wrong? Use Raise ticket.
+      </p>
+    </Page>
+  );
 }
 
 function MyTickets({ user }: { user: User }) {
@@ -87,15 +130,20 @@ function TestRequests({ user }: { user: User }) {
   const s = useMillState();
   const now = useNow();
   const list = pendingRequests(s);
+  const behind = labBacklog(s, now).length;
   return (
-    <Page title="Test requests" sub={`${user.shift} shift lab · ${first(user)} · ${list.length} waiting`}>
+    <Page title="Test requests" sub={`${user.shift} shift lab · ${first(user)} · ${list.length} waiting · riskiest first`}>
+      {behind >= 3 && (
+        <p className="t-small-strong mb-3 rounded-[10px] bg-major-soft px-3 py-2.5 text-major">{behind} urgent tests are late. The QC manager has been told.</p>
+      )}
       {list.length === 0 ? (
         <Empty icon={<Checkmark size={32} />} title="No urgent tests" body="Routine tests continue every 8 hours. Urgent requests appear here first." />
       ) : (
         <ul className="flex flex-col gap-3">
-          {list.map((r) => {
+          {list.map((r, i) => {
             const product = productOfFrame(s, r.frameId);
             const late = now > r.dueAt;
+            const sev = r.ticketId ? s.tickets.find((x) => x.id === r.ticketId)?.severity : undefined;
             return (
               <li key={r.id}>
                 <Link
@@ -104,9 +152,10 @@ function TestRequests({ user }: { user: User }) {
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
+                      <span className="t-data grid size-6 place-items-center rounded-full bg-sunken text-[12px]">{i + 1}</span>
                       {r.urgent && (
-                        <span className="t-label inline-flex h-6 items-center gap-1.5 rounded-[6px] bg-major-soft px-2 text-major">
-                          <SeverityShape level="major" /> Urgent
+                        <span className={cx('t-label inline-flex h-6 items-center gap-1.5 rounded-[6px] px-2', sev === 'critical' ? 'bg-critical-soft text-critical' : 'bg-major-soft text-major')}>
+                          <SeverityShape level={sev === 'critical' ? 'critical' : 'major'} /> Urgent
                         </span>
                       )}
                       <span className="t-small text-muted">{REASON[r.reason]}</span>
@@ -178,7 +227,7 @@ export function TicketScreen() {
 
 function TicketDetail({ s, t, now, user }: { s: MillState; t: Ticket; now: number; user: User }) {
   const dispatch = useDispatch();
-  const [sheet, setSheet] = useState<'fitter' | 'fixed' | 'handover' | null>(null);
+  const [sheet, setSheet] = useState<'fitter' | 'fixed' | 'handover' | 'part' | null>(null);
   const esc = escalation(t, now);
   const reading = t.readings.at(-1);
   const rule = reading && t.kind === 'test_fail' ? ruleFor(s, t.productId, reading.test) : undefined;
@@ -207,6 +256,20 @@ function TicketDetail({ s, t, now, user }: { s: MillState; t: Ticket; now: numbe
       <div className="flex flex-col gap-2">
         <Button size="lg" block onClick={() => setSheet('fitter')}>
           Send to a fitter
+        </Button>
+        <Button size="lg" block variant="secondary" onClick={() => setSheet('fixed')}>
+          Mark fixed
+        </Button>
+      </div>
+    );
+  if (canAct && t.waitingPart && t.status === 'working')
+    action = (
+      <div className="flex flex-col gap-2">
+        <p className="t-small rounded-[10px] bg-major-soft px-3 py-2.5 text-ink">
+          <span className="t-small-strong">Waiting for a spare part:</span> {t.waitingPart}
+        </p>
+        <Button size="lg" block variant="secondary" onClick={() => dispatch({ type: 'ticket/partArrived', ticketId: t.id, by: user.id })}>
+          Part arrived
         </Button>
         <Button size="lg" block variant="secondary" onClick={() => setSheet('fixed')}>
           Mark fixed
@@ -393,15 +456,29 @@ function TicketDetail({ s, t, now, user }: { s: MillState; t: Ticket; now: numbe
         </div>
       )}
 
+      {t.rca && (
+        <p className="t-small mt-4 rounded-[10px] bg-sunken px-3 py-2.5 text-ink">
+          <span className="t-small-strong">Root-cause check open.</span> No cause was found, so this frame is watched for a repeat.
+        </p>
+      )}
+
       {canAct && !resolved && (
-        <Button variant="ghost" block className="mt-4" onClick={() => setSheet('handover')}>
-          Hand over to next shift
-        </Button>
+        <div className="mt-4 flex flex-col gap-1">
+          {!t.waitingPart && t.status !== 'open' && (
+            <Button variant="ghost" block onClick={() => setSheet('part')}>
+              Waiting for a spare part
+            </Button>
+          )}
+          <Button variant="ghost" block onClick={() => setSheet('handover')}>
+            Hand over to next shift
+          </Button>
+        </div>
       )}
 
       {sheet === 'fitter' && <FitterSheet t={t} user={user} onClose={() => setSheet(null)} />}
       {sheet === 'fixed' && <FixedSheet t={t} user={user} onClose={() => setSheet(null)} />}
       {sheet === 'handover' && <HandoverSheet t={t} user={user} onClose={() => setSheet(null)} />}
+      {sheet === 'part' && <PartSheet t={t} user={user} onClose={() => setSheet(null)} />}
     </Page>
   );
 }
@@ -505,6 +582,37 @@ function FixedSheet({ t, user, onClose }: { t: Ticket; user: User; onClose: () =
         Mark fixed
       </Button>
       {!cause && <p className="t-small mt-2 text-center text-muted">Pick a cause to continue</p>}
+    </Sheet>
+  );
+}
+
+const PARTS_LIST = ['Top roller cots', 'Aprons', 'Travellers', 'Spindle bearing', 'Drafting gear', 'Something else'];
+
+function PartSheet({ t, user, onClose }: { t: Ticket; user: User; onClose: () => void }) {
+  const dispatch = useDispatch();
+  const [part, setPart] = useState<string>();
+  return (
+    <Sheet title="Waiting for a spare part" onClose={onClose}>
+      <p className="t-small text-muted">The ticket stays open and the dashboard shows the wait, so nobody chases you for it. Tap Part arrived when it comes.</p>
+      <div role="radiogroup" aria-label="Part" className="mt-4 grid grid-cols-2 gap-2">
+        {PARTS_LIST.map((p) => (
+          <Choice key={p} selected={part === p} onClick={() => setPart(p)}>
+            {p}
+          </Choice>
+        ))}
+      </div>
+      <Button
+        size="lg"
+        block
+        className="mt-5"
+        disabled={!part}
+        onClick={() => {
+          dispatch({ type: 'ticket/waitPart', ticketId: t.id, part: part!, by: user.id });
+          onClose();
+        }}
+      >
+        Mark as waiting
+      </Button>
     </Sheet>
   );
 }

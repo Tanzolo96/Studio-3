@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { apply, holdKg, roundKg } from '../src/engine/reducer';
 import { DEMO_START, seedState } from '../src/engine/seed';
-import { escalation, frameView, heldKg, openHolds, takeoversFor, timeline } from '../src/engine/selectors';
+import { escalation, frameView, heldKg, myTickets, openHolds, pendingRequests, takeoversFor, timeline } from '../src/engine/selectors';
 import { MIN } from '../src/engine/time';
 import { alertHeat } from '../src/engine/analytics';
 import { predictAll, predictFrame } from '../src/engine/predict';
@@ -175,5 +175,54 @@ describe('rules', () => {
     expect(r.updatedBy).toBe('priya');
     run(s, DEMO_START + MIN, { type: 'rule/set', ruleId: r.id, min: 30, max: 20, severity: 'minor', escalateQcMins: 5, escalatePhMins: 9, by: 'priya' } as never);
     expect(r.min).toBe(10);
+  });
+});
+
+describe('who owns an alert', () => {
+  it('routes a frame to the supervisor who looks after it, and the operator sees his frames', () => {
+    const s = seedState();
+    run(s, DEMO_START, { type: 'result/enter', frameId: 'RF-12', test: 'count', value: 28.9, by: 'rohan' });
+    const t = s.tickets.at(-1)!;
+    expect(t.events.some((e) => e.text.includes('Krish Patel'))).toBe(true);
+    expect(takeoversFor(s, user(s, 'krish'), DEMO_START).map((x) => x.id)).toContain(t.id);
+    expect(takeoversFor(s, user(s, 'farhan'), DEMO_START).map((x) => x.id)).not.toContain(t.id);
+    expect(myTickets(s, user(s, 'ramesh'), DEMO_START).map((x) => x.id)).toContain(t.id);
+  });
+  it('a ticket raised by the operator alerts his supervisor', () => {
+    const s = seedState();
+    run(s, DEMO_START, { type: 'ticket/raise', frameId: 'RF-07', problem: 'Ends breaking often', severity: 'major', by: 'ramesh' });
+    const t = s.tickets.at(-1)!;
+    expect(t.status).toBe('open');
+    expect(t.raisedBy).toBe('ramesh');
+    expect(takeoversFor(s, user(s, 'krish'), DEMO_START).map((x) => x.id)).toContain(t.id);
+  });
+});
+
+describe('exceptions', () => {
+  it('waiting for a spare part is logged and cleared when it arrives or the frame is fixed', () => {
+    const s = seedState();
+    run(s, DEMO_START, { type: 'result/enter', frameId: 'RF-12', test: 'count', value: 28.9, by: 'rohan' });
+    const t = s.tickets.at(-1)!;
+    run(s, DEMO_START + 3 * MIN, { type: 'ticket/waitPart', ticketId: t.id, part: 'Top roller cots', by: 'krish' });
+    expect(t.waitingPart).toBe('Top roller cots');
+    expect(t.status).toBe('working');
+    expect(escalation(t, DEMO_START + 60 * MIN).level).toBe(0);
+    run(s, DEMO_START + 40 * MIN, { type: 'ticket/partArrived', ticketId: t.id, by: 'krish' });
+    expect(t.waitingPart).toBeUndefined();
+  });
+  it('fixed with no cause found opens a root-cause check', () => {
+    const s = seedState();
+    run(s, DEMO_START, { type: 'result/enter', frameId: 'RF-12', test: 'count', value: 28.9, by: 'rohan' });
+    const t = s.tickets.at(-1)!;
+    run(s, DEMO_START + 30 * MIN, { type: 'ticket/fixed', ticketId: t.id, cause: 'No cause found', by: 'krish' });
+    expect(t.rca).toBe(true);
+  });
+  it('the lab queue puts the riskiest test first', () => {
+    const s = seedState();
+    run(s, DEMO_START, { type: 'result/enter', frameId: 'RF-12', test: 'count', value: 28.9, by: 'rohan' });
+    run(s, DEMO_START + MIN, { type: 'sim/drift', frameId: 'RF-20', cvPct: 2.4, by: 'system' });
+    const q = pendingRequests(s);
+    expect(q[0].reason).toBe('sister');
+    expect(s.tickets.find((x) => x.id === q[0].ticketId)!.severity).toBe('critical');
   });
 });

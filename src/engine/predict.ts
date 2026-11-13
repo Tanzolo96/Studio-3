@@ -1,4 +1,4 @@
-// "AI" breakdown forecast for one ring frame. Rules, not a trained model: it reads the frame's
+// Breakdown watch for one ring frame (shown as "AI insights"). Rules, not a trained model: it reads the frame's
 // fault history (cause recorded at fix time), its sister frames on the same lot, how close the
 // latest lab readings sit to their limits, and the winding-sensor drift, then ranks the machine
 // parts most likely to cause the next fault. Every number comes with the evidence behind it.
@@ -23,7 +23,9 @@ export interface PartRisk {
   part: Part;
   name: string;
   how: string;
+  /** Internal score, used to rank parts. Not shown as a percentage: it is not a measured probability. */
   pct: number;
+  level: 'low' | 'watch' | 'high';
   evidence: string[];
 }
 
@@ -41,6 +43,7 @@ export interface FramePrediction {
   frameId: string;
   risk: number;
   level: 'low' | 'watch' | 'high';
+  /** What to do, in floor words, instead of a made-up deadline. */
   horizon: string;
   parts: PartRisk[];
   readings: ReadingMargin[];
@@ -84,7 +87,7 @@ export function predictFrame(s: MillState, frameId: string, now: number): FrameP
     const mine = withCause.filter((t) => def.causes.includes(t.cause!)).length;
     if (mine) {
       score += mine * 16;
-      evidence.push(mine === withCause.length ? `${mine === 1 ? 'The last fixed fault' : `All ${mine} fixed faults`} on ${frameId} ${mine === 1 ? 'was' : 'were'} ${def.causes[0].toLowerCase()}` : `${mine} of the last ${withCause.length} fixed faults on ${frameId} were ${def.causes[0].toLowerCase()}`);
+      evidence.push(mine === withCause.length ? `${mine === 1 ? 'The last fixed fault' : `All ${mine} fixed faults`} on ${frameId} ${mine === 1 ? 'was' : 'were'} ${def.causes[0].toLowerCase()}` : `${mine} of the last ${withCause.length} fixed faults on ${frameId} ${mine === 1 ? 'was' : 'were'} ${def.causes[0].toLowerCase()}`);
     }
     const mate = mateTickets.filter((t) => t.cause && def.causes.includes(t.cause)).length;
     if (mate) {
@@ -106,14 +109,15 @@ export function predictFrame(s: MillState, frameId: string, now: number): FrameP
       evidence.push('There is an open ticket on this part right now');
     }
     if (!evidence.length) evidence.push('No warning signs in the last 90 days');
-    return { part, name: def.name, how: def.how, pct: Math.min(88, Math.round(score)), evidence };
+    const pct = Math.min(88, Math.round(score));
+    return { part, name: def.name, how: def.how, pct, level: pct >= 50 ? 'high' : pct >= 25 ? 'watch' : 'low', evidence };
   });
   parts.sort((a, b) => b.pct - a.pct);
 
   // the weakest part sets the risk; the next one adds a little
   const risk = Math.min(95, Math.round(parts[0].pct + (parts[1]?.pct ?? 0) * 0.2));
   const level = risk >= 60 ? 'high' : risk >= 35 ? 'watch' : 'low';
-  const horizon = level === 'high' ? 'Likely within 3 days' : level === 'watch' ? 'Possible within 2 weeks' : 'No sign of a fault soon';
+  const horizon = level === 'high' ? `Check the ${parts[0].name.toLowerCase()} this shift` : level === 'watch' ? `Check the ${parts[0].name.toLowerCase()} this week` : 'No action needed';
   const health = Math.max(5, 100 - risk);
   return { frameId, risk, level, horizon, parts, readings, faults90: own.length, health };
 }

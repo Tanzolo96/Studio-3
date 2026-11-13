@@ -119,3 +119,10 @@ p { margin: 0; text-wrap: pretty; }
 
 /* Jury demo: the phone sits under the person switcher, so it gets a little less height. */
 .demo-phone .phone { max-height: calc(100dvh - 104px); }
+
+/* Monthly report "Download PDF": print only the page content */
+@media print {
+  nav, aside, header[role='banner'], .no-print { display: none !important; }
+  main { overflow: visible !important; }
+  body { background: #fff; }
+}
