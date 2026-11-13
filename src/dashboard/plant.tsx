@@ -1,22 +1,22 @@
-// Plant head (Mohit) on the dashboard: the decisions only he makes first, then a short briefing,
-// then the monthly review. Priya's and Krish's screens are elsewhere and untouched.
+// Plant head (Mohit) on the dashboard: information only (no decisions here): the top alerts of the last week,
+// who answers how fast, and what is live now; then the monthly review. Priya's and Krish's screens are elsewhere and untouched.
 
 import { useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Phone } from '@carbon/icons-react';
+import { ArrowLeft, ArrowRight } from '@carbon/icons-react';
 import type { MillState, Ticket } from '../engine/types';
 import { useDispatch, useMillState, useNow, useUser } from '../store/store';
 import { escalation } from '../engine/selectors';
 import { frameWord, roundKg, limitFor, userName } from '../engine/reducer';
 import { BASELINE_KG } from '../engine/analytics';
 import { insights } from '../engine/insights';
-import { frameAlerts, frameCase, lastFrameDecision, plantCases, plantLog, releaseCase, responseDots, type FrameCase, type PlantCase, type ReleaseCase } from '../engine/plant';
+import { frameAlerts, frameCase, lastFrameDecision, plantCases, releaseCase, responseDots, type FrameCase, type PlantCase, type ReleaseCase } from '../engine/plant';
 import { DAY, HOUR, dateTime, dayMonth, hhmm, mill, millDayKey, millHour } from '../engine/time';
 import { TEST } from '../engine/vocab';
 import { cx, SeverityBadge } from '../ui/primitives';
-import { ReadingGauge } from '../ui/cards';
+import { ReadingGauge, readingLine } from '../ui/cards';
 import { CountUp } from '../ui/charts';
-import { CauseStrip, DeadlineCells, DecisionPanel, KgBlocks, Relay, ShiftDots, holdLine, stagger, stuckLine } from '../ui/plant';
+import { CauseStrip, DeadlineCells, DecisionPanel, KgBlocks, ShiftDots, stagger } from '../ui/plant';
 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const weekday = (t: number) => WEEKDAYS[new Date(t + 5.5 * HOUR).getUTCDay()];
@@ -50,89 +50,6 @@ export function caseQuestion(c: PlantCase) {
   return `${c.frameId} keeps failing. Overhaul it, or fix how it's run?`;
 }
 
-function DecisionCard({ s, c, now, i }: { s: MillState; c: PlantCase; now: number; i: number }) {
-  const nav = useNavigate();
-  const open = () => nav(`/dashboard/case/${c.id}`);
-  if (c.kind === 'release') {
-    const r = c.ticket?.readings.at(-1);
-    const rule = c.ticket && r ? limitFor(s, c.ticket.productId, r) : undefined;
-    return (
-      <article className="anim-in grid gap-3 rounded-[12px] border border-line-strong bg-raised p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center" style={stagger(i)}>
-        <div className="flex min-w-0 flex-col gap-1.5">
-          <h3 className="t-section">{caseQuestion(c)}</h3>
-          <p className="t-small text-muted">
-            {r ? `${TEST[r.test].name} ${r.value} ${TEST[r.test].unit}, limit ${rule?.min ?? '–'}–${rule?.max ?? '–'}` : 'Failed test'} · re-test {c.hold.retest === 'failed' ? 'failed' : 'not passed'} · {userName(s, c.askedBy).split(' ')[0]} asks, {hhmm(c.askedAt)}
-          </p>
-          <DeadlineCells at={c.deadline} now={now} label="Dispatch" />
-        </div>
-        <button type="button" onClick={open} className="t-small-strong inline-flex h-10 items-center gap-1.5 justify-self-start rounded-[10px] px-1 text-brand-text hover:underline">
-          Open case <ArrowRight size={14} />
-        </button>
-      </article>
-    );
-  }
-  return (
-    <article className="anim-in grid gap-3 rounded-[12px] border border-line bg-raised p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center" style={stagger(i)}>
-      <div className="flex min-w-0 flex-col gap-1.5">
-        <h3 className="t-section">{caseQuestion(c)}</h3>
-        <p className="t-small text-muted">
-          {c.alerts.length} alerts in 30 days · {c.topCause ? `${c.topCauseCount}× ${c.topCause.toLowerCase()}` : 'mixed causes'}
-          {c.afterRoving ? ` · ${c.afterRoving} right after a roving change` : ''}
-        </p>
-        <p className="t-small text-muted">No deadline. Decide this week.</p>
-      </div>
-      <button type="button" onClick={open} className="t-small-strong inline-flex h-10 items-center gap-1.5 justify-self-start rounded-[10px] px-1 text-brand-text hover:underline">
-        Open case <ArrowRight size={14} />
-      </button>
-    </article>
-  );
-}
-
-// ---------- escalation that reached him ----------
-function EscalationCard({ s, t, now, i }: { s: MillState; t: Ticket; now: number; i: number }) {
-  const sup = s.users.find((u) => u.role === 'supervisor' && u.shift === t.shift);
-  const qc = s.users.find((u) => u.role === 'qc');
-  const hold = holdLine(s, t, now);
-  return (
-    <article className="anim-in flex flex-col gap-4 rounded-[12px] border border-[color-mix(in_srgb,var(--critical)_45%,transparent)] bg-raised p-5" style={stagger(i)}>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex min-w-0 flex-col gap-1">
-          <div className="flex items-center gap-2">
-            <SeverityBadge level={t.severity} />
-            <span className="t-small text-muted">since {hhmm(t.alertAt)}</span>
-          </div>
-          <h3 className="t-section">
-            {frameWord(t.frameId)} · {t.title.toLowerCase()}, and nobody has picked it up
-          </h3>
-          <p className="t-small text-critical">{stuckLine(s, t, now)}</p>
-        </div>
-        {hold && (
-          <div className="text-right">
-            <p className="t-stat !text-[28px] !leading-8">
-              <CountUp value={roundKg(hold.kg)} ms={400} /> <span className="t-body text-muted">kg held</span>
-            </p>
-            <p className="t-small text-muted">{hold.growing ? `about ${Math.round(hold.perHour)} kg more every hour` : 'stopped growing'}</p>
-          </div>
-        )}
-      </div>
-      <Relay s={s} t={t} now={now} />
-      <div className="flex flex-wrap gap-2">
-        {[sup, qc].filter(Boolean).map((u) => (
-          <a key={u!.id} href={`tel:${u!.phone?.replace(/\s/g, '') ?? ''}`} className="inline-flex h-10 items-center gap-2 rounded-[10px] border border-line-strong bg-raised px-4 t-small-strong hover:bg-sunken">
-            <Phone size={16} /> Call {u!.name.split(' ')[0]} <span className="font-mono text-[12px] font-normal text-muted">{u!.phone}</span>
-          </a>
-        ))}
-        <Link to={`/dashboard/tickets/${t.id}`} className="t-small-strong inline-flex h-10 items-center gap-1 px-2 text-brand-text hover:underline">
-          See the ticket <ArrowRight size={14} />
-        </Link>
-      </div>
-    </article>
-  );
-}
-
-// ---------- right now ----------
-
-/** Right now: every live alert and who QC Alert is waiting on. Replaces the old held-yarn panel. */
 function RightNow({ s, now, i }: { s: MillState; now: number; i: number }) {
   const live = s.tickets.filter((t) => t.status !== 'closed' && t.severity !== 'minor' && t.createdAt <= now).sort((a, b) => a.alertAt - b.alertAt);
   const WHO = ['the supervisor', 'the QC manager', 'you'];
@@ -172,30 +89,16 @@ export function PlantHome() {
   const s = useMillState();
   const now = useNow();
   const user = useUser('dash');
-  const nav = useNavigate();
   const hour = Math.floor(now / HOUR);
-  const data = useMemo(() => {
-    const since14 = now - 14 * DAY;
-    const since56 = mill(millDayKey(now)) - 35 * DAY;
-    const counts = new Map<string, number>();
-    for (const t of s.tickets) if (t.severity !== 'minor' && t.createdAt >= since56 && t.createdAt <= now) counts.set(t.frameId, (counts.get(t.frameId) ?? 0) + 1);
-    const top = [...counts.entries()].filter(([, n]) => n >= 2).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([f]) => f);
-    return { dots: responseDots(s, since14, now), top, since56 };
-    // recompute once a mill hour; cases and holds below stay live
+  const dots = useMemo(() => responseDots(s, now - 14 * DAY, now),
+    // recompute once a mill hour
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [s, hour]);
-  const cases = plantCases(s, now);
-  const toMe = s.tickets.filter((t) => t.status !== 'closed' && t.status !== 'fixed' && escalation(t, now).level >= 2);
-  const log = plantLog(s);
+    [s, hour]);
+  const week = s.tickets.filter((t) => t.createdAt > now - 7 * DAY && t.createdAt <= now);
+  const crit = week.filter((t) => t.severity === 'critical');
+  const major = week.filter((t) => t.severity === 'major');
   const h = millHour(now);
   const greet = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
-  const n = cases.length;
-  const line =
-    toMe.length > 0
-      ? `${toMe.length} alert${toMe.length > 1 ? 's have' : ' has'} reached you. ${n ? `${n} decision${n > 1 ? 's' : ''} also wait.` : ''}`
-      : n
-        ? `${n} decision${n > 1 ? 's' : ''} need${n > 1 ? '' : 's'} you today.`
-        : 'Nothing needs you today.';
 
   return (
     <div className="mx-auto flex max-w-[1240px] flex-col gap-5">
@@ -207,97 +110,87 @@ export function PlantHome() {
           <h1 className="t-page mt-0.5">
             {greet}, {user.name.split(' ')[0]}
           </h1>
-          <p className={cx('t-body mt-1', toMe.length ? 'font-semibold text-critical' : 'text-ink')} aria-live="polite">
-            {line}
+          <p className="t-body mt-1 text-ink">
+            Last 7 days: <span className={cx('font-semibold', crit.length > 0 && 'text-critical')}>{crit.length} critical</span> and {major.length} major alert{major.length === 1 ? '' : 's'}.
           </p>
         </div>
         <TextLink to="/dashboard/review">Monthly review</TextLink>
       </header>
 
-      {toMe.length > 0 && (
-        <div className="flex flex-col gap-3" aria-label="Escalated to you">
-          {toMe.map((t, i) => (
-            <EscalationCard key={t.id} s={s} t={t} now={now} i={i} />
-          ))}
-        </div>
-      )}
-
-      <Section title="Needs your decision" sub={n ? 'Nearest deadline first. Open a case to see the evidence before you decide.' : undefined}>
-        {n ? (
-          <div className="flex flex-col gap-3">
-            {cases.map((c, i) => (
-              <DecisionCard key={c.id} s={s} c={c} now={now} i={i} />
-            ))}
-          </div>
-        ) : (
-          <p className="t-body text-muted">Nothing waiting. {log[0] ? `Last decision ${dayMonth(log[0].at)}: ${log[0].text.charAt(0).toLowerCase()}${log[0].text.slice(1)}.` : ''}</p>
-        )}
-      </Section>
+      <TopAlerts s={s} now={now} week={week} />
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
         <Section title="Response by shift" sub="Every critical and major alert, last 14 days">
-          <ShiftDots dots={data.dots} />
+          <ShiftDots dots={dots} />
         </Section>
         <RightNow s={s} now={now} i={0} />
       </div>
-
-      <Section
-        title="Frames that keep failing"
-        sub={`Critical and major alerts since ${dayMonth(data.since56)}. Same cause after the same event points to how it's run, not the machine.`}
-        aside={<TextLink to="/dashboard/review">All frames</TextLink>}
-      >
-        {data.top.length ? (
-          <>
-            <CauseStrip s={s} frameIds={data.top} since={data.since56} now={now} width={1120} onPick={(f) => nav(`/dashboard/case/${f}`)} />
-            <ul className="mt-2 flex flex-col divide-y divide-[var(--line)]">
-              {data.top.map((f) => {
-                const c = frameCase(s, f, now);
-                const d = lastFrameDecision(s, f);
-                const open = cases.some((x) => x.id === f);
-                return (
-                  <li key={f} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
-                    <p className="t-small min-w-0">
-                      <span className="font-semibold">{f}</span> <span className="text-muted">· {c.alerts.length} in 30 days{c.afterRoving ? `, ${c.afterRoving} right after a roving change` : ''}</span>
-                    </p>
-                    {open ? (
-                      <TextLink to={`/dashboard/case/${f}`}>Open case</TextLink>
-                    ) : d ? (
-                      <span className="t-small text-muted">You decided {dayMonth(d.at)}</span>
-                    ) : (
-                      <span className="t-small text-muted">Under 3 alerts in 30 days</span>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          </>
-        ) : (
-          <p className="t-body text-muted">No frame failed twice in five weeks.</p>
-        )}
-      </Section>
-
-      {log.length > 0 && (
-        <Section title="Your recent decisions">
-          <DecisionLog entries={log.slice(0, 3)} />
-        </Section>
-      )}
     </div>
   );
 }
 
-function DecisionLog({ entries }: { entries: { at: number; text: string; reason?: string }[] }) {
+/** The few alerts of the last week that matter most, told the way the person who fixed them told it. */
+function TopAlerts({ s, now, week }: { s: MillState; now: number; week: Ticket[] }) {
+  const nav = useNavigate();
+  const SEV = { critical: 0, major: 1, minor: 2 } as const;
+  const kg = (t: Ticket) => t.affectedKg ?? 0;
+  const top = week
+    .filter((t) => t.severity !== 'minor')
+    .sort((a, b) => SEV[a.severity] - SEV[b.severity] || kg(b) - kg(a) || (b.fixedAt ?? now) - (b.workingAt ?? b.alertAt) - ((a.fixedAt ?? now) - (a.workingAt ?? a.alertAt)))
+    .slice(0, 4);
+  const rest = week.filter((t) => t.severity !== 'minor').length - top.length;
   return (
-    <ul className="flex flex-col divide-y divide-[var(--line)]">
-      {entries.map((e, i) => (
-        <li key={i} className="anim-fade grid grid-cols-[96px_minmax(0,1fr)] gap-3 py-2.5">
-          <span className="t-data text-[13px] text-muted">{dayMonth(e.at)}</span>
-          <span className="t-small">
-            {e.text}
-            {e.reason ? <span className="text-muted"> · “{e.reason}”</span> : null}
-          </span>
-        </li>
-      ))}
-    </ul>
+    <Section
+      title="Top alerts last week"
+      sub="The most serious failed tests of the last 7 days, and what the person who fixed each one reported."
+      aside={<TextLink to="/dashboard/tickets?tab=all">All past alerts</TextLink>}
+    >
+      {top.length ? (
+        <ul className="grid gap-3 md:grid-cols-2">
+          {top.map((t, i) => {
+            const fixMins = t.fixedAt && t.workingAt ? Math.round((t.fixedAt - t.workingAt) / 60000) : undefined;
+            const said = t.note ?? (t.cause ? `${t.cause}${t.part ? `, ${t.part.toLowerCase()}` : ''}` : undefined);
+            return (
+              <li key={t.id}>
+                <button
+                  type="button"
+                  onClick={() => nav(`/dashboard/tickets/${t.id}`)}
+                  className="anim-in flex h-full w-full flex-col gap-3 rounded-[12px] border border-line p-4 text-left transition-colors hover:bg-sunken"
+                  style={stagger(i)}
+                >
+                  <span className="flex flex-wrap items-center justify-between gap-2">
+                    <SeverityBadge level={t.severity} />
+                    <span className="t-small text-muted">{dateTime(t.createdAt)}</span>
+                  </span>
+                  <span>
+                    <span className="t-body-strong block">
+                      {frameWord(t.frameId)} · {t.title}
+                    </span>
+                    <span className="t-data block text-[13px] text-muted">
+                      {readingLine(s, t)} · Lot {t.lotId}
+                    </span>
+                  </span>
+                  <span className="rounded-[10px] bg-sunken px-3 py-2.5">
+                    <span className="t-label block text-[10px] text-muted">{t.fixedBy ? `${userName(s, t.fixedBy)} reported` : 'Not fixed yet'}</span>
+                    <span className="t-small mt-1 block">{said ? `“${said}”` : t.status === 'closed' ? 'No description given.' : 'Waiting for the fix report.'}</span>
+                  </span>
+                  <span className="t-small flex flex-wrap gap-x-4 gap-y-1 text-muted">
+                    {t.part && <span>Part: <span className="text-ink">{t.part}</span></span>}
+                    {t.cause && <span>Cause: <span className="text-ink">{t.cause}</span></span>}
+                    {fixMins !== undefined && <span>Fixed in <span className="text-ink">{fixMins} min</span></span>}
+                    {t.affectedKg !== undefined && <span>Yarn before the fix: <span className="text-ink">about {t.affectedKg} kg</span></span>}
+                    {t.status !== 'closed' && <span className="text-critical">Still open</span>}
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <p className="t-body text-muted">No critical or major alerts in the last 7 days.</p>
+      )}
+      {rest > 0 && <p className="t-small mt-3 text-muted">{rest} more critical or major alert{rest > 1 ? 's' : ''} this week, and the minor ones, are in History.</p>}
+    </Section>
   );
 }
 
@@ -553,7 +446,6 @@ export function PlantReview() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [s, day]);
   const r50 = (v: number) => (Math.round(v / 50) * 50).toLocaleString('en-IN');
-  const log = plantLog(s);
   return (
     <div className="mx-auto flex max-w-[1240px] flex-col gap-5">
       <header className="anim-in">
@@ -591,12 +483,11 @@ export function PlantReview() {
         <ShiftDots dots={d.dots} width={1120} />
       </Section>
 
-      <Section title="Frames that keep failing" sub={`Since ${dayMonth(d.since56)}. Click a frame to open its case.`}>
-        {d.top.length ? <CauseStrip s={s} frameIds={d.top} since={d.since56} now={now} width={1120} onPick={(f) => nav(`/dashboard/case/${f}`)} /> : <p className="t-body text-muted">No frame failed twice.</p>}
+      <Section title="Frames that keep failing" sub={`Since ${dayMonth(d.since56)}. Click a frame to see its alerts.`}>
+        {d.top.length ? <CauseStrip s={s} frameIds={d.top} since={d.since56} now={now} width={1120} onPick={(f) => nav(`/dashboard/tickets?frame=${f}&tab=all`)} /> : <p className="t-body text-muted">No frame failed twice.</p>}
       </Section>
 
-      <div className="grid gap-5 lg:grid-cols-2">
-        <Section title="Your decisions">{log.length ? <DecisionLog entries={log} /> : <p className="t-body text-muted">No decisions this month.</p>}</Section>
+      <div className="grid gap-5">
         <Section title="Rule changes" sub="Limits the QC manager changed this month">
           {d.rules.length ? (
             <ul className="flex flex-col divide-y divide-[var(--line)]">
