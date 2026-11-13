@@ -6,6 +6,7 @@ import { MIN } from '../src/engine/time';
 import { alertHeat } from '../src/engine/analytics';
 import { predictAll, predictFrame } from '../src/engine/predict';
 import { plantCases } from '../src/engine/plant';
+import { currentRouting, mergedRouting, readRules, rulesAsText } from '../src/engine/rulesText';
 import type { MillEvent, MillEventInput, MillState } from '../src/engine/types';
 
 let n = 0;
@@ -264,5 +265,34 @@ describe('fitter needs parts', () => {
     expect(t.waitingParts?.note).toBe('Top roller cot from store');
     run(s, DEMO_START + 30 * MIN, { type: 'ticket/repairDone', ticketId: t.id, by: 'suresh' });
     expect(t.waitingParts).toBeUndefined();
+  });
+});
+
+describe('rules document reader', () => {
+  const doc = `Mill QC alert rules, revision 3
+1. When a lab test fails, alert the shift supervisor of that frame at once.
+2. If nobody answers within 4 minutes, alert the backup supervisor on the same shift.
+3. If nobody answers within 8 minutes, alert the QC manager.
+4. If nobody answers within 15 minutes, call the plant head.
+5. 30s count must stay between 29.5 and 30.5 Ne. Critical.
+6. 30s CSP minimum 2250. Major.
+7. Every fix needs a lab re-test before the alert is closed.
+8. Canteen closes at 22:00 on Sundays.`;
+  it('finds the alert chain and limits, knows what is built in, and keeps the rest as notes', () => {
+    const s = seedState();
+    const found = readRules(doc, s);
+    expect(found.filter((f) => f.kind === 'routing').map((f) => f.routing)).toEqual([{ backupMins: 4 }, { qcMins: 8 }, { plantMins: 15 }]);
+    const limits = found.filter((f) => f.kind === 'limit');
+    expect(limits[0].limit).toMatchObject({ ruleId: 'p30-count', min: 29.5, max: 30.5, severity: 'critical' });
+    expect(limits[1].limit).toMatchObject({ ruleId: 'p30-csp', min: 2250, severity: 'major' });
+    expect(found.filter((f) => f.kind === 'builtin')).toHaveLength(2);
+    expect(found.find((f) => f.text.startsWith('Canteen'))?.kind).toBe('note');
+    expect(mergedRouting(currentRouting(s), found)).toEqual({ backupMins: 4, qcMins: 8, plantMins: 15 });
+  });
+  it('writes the current rules out as sentences', () => {
+    const s = seedState();
+    const text = rulesAsText(s).join('\n');
+    expect(text).toContain('within 5 minutes');
+    expect(text).toContain('30s combed, Buyer B: count must be between 29.4 and 30.6 Ne');
   });
 });

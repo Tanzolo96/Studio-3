@@ -1,8 +1,10 @@
 // Rules (QC manager edits, everyone else reads) and Account (profile, people, shifts, notifications).
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { Rule, Severity, ShiftId } from '../engine/types';
 import { useDispatch, useMillState, useNow, useUser } from '../store/store';
 import { withinRule, userName } from '../engine/reducer';
+import { currentRouting, mergedRouting, readRules, rulesAsText, type FoundRule } from '../engine/rulesText';
+import { pdfToText } from './pdfText';
 import { SEVERITY, TEST } from '../engine/vocab';
 import { dayMonth, shiftAt } from '../engine/time';
 import { cx, SeverityBadge } from '../ui/primitives';
@@ -11,10 +13,304 @@ import { PageHead } from './DashShell';
 import { Panel } from './Overview';
 
 // ---------- Rules ----------
+/** Rules: who gets told and when, the test limits, the rules in plain words, and rules documents. */
+export function RulesPage() {
+  const user = useUser('dash');
+  const canEdit = user.role === 'qc';
+  return (
+    <div className="mx-auto flex max-w-[1180px] flex-col gap-6">
+      <PageHead
+        title="Rules"
+        sub={canEdit ? 'Who QC Alert tells, when, and what counts as a failed test. Drop the mill’s rules PDF to add rules from it.' : 'Who QC Alert tells, when, and what counts as a failed test. Only the QC manager can change them.'}
+      />
+      <AlertChain canEdit={canEdit} />
+      <RulesDocument canEdit={canEdit} />
+      <RulesInWords />
+      <LimitTables />
+    </div>
+  );
+}
+
+function AlertChain({ canEdit }: { canEdit: boolean }) {
+  const s = useMillState();
+  const user = useUser('dash');
+  const dispatch = useDispatch();
+  const r = currentRouting(s);
+  const [d, setD] = useState<{ b: string; q: string; p: string } | null>(null);
+  const [err, setErr] = useState('');
+  const steps = [
+    { at: '0 min', who: 'Shift supervisor of that frame', how: 'Phone alert, with sound for critical', key: null },
+    { at: `${r.backupMins} min`, who: 'Backup supervisor on the same shift', how: 'Phone alert', key: 'b' as const },
+    { at: `${r.qcMins} min`, who: 'QC manager', how: 'Phone alert with sound', key: 'q' as const },
+    { at: `${r.plantMins} min`, who: 'Plant head', how: 'Phone alert and a call', key: 'p' as const },
+  ];
+  const save = () => {
+    if (!d) return;
+    const b = Number(d.b), q = Number(d.q), p = Number(d.p);
+    if (![b, q, p].every((n) => Number.isFinite(n) && n >= 1)) return setErr('Use whole minutes, like 5');
+    if (!(b < q && q < p)) return setErr('Each step must come after the one before it');
+    dispatch({ type: 'routing/set', backupMins: b, qcMins: q, plantMins: p, by: user.id } as never);
+    setD(null);
+    setErr('');
+  };
+  const input = 't-data h-9 w-16 rounded-[8px] border border-line-strong bg-raised px-2 text-right';
+  return (
+    <Panel
+      title="Who gets told, and when"
+      sub="If nobody taps “I’m fixing it”, the alert moves up. The first person to tap owns it."
+      aside={
+        canEdit &&
+        (d ? (
+          <span className="flex gap-2">
+            <button type="button" onClick={() => setD(null)} className="t-small-strong h-9 rounded-full border border-line px-3 hover:bg-sunken">
+              Cancel
+            </button>
+            <button type="button" onClick={save} className="t-small-strong h-9 rounded-full bg-brand px-4 text-on-brand hover:bg-[var(--brand-hover)]">
+              Save times
+            </button>
+          </span>
+        ) : (
+          <button type="button" onClick={() => setD({ b: String(r.backupMins), q: String(r.qcMins), p: String(r.plantMins) })} className="t-small-strong h-9 rounded-full border border-line px-4 hover:bg-sunken">
+            Change times
+          </button>
+        ))
+      }
+    >
+      <ol className="grid gap-3 md:grid-cols-4">
+        {steps.map((st, i) => (
+          <li key={st.who} className="relative rounded-[12px] border border-line bg-sunken p-4">
+            <p className="t-label text-[10px] text-muted">{i === 0 ? 'At once' : 'No answer after'}</p>
+            <p className="t-stat mt-1">
+              {d && st.key ? (
+                <span className="flex items-baseline gap-1">
+                  <input aria-label={`Minutes before ${st.who}`} className={input} value={d[st.key]} onChange={(e) => setD({ ...d, [st.key!]: e.target.value })} />
+                  <span className="t-small">min</span>
+                </span>
+              ) : (
+                st.at
+              )}
+            </p>
+            <p className="t-body-strong mt-2">{st.who}</p>
+            <p className="t-small text-muted">{st.how}</p>
+          </li>
+        ))}
+      </ol>
+      {err && <p className="t-small mt-3 text-critical">{err}</p>}
+      <p className="t-small mt-4 text-muted">
+        After the fix report the lab is asked to re-test. A failed re-test sends the alert back to the supervisor. Minor faults show only on the dashboard. Last changed {dayMonth(s.rules[0]?.updatedAt ?? 0)} by {userName(s, s.rules[0]?.updatedBy)}.
+      </p>
+    </Panel>
+  );
+}
+
+function RulesInWords() {
+  const s = useMillState();
+  const lines = rulesAsText(s);
+  const [copied, setCopied] = useState(false);
+  return (
+    <Panel
+      title="The rules in plain words"
+      sub="One sentence per rule, for people and for an AI to read and analyse"
+      aside={
+        <button
+          type="button"
+          className="t-small-strong h-9 rounded-full border border-line px-4 hover:bg-sunken"
+          onClick={() => {
+            navigator.clipboard?.writeText(lines.join('\n')).then(
+              () => setCopied(true),
+              () => setCopied(false),
+            );
+          }}
+        >
+          {copied ? 'Copied' : 'Copy as text'}
+        </button>
+      }
+    >
+      <ol className="t-small flex list-decimal flex-col gap-1.5 pl-5 text-ink">
+        {lines.map((l) => (
+          <li key={l}>{l}</li>
+        ))}
+      </ol>
+    </Panel>
+  );
+}
+
+function RulesDocument({ canEdit }: { canEdit: boolean }) {
+  const s = useMillState();
+  const user = useUser('dash');
+  const dispatch = useDispatch();
+  const [over, setOver] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [file, setFile] = useState<{ name: string; pages: number } | null>(null);
+  const [found, setFound] = useState<FoundRule[]>([]);
+  const [pick, setPick] = useState<boolean[]>([]);
+  const [done, setDone] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const read = async (f: File) => {
+    setErr('');
+    setDone('');
+    setBusy(true);
+    try {
+      const isPdf = f.type === 'application/pdf' || /\.pdf$/i.test(f.name);
+      const { text, pages } = isPdf ? await pdfToText(f) : { text: await f.text(), pages: 1 };
+      const rules = readRules(text, s);
+      setFile({ name: f.name, pages });
+      setFound(rules);
+      setPick(rules.map((r) => r.kind === 'routing' || r.kind === 'limit'));
+      if (!rules.length) setErr('No rules found in this file. Is it a scanned image? Try a PDF with selectable text.');
+    } catch {
+      setErr('This file could not be read. Drop a PDF with selectable text, or a .txt file.');
+    } finally {
+      setBusy(false);
+    }
+  };
+  const apply = () => {
+    const chosen = found.filter((_, i) => pick[i]);
+    const routing = mergedRouting(currentRouting(s), chosen.filter((f) => f.routing));
+    if (chosen.some((f) => f.routing) && !routing) return setErr('The times in this document do not make a chain (backup, then QC manager, then plant head). Untick one or change them by hand.');
+    let applied = 0;
+    if (routing && chosen.some((f) => f.routing)) {
+      dispatch({ type: 'routing/set', ...routing, by: user.id } as never);
+      applied += chosen.filter((f) => f.routing).length;
+    }
+    for (const f of chosen.filter((x) => x.limit)) {
+      const rule = s.rules.find((r) => r.id === f.limit!.ruleId)!;
+      dispatch({ type: 'rule/set', ruleId: rule.id, min: f.limit!.min ?? rule.min, max: f.limit!.max ?? rule.max, severity: f.limit!.severity ?? rule.severity, escalateQcMins: routing?.qcMins ?? rule.escalateQcMins, escalatePhMins: routing?.plantMins ?? rule.escalatePhMins, by: user.id } as never);
+      applied += 1;
+    }
+    dispatch({ type: 'rules/doc', name: file!.name, pages: file!.pages, found: found.map((f) => `${f.text} → ${f.meaning}`), applied, by: user.id } as never);
+    setDone(`${applied} rule${applied === 1 ? '' : 's'} applied from ${file!.name}. The rest are kept with the document.`);
+    setFile(null);
+    setFound([]);
+  };
+  const KIND: Record<FoundRule['kind'], string> = { routing: 'Who gets told', limit: 'Test limit', builtin: 'Already built in', note: 'Note' };
+
+  return (
+    <Panel title="Rules document" sub="Drop the mill’s rules PDF. QC Alert reads it here in the browser and lists the rules it understood for you to check.">
+      {canEdit && !file && (
+        <div
+          role="button"
+          tabIndex={0}
+          aria-label="Drop a rules PDF here, or choose a file"
+          onClick={() => inputRef.current?.click()}
+          onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && inputRef.current?.click()}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setOver(true);
+          }}
+          onDragLeave={() => setOver(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setOver(false);
+            const f = e.dataTransfer.files[0];
+            if (f) void read(f);
+          }}
+          className={cx('flex cursor-pointer flex-col items-center gap-2 rounded-[12px] border-2 border-dashed px-6 py-10 text-center', over ? 'border-brand bg-brand-soft' : 'border-line-strong hover:bg-sunken')}
+        >
+          <p className="t-body-strong">{busy ? 'Reading…' : 'Drop the rules PDF here'}</p>
+          <p className="t-small text-muted">or click to choose a file · PDF with selectable text, or .txt</p>
+          <input
+            ref={inputRef}
+            type="file"
+            accept="application/pdf,.pdf,text/plain,.txt"
+            className="sr-only"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void read(f);
+              e.target.value = '';
+            }}
+          />
+        </div>
+      )}
+      {canEdit && !file && (
+        <p className="t-small mt-2 text-muted">
+          No file to hand? Try the{' '}
+          <a className="text-brand-text underline" href={import.meta.env.VITE_STANDALONE === '1' ? 'rules-sample.pdf' : '/rules-sample.pdf'} download>
+            sample rules PDF
+          </a>
+          .
+        </p>
+      )}
+      {!canEdit && <p className="t-small text-muted">Only the QC manager adds rules documents.</p>}
+      {err && <p className="t-small mt-3 text-critical">{err}</p>}
+      {done && <p className="t-small-strong mt-3 text-ok">{done}</p>}
+
+      {file && found.length > 0 && (
+        <div className="mt-1">
+          <p className="t-small-strong">
+            {file.name} · {file.pages} page{file.pages > 1 ? 's' : ''} · {found.length} rule{found.length > 1 ? 's' : ''} found
+          </p>
+          <ul className="mt-3 divide-y divide-[var(--line)] rounded-[12px] border border-line">
+            {found.map((f, i) => {
+              const can = f.kind === 'routing' || f.kind === 'limit';
+              return (
+                <li key={i} className="grid grid-cols-[28px_minmax(0,1fr)_auto] items-start gap-3 px-4 py-3">
+                  <input
+                    type="checkbox"
+                    aria-label={`Apply: ${f.meaning}`}
+                    disabled={!can}
+                    checked={!!pick[i]}
+                    onChange={(e) => setPick((p) => p.map((v, j) => (j === i ? e.target.checked : v)))}
+                    className="mt-1 size-4"
+                  />
+                  <span className="min-w-0">
+                    <span className="t-small block text-muted">“{f.text}”</span>
+                    <span className="t-small-strong block">{f.meaning}</span>
+                  </span>
+                  <span className={cx('t-label rounded-[6px] px-2 py-0.5 text-[10px]', can ? 'bg-brand-soft text-brand-text' : f.kind === 'builtin' ? 'bg-ok-soft text-ok' : 'bg-sunken text-muted')}>{KIND[f.kind]}</span>
+                </li>
+              );
+            })}
+          </ul>
+          <div className="mt-4 flex gap-2">
+            <button type="button" onClick={apply} className="t-small-strong h-10 rounded-full bg-brand px-5 text-on-brand hover:bg-[var(--brand-hover)]">
+              Apply {pick.filter(Boolean).length} rule{pick.filter(Boolean).length === 1 ? '' : 's'}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setFile(null);
+                setFound([]);
+              }}
+              className="t-small-strong h-10 rounded-full border border-line px-4 hover:bg-sunken"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {s.rulesDocs.length > 0 && (
+        <div className="mt-5">
+          <p className="t-small-strong mb-2 text-muted">Documents added</p>
+          <ul className="flex flex-col gap-2">
+            {[...s.rulesDocs].reverse().map((doc) => (
+              <li key={doc.at + doc.name}>
+                <details className="rounded-[10px] border border-line px-4 py-2.5">
+                  <summary className="t-small cursor-pointer">
+                    <span className="t-small-strong">{doc.name}</span> · {dayMonth(doc.at)} · {userName(s, doc.by)} · {doc.applied} applied of {doc.found.length} found
+                  </summary>
+                  <ul className="t-small mt-2 flex list-disc flex-col gap-1 pl-5 text-muted">
+                    {doc.found.map((f) => (
+                      <li key={f}>{f}</li>
+                    ))}
+                  </ul>
+                </details>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </Panel>
+  );
+}
+
 type Draft = { min: string; max: string; severity: Severity; qc: string; ph: string };
 const toNum = (v: string) => (v.trim() === '' ? undefined : Number(v));
 
-export function RulesPage() {
+function LimitTables() {
   const s = useMillState();
   const now = useNow();
   const user = useUser('dash');
@@ -54,22 +350,21 @@ export function RulesPage() {
 
   return (
     <div className="mx-auto flex max-w-[1180px] flex-col gap-5">
-      <PageHead title="Rules" sub={canEdit ? 'Limits for each yarn and test. Changes apply to the next test result.' : 'Limits for each yarn and test. Only the QC manager can change them.'} />
+      <h2 className="t-section mt-2">Test limits</h2>
+      <p className="t-small -mt-3 text-muted">{canEdit ? 'Limits for each yarn and test. A reading outside a limit raises an alert. Changes apply to the next test result.' : 'Limits for each yarn and test. Only the QC manager can change them.'}</p>
       {s.products.map((p) => {
         const rules = s.rules.filter((r) => r.productId === p.id);
         if (!rules.length) return null;
         return (
-          <Panel key={p.id} title={p.name} sub={`Nominal count ${p.nominalNe} Ne · winding sensor warns at CV +${p.cvWarnPct.toFixed(1)}%`}>
+          <Panel key={p.id} title={p.name} sub={`Nominal count ${p.nominalNe} Ne`}>
             <div className="-mx-5 overflow-x-auto">
-              <table className="w-full min-w-[760px] text-left">
+              <table className="w-full min-w-[620px] text-left">
                 <thead>
                   <tr className="t-label text-[10px] text-muted">
                     <th className="px-5 pb-2 font-semibold">Test</th>
                     <th className="pb-2 font-semibold">Lower</th>
                     <th className="pb-2 font-semibold">Upper</th>
                     <th className="pb-2 font-semibold">Severity</th>
-                    <th className="pb-2 font-semibold">To QC manager</th>
-                    <th className="pb-2 font-semibold">To plant head</th>
                     <th className="pb-2 font-semibold">Last 30 days</th>
                     <th className="px-5 pb-2 text-right font-semibold">{canEdit ? '' : 'Changed'}</th>
                   </tr>
@@ -98,8 +393,6 @@ export function RulesPage() {
                             <SeverityBadge level={r.severity} />
                           )}
                         </td>
-                        <td className="t-data py-3">{on ? <input id={`qc-${r.id}`} aria-label="Minutes before the QC manager" className={input} value={draft.qc} onChange={(e) => setDraft({ ...draft, qc: e.target.value })} /> : `${r.escalateQcMins} min`}</td>
-                        <td className="t-data py-3">{on ? <input id={`ph-${r.id}`} aria-label="Minutes before the plant head" className={input} value={draft.ph} onChange={(e) => setDraft({ ...draft, ph: e.target.value })} /> : `${r.escalatePhMins} min`}</td>
                         <td className="t-small py-3">
                           {on ? (
                             <span>

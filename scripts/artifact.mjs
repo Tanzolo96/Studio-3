@@ -43,5 +43,6 @@ manifest.start_url = './#app';
 manifest.icons = [{ src: 'icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' }];
 writeFileSync('dist-standalone/site/manifest.webmanifest', JSON.stringify(manifest, null, 2));
 copyFileSync('public/icon.svg', 'dist-standalone/site/icon.svg');
+copyFileSync('public/rules-sample.pdf', 'dist-standalone/site/rules-sample.pdf');
 writeFileSync('dist-standalone/site/.nojekyll', '');
 console.log('wrote dist-standalone/site/ (web page for GitHub Pages)');
