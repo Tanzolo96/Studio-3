@@ -73,10 +73,6 @@ export function DashShell() {
       <aside className="w-[220px] shrink-0">
         <div className="sticky top-3 z-[var(--z-dock)] flex h-[calc(100dvh-24px)] flex-col">
         <div className="flex h-[60px] items-center gap-2.5 px-5">
-          <svg width="22" height="22" viewBox="0 0 64 64" aria-hidden>
-            <rect width="64" height="64" rx="12" fill="var(--ink)" />
-            <path d="M32 13 54 51H10Z" fill="var(--critical)" />
-          </svg>
           <span className="t-section">QC Alert</span>
         </div>
         <nav aria-label="Dashboard" className="flex flex-col gap-5 pt-2">

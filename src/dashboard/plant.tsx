@@ -10,7 +10,8 @@ import { escalation } from '../engine/selectors';
 import { frameWord, roundKg, limitFor, userName } from '../engine/reducer';
 import { insights } from '../engine/insights';
 import { frameAlerts, frameCase, lastFrameDecision, plantCases, releaseCase, responseDots, type FrameCase, type PlantCase, type ReleaseCase } from '../engine/plant';
-import { DAY, HOUR, dateTime, dayMonth, hhmm, mill, millDayKey, millHour } from '../engine/time';
+import { TEST } from '../engine/vocab';
+import { DAY, HOUR, ago, dateTime, dayMonth, hhmm, mill, millDayKey, millHour } from '../engine/time';
 import { cx, SeverityBadge } from '../ui/primitives';
 import { ReadingGauge, readingLine } from '../ui/cards';
 import { CountUp } from '../ui/charts';
@@ -127,68 +128,125 @@ export function PlantHome() {
   );
 }
 
-/** The few alerts of the last week that matter most, told the way the person who fixed them told it. */
+/** The alerts of the last week that matter most: headings on the right, the picked one's whole story on the left. */
 function TopAlerts({ s, now, week }: { s: MillState; now: number; week: Ticket[] }) {
-  const nav = useNavigate();
   const SEV = { critical: 0, major: 1, minor: 2 } as const;
-  const kg = (t: Ticket) => t.affectedKg ?? 0;
   const top = week
     .filter((t) => t.severity !== 'minor')
-    .sort((a, b) => SEV[a.severity] - SEV[b.severity] || kg(b) - kg(a) || (b.fixedAt ?? now) - (b.workingAt ?? b.alertAt) - ((a.fixedAt ?? now) - (a.workingAt ?? a.alertAt)))
-    .slice(0, 4);
-  const rest = week.filter((t) => t.severity !== 'minor').length - top.length;
+    .sort((a, b) => SEV[a.severity] - SEV[b.severity] || (b.affectedKg ?? 0) - (a.affectedKg ?? 0) || b.createdAt - a.createdAt)
+    .slice(0, 6);
+  const [pick, setPick] = useState<string | null>(null);
+  const t = top.find((x) => x.id === pick) ?? top[0];
   return (
-    <Section
-      title="Top alerts last week"
-      sub="The most serious failed tests of the last 7 days, and what the person who fixed each one reported."
-      aside={<TextLink to="/dashboard/tickets?tab=all">All past alerts</TextLink>}
-    >
-      {top.length ? (
-        <ul className="grid gap-3 md:grid-cols-2">
-          {top.map((t, i) => {
-            const fixMins = t.fixedAt && t.workingAt ? Math.round((t.fixedAt - t.workingAt) / 60000) : undefined;
-            const said = t.note ?? (t.cause ? `${t.cause}${t.part ? `, ${t.part.toLowerCase()}` : ''}` : undefined);
-            return (
-              <li key={t.id}>
-                <button
-                  type="button"
-                  onClick={() => nav(`/dashboard/tickets/${t.id}`)}
-                  className="anim-in flex h-full w-full flex-col gap-3 rounded-[12px] border border-line p-4 text-left transition-colors hover:bg-sunken"
-                  style={stagger(i)}
-                >
-                  <span className="flex flex-wrap items-center justify-between gap-2">
-                    <SeverityBadge level={t.severity} />
-                    <span className="t-small text-muted">{dateTime(t.createdAt)}</span>
-                  </span>
-                  <span>
-                    <span className="t-body-strong block">
-                      {frameWord(t.frameId)} · {t.title}
+    <div className="grid gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+      <Section title="What happened" sub={t ? 'The whole story of the alert you picked' : undefined} aside={t ? <TextLink to={`/dashboard/tickets/${t.id}`}>Full alert</TextLink> : undefined}>
+        {t ? <AlertStory s={s} t={t} now={now} /> : <p className="t-body text-muted">No critical or major alerts in the last 7 days.</p>}
+      </Section>
+      <Section title="Top alerts last week" sub="Most serious first · click one to read its story" aside={<TextLink to="/dashboard/tickets?tab=all">All past alerts</TextLink>}>
+        {top.length ? (
+          <ul className="-mx-2 flex flex-col gap-1">
+            {top.map((x) => {
+              const on = x.id === t?.id;
+              return (
+                <li key={x.id}>
+                  <button
+                    type="button"
+                    onClick={() => setPick(x.id)}
+                    aria-pressed={on}
+                    className={cx('flex w-full items-center gap-3 rounded-[10px] px-3 py-2.5 text-left transition-colors', on ? 'bg-brand-soft' : 'hover:bg-sunken')}
+                  >
+                    <span className={cx('size-2.5 shrink-0 rounded-full', x.severity === 'critical' ? 'bg-critical' : 'bg-major-fill')} aria-label={x.severity} />
+                    <span className="min-w-0 flex-1">
+                      <span className="t-small-strong block truncate">
+                        {frameWord(x.frameId)} · {x.title}
+                      </span>
+                      <span className="t-small block text-muted">
+                        {weekday(x.createdAt).slice(0, 3)} {dayMonth(x.createdAt)} · {x.status === 'closed' ? 'Fixed and closed' : 'Still open'}
+                      </span>
                     </span>
-                    <span className="t-data block text-[13px] text-muted">
-                      {readingLine(s, t)} · Lot {t.lotId}
-                    </span>
-                  </span>
-                  <span className="rounded-[10px] bg-sunken px-3 py-2.5">
-                    <span className="t-label block text-[10px] text-muted">{t.fixedBy ? `${userName(s, t.fixedBy)} reported` : 'Not fixed yet'}</span>
-                    <span className="t-small mt-1 block">{said ? `“${said}”` : t.status === 'closed' ? 'No description given.' : 'Waiting for the fix report.'}</span>
-                  </span>
-                  <span className="t-small flex flex-wrap gap-x-4 gap-y-1 text-muted">
-                    {t.part && <span>Part: <span className="text-ink">{t.part}</span></span>}
-                    {t.cause && <span>Cause: <span className="text-ink">{t.cause}</span></span>}
-                    {fixMins !== undefined && <span>Fixed in <span className="text-ink">{fixMins} min</span></span>}
-                    {t.affectedKg !== undefined && <span>Yarn before the fix: <span className="text-ink">about {t.affectedKg} kg</span></span>}
-                    {t.status !== 'closed' && <span className="text-critical">Still open</span>}
-                  </span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      ) : (
-        <p className="t-body text-muted">No critical or major alerts in the last 7 days.</p>
-      )}
-      {rest > 0 && <p className="t-small mt-3 text-muted">{rest} more critical or major alert{rest > 1 ? 's' : ''} this week, and the minor ones, are in History.</p>}
-    </Section>
+                    <ArrowRight size={14} className={on ? 'text-brand-text' : 'text-muted'} />
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <p className="t-body text-muted">Nothing serious this week.</p>
+        )}
+      </Section>
+    </div>
+  );
+}
+
+/** One alert told as a short story: what the lab found, who picked it up, what they found, how it ended. */
+function AlertStory({ s, t, now }: { s: MillState; t: Ticket; now: number }) {
+  const first = (n?: string) => (n ? userName(s, n) : 'Someone');
+  const r = t.readings[0];
+  const tester = r?.resultId ? s.results.find((x) => x.id === r.resultId)?.by : t.raisedBy;
+  const product = s.products.find((p) => p.id === t.productId);
+  const wait = t.workingAt ? Math.round((t.workingAt - t.alertAt) / 60000) : undefined;
+  const fix = t.fixedAt && t.workingAt ? Math.round((t.fixedAt - t.workingAt) / 60000) : undefined;
+  const steps: { at?: number; title: string; body?: ReactNode; tone: 'bad' | 'warn' | 'ok' | 'muted' }[] = [
+    {
+      at: t.createdAt,
+      title: t.raisedBy && !r?.resultId ? `${first(tester)} raised it by hand` : `The lab found a failed ${t.test ? TEST[t.test].name.toLowerCase() : ''} test`,
+      body: (
+        <>
+          {r ? <span className="t-data text-[13px]">{readingLine(s, t)}</span> : t.title} on Lot {t.lotId}
+          {product ? `, ${product.name}` : ''}. {tester && r?.resultId ? `Tested by ${first(tester)}.` : ''}
+        </>
+      ),
+      tone: 'bad',
+    },
+    {
+      at: t.workingAt,
+      title: t.workingAt ? `${first(t.seenBy)} started fixing it` : 'Nobody has started fixing it yet',
+      body: wait !== undefined ? <span className={wait > 5 ? 'text-critical' : 'text-ok'}>{wait <= 0 ? 'Straight away' : `${wait} min after the alert`}{wait > 5 ? ', later than the 5 min target' : ', within the 5 min target'}.</span> : undefined,
+      tone: wait === undefined ? 'muted' : wait > 5 ? 'warn' : 'ok',
+    },
+  ];
+  if (t.fixedAt)
+    steps.push({
+      at: t.fixedAt,
+      title: `Fixed${fix !== undefined ? ` in ${fix} min` : ''}`,
+      body: (
+        <>
+          {t.note && <span className="t-body mb-1 block">“{t.note}”</span>}
+          <span className="text-muted">
+            {[t.part && `Part: ${t.part}`, t.cause && `Cause: ${t.cause}`, t.affectedKg !== undefined && `about ${t.affectedKg} kg made before the fix`].filter(Boolean).join(' · ')}
+          </span>
+        </>
+      ),
+      tone: 'ok',
+    });
+  steps.push(
+    t.status === 'closed'
+      ? { at: t.closedAt, title: t.fixConfirmedAt ? 'Re-test passed, alert closed' : 'Alert closed', tone: 'ok' }
+      : { title: t.status === 'fixed' ? 'Waiting for the lab re-test' : 'Still open', body: `Open for ${ago(now - t.createdAt)}.`, tone: 'warn' },
+  );
+  const DOT = { bad: 'bg-critical', warn: 'bg-major-fill', ok: 'bg-ok', muted: 'bg-[var(--line-strong)]' };
+  return (
+    <div>
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <SeverityBadge level={t.severity} />
+        <h3 className="t-section">
+          {frameWord(t.frameId)} · {t.title}
+        </h3>
+      </div>
+      <ol className="relative flex flex-col gap-4 pl-6">
+        <span className="absolute bottom-2 left-[5px] top-2 w-px bg-[var(--line-strong)]" aria-hidden />
+        {steps.map((st, i) => (
+          <li key={i} className="anim-in relative" style={stagger(i)}>
+            <span className={cx('absolute -left-6 top-1 size-[11px] rounded-full ring-4 ring-[var(--surface-raised)]', DOT[st.tone])} aria-hidden />
+            <p className="t-small-strong">
+              {st.title}
+              {st.at ? <span className="t-small font-normal text-muted"> · {weekday(st.at).slice(0, 3)} {dayMonth(st.at)}, {hhmm(st.at)}</span> : null}
+            </p>
+            {st.body && <p className="t-small mt-0.5">{st.body}</p>}
+          </li>
+        ))}
+      </ol>
+    </div>
   );
 }
 
