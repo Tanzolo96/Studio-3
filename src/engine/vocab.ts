@@ -16,7 +16,7 @@ export const SEVERITY: Record<Severity, { word: string; rank: number }> = {
 export const STATUS_WORD: Record<TicketStatus, string> = {
   open: 'Open',
   seen: 'Seen',
-  working: 'Working on it',
+  working: 'Fixing',
   fixed: 'Fixed',
   closed: 'Closed',
 };

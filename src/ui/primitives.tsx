@@ -36,7 +36,7 @@ export type ChipKind = TicketStatus | 'escalated' | 'on_hold' | 'released' | 're
 const CHIP: Record<ChipKind, { word: string; cls: string; dot: string }> = {
   open: { word: 'Open', cls: 'bg-critical-soft text-critical', dot: 'var(--critical)' },
   seen: { word: 'Seen', cls: 'bg-brand-soft text-brand-text', dot: 'var(--brand)' },
-  working: { word: 'Working on it', cls: 'bg-major-soft text-major', dot: 'var(--major)' },
+  working: { word: 'Fixing', cls: 'bg-major-soft text-major', dot: 'var(--major)' },
   fixed: { word: 'Fixed', cls: 'bg-ok-soft text-ok', dot: 'var(--ok)' },
   closed: { word: 'Closed', cls: 'bg-minor-soft text-minor', dot: 'var(--neutral-state)' },
   escalated: { word: 'Escalated', cls: 'bg-critical-soft text-critical', dot: 'var(--critical)' },

@@ -110,11 +110,11 @@ function Takeover({ s, t, user, now, more }: { s: MillState; t: Ticket; user: Us
             variant={critical ? 'danger' : 'primary'}
             onClick={() => {
               if (user.role === 'plant') acknowledged.add(takeoverKey(t, now));
-              else dispatch({ type: 'ticket/seen', ticketId: t.id, by: user.id });
+              else dispatch({ type: 'ticket/working', ticketId: t.id, by: user.id });
               nav(`/app/ticket/${t.id}`);
             }}
           >
-            {user.role === 'plant' ? 'See who is on it' : 'Seen, I’m on it'}
+            {user.role === 'plant' ? 'See who is on it' : 'I’m fixing it'}
           </Button>
         </div>
       </div>

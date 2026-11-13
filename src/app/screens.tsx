@@ -5,8 +5,8 @@ import type { MillState, Severity, TestKind, Ticket, User } from '../engine/type
 import { useDispatch, useMill, useMillState, useNow, useUser } from '../store/store';
 import { decisionNotices, escalation, fitterJobs, labBacklog, median, myTickets, pendingRequests, seenTimes, timeline } from '../engine/selectors';
 import { failWord, frameWord, holdKg, lotOf, productOfFrame, roundKg, ruleFor, supervisorFor, userName, withinRule, withUnit } from '../engine/reducer';
-import { CAUSE_HINT, CAUSES, RAISE_PROBLEMS, TEST } from '../engine/vocab';
-import { DAY, HOUR, ago, dayMonth, hhmm, mill, millDayKey, monthName, sameMillDay, shiftAt, timer } from '../engine/time';
+import { CAUSE_HINT, CAUSES, MACHINE_PARTS, RAISE_PROBLEMS, TEST } from '../engine/vocab';
+import { ago, dayMonth, hhmm, monthName, shiftAt, timer } from '../engine/time';
 import { Button, Choice, cx, Empty, Field, SeverityBadge, SeverityShape, TextField } from '../ui/primitives';
 import { ReadingGauge, ResponseTimer, TicketCard, ticketMeta } from '../ui/cards';
 import { Timeline } from '../ui/timeline';
@@ -327,7 +327,6 @@ function Step({ n, title, state, when, children }: { n: number; title: string; s
 function TicketDetail({ s, t, now, user }: { s: MillState; t: Ticket; now: number; user: User }) {
   const dispatch = useDispatch();
   const [sheet, setSheet] = useState<'fitter' | 'fixed' | 'handover' | 'part' | null>(null);
-  const [picked, setPicked] = useState<string[]>([]);
   const esc = escalation(t, now);
   const reading = t.readings.find((r) => r.at === t.alertAt) ?? t.readings[0];
   const lastReading = t.readings.at(-1);
@@ -368,97 +367,38 @@ function TicketDetail({ s, t, now, user }: { s: MillState; t: Ticket; now: numbe
         ? {
             tone: t.severity,
             head: t.reopened ? 'Re-test failed' : 'Not resolved yet',
-            line: esc.level > 0 ? `Nobody has said Seen for ${Math.floor(esc.elapsed / 60000)} min. ${esc.level === 2 ? 'Plant head told.' : 'QC manager told.'}` : esc.backup ? 'Not seen in 5 min. Backup supervisor alerted.' : 'Waiting for someone to say Seen',
+            line: esc.level > 0 ? `Nobody has started fixing for ${Math.floor(esc.elapsed / 60000)} min. ${esc.level === 2 ? 'Plant head told.' : 'QC manager told.'}` : esc.backup ? `No answer in ${t.seenMins} min. Backup supervisor alerted.` : 'Waiting for someone to start fixing',
           }
-        : { tone: t.severity, head: 'Not resolved yet', line: t.waitingPart ? `Waiting for a spare part: ${t.waitingPart}` : fitter && !t.repairDoneAt ? `${fitter.split(' ')[0]} is repairing the frame` : `${by(t.seenBy)} is on it` };
+        : { tone: t.severity, head: 'Not resolved yet', line: t.waitingPart ? `Waiting for a spare part: ${t.waitingPart}` : fitter && !t.repairDoneAt ? `${fitter.split(' ')[0]} is repairing the frame` : `${by(t.seenBy)} is fixing it · ${timer(now - (t.workingAt ?? t.seenAt ?? now))}` };
 
   // Steps, in order. The first one not done is the one to do now.
-  const needsSisters = !!t.holdId;
+  // Alert -> Fixing -> Fixed + report -> lab re-test. The first step not done is the one to do now.
   const steps = [
-    { key: 'seen', title: 'Seen, I\u2019m on it', done: !!t.seenAt, when: t.seenAt },
-    ...(needsSisters ? [{ key: 'sisters', title: `Other frames on Lot ${t.lotId}`, done: !!t.sistersAskedAt, when: t.sistersAskedAt }] : []),
-    ...(hold ? [{ key: 'held', title: 'Tag the held yarn', done: !!hold.taggedAt, when: hold.taggedAt }] : []),
-    { key: 'line', title: 'Stop or correct the line', done: !!t.lineAction, when: t.lineActionAt },
-    { key: 'fixed', title: 'Mark fixed and pick the cause', done: !!t.fixedAt || closed, when: t.fixedAt },
+    { key: 'seen', title: 'Fixing: I\u2019m on it', done: !!t.seenAt, when: t.seenAt },
+    { key: 'fixed', title: 'Fixed: tell us what happened', done: !!t.fixedAt || closed, when: t.fixedAt },
     ...(t.kind === 'manual' && !t.test ? [] : [{ key: 'retest', title: 'Lab re-test confirms the fix', done: !!t.fixConfirmedAt || (closed && t.closeReason !== 'fixed'), when: t.fixConfirmedAt }]),
-    ...(hold ? [{ key: 'decided', title: 'QC manager decides on the yarn', done: hold.status !== 'on_hold', when: hold.closedAt }] : []),
   ];
   const activeIdx = closed ? -1 : steps.findIndex((x) => !x.done);
   const stateOf = (i: number): StepState => (steps[i].done ? 'done' : i === activeIdx ? 'active' : 'todo');
-  const sameLot = s.frames.filter((f) => f.id !== t.frameId);
 
   const body = (key: string): ReactNode => {
     if (!canAct) return null;
     switch (key) {
       case 'seen':
         return (
-          <Button size="lg" block variant={t.severity === 'critical' ? 'danger' : 'primary'} onClick={() => dispatch({ type: 'ticket/seen', ticketId: t.id, by: user.id })}>
-            Seen, I’m on it
-          </Button>
-        );
-      case 'sisters':
-        if (!isSupervisor) return <p className="t-small text-muted">The supervisor picks the frames.</p>;
-        return (
           <>
-            <p className="t-small text-ink">Which other frames are running Lot {t.lotId}? Tap them from the floor or the register. They go to the top of the lab’s list.</p>
-            <div role="group" aria-label="Frames on the same lot" className="grid grid-cols-6 gap-1.5">
-              {sameLot.map((f) => {
-                const on = picked.includes(f.id);
-                return (
-                  <button
-                    key={f.id}
-                    type="button"
-                    aria-pressed={on}
-                    aria-label={f.id}
-                    onClick={() => setPicked((p) => (on ? p.filter((x) => x !== f.id) : [...p, f.id]))}
-                    className={cx('t-data h-11 rounded-[8px] border text-[14px]', on ? 'border-ink bg-ink text-[var(--surface-raised)]' : 'border-line-strong bg-raised hover:bg-sunken')}
-                  >
-                    {f.num}
-                  </button>
-                );
-              })}
-            </div>
-            <Button size="lg" block disabled={!picked.length} onClick={() => dispatch({ type: 'ticket/sisters', ticketId: t.id, frameIds: picked, by: user.id })}>
-              {picked.length ? `Send ${picked.length} frame${picked.length > 1 ? 's' : ''} to the lab` : 'Pick the frames'}
+            <Button size="lg" block variant={t.severity === 'critical' ? 'danger' : 'primary'} onClick={() => dispatch({ type: 'ticket/working', ticketId: t.id, by: user.id })}>
+              I’m fixing it
             </Button>
-            <Button variant="ghost" block onClick={() => dispatch({ type: 'ticket/sisters', ticketId: t.id, frameIds: [], by: user.id })}>
-              No other frames on this lot
-            </Button>
-          </>
-        );
-      case 'held':
-        return (
-          <>
-            <p className="t-small text-ink">
-              Put a red hold tag on the {frameWord(t.frameId)} cops made since {hhmm(hold!.from)} (about {roundKg(holdKg(hold!, now))} kg) and keep them off the trolley to winding.
-            </p>
-            <Button size="lg" block onClick={() => dispatch({ type: 'hold/tag', holdId: hold!.id, by: user.id })}>
-              Held, tag is on
-            </Button>
-          </>
-        );
-      case 'line':
-        return (
-          <>
-            <p className="t-small text-ink">{hold ? 'Stopping the frame stops the hold growing.' : 'Stop the frame if it keeps making bad yarn.'}</p>
-            <div className="grid grid-cols-2 gap-2">
-              <Button size="lg" variant="danger" onClick={() => dispatch({ type: 'ticket/line', ticketId: t.id, action: 'stopped', by: user.id })}>
-                Stopped it
-              </Button>
-              <Button size="lg" variant="secondary" onClick={() => dispatch({ type: 'ticket/line', ticketId: t.id, action: 'corrected', by: user.id })}>
-                Corrected it
-              </Button>
-            </div>
-            {!t.fitterId && (
-              <Button variant="ghost" block onClick={() => setSheet('fitter')}>
-                Send a fitter
-              </Button>
-            )}
+            <p className="t-small text-muted">Starts the fixing time and stops the alert going to anyone else.</p>
           </>
         );
       case 'fixed':
         return (
           <>
+            <p className="t-small text-ink">
+              Fixing for <span className="t-data">{timer(now - (t.workingAt ?? t.seenAt ?? now))}</span>. When the frame is running right, tap Fixed and say what happened.
+            </p>
             {t.waitingPart ? (
               <>
                 <p className="t-small rounded-[10px] bg-major-soft px-3 py-2.5 text-ink">
@@ -474,7 +414,7 @@ function TicketDetail({ s, t, now, user }: { s: MillState; t: Ticket; now: numbe
               </p>
             ) : null}
             <Button size="lg" block variant={t.repairDoneAt || !fitter ? 'primary' : 'secondary'} onClick={() => setSheet('fixed')}>
-              Mark fixed
+              Fixed
             </Button>
             {!t.fitterId && (
               <Button variant="ghost" block onClick={() => setSheet('fitter')}>
@@ -496,8 +436,6 @@ function TicketDetail({ s, t, now, user }: { s: MillState; t: Ticket; now: numbe
         ) : (
           <p className="t-small text-ink">At the top of the lab’s list{retest ? `, due ${hhmm(retest.dueAt)}` : ''}. A pass confirms the fix; a fail sends this back to you.</p>
         );
-      case 'decided':
-        return <p className="t-small text-ink">The QC manager decides: release, re-test more, reprocess or downgrade. You will be told what to do with the yarn.</p>;
     }
     return null;
   };
@@ -683,10 +621,19 @@ function PhotoInput({ value, onChange }: { value?: string; onChange: (v?: string
 function FixedSheet({ t, user, onClose }: { t: Ticket; user: User; onClose: () => void }) {
   const dispatch = useDispatch();
   const [cause, setCause] = useState<string>();
+  const [part, setPart] = useState<string>();
   const [note, setNote] = useState('');
   const [photo, setPhoto] = useState<string>();
   return (
-    <Sheet title={`Mark ${frameWord(t.frameId)} fixed`} onClose={onClose}>
+    <Sheet title={`${frameWord(t.frameId)} fixed: what happened?`} onClose={onClose}>
+      <p className="t-small-strong mb-2 text-muted">Which part of the machine needed fixing?</p>
+      <div role="radiogroup" aria-label="Machine part" className="mb-5 grid grid-cols-2 gap-2">
+        {MACHINE_PARTS.map((p) => (
+          <Choice key={p} selected={part === p} onClick={() => setPart(p)}>
+            {p}
+          </Choice>
+        ))}
+      </div>
       <p className="t-small-strong mb-2 text-muted">What caused it?</p>
       <div role="radiogroup" aria-label="Cause" className="grid grid-cols-1 gap-2">
         {CAUSES.map((c) => (
@@ -696,7 +643,7 @@ function FixedSheet({ t, user, onClose }: { t: Ticket; user: User; onClose: () =
           </Choice>
         ))}
       </div>
-      <p className="t-small mt-3 text-muted">After this the lab re-tests the frame. The ticket closes only when the re-test passes.</p>
+      <p className="t-small mt-3 text-muted">The report goes to the dashboard. The lab re-tests the frame, and the ticket closes when the re-test passes.</p>
       <div className="mt-4 flex flex-col gap-1.5">
         <label htmlFor="fix-note" className="t-small-strong text-muted">
           Note (optional)
@@ -717,15 +664,15 @@ function FixedSheet({ t, user, onClose }: { t: Ticket; user: User; onClose: () =
         size="lg"
         block
         className="mt-5"
-        disabled={!cause}
+        disabled={!cause || !part}
         onClick={() => {
-          dispatch({ type: 'ticket/fixed', ticketId: t.id, cause: cause!, note: note.trim() || undefined, photo, by: user.id });
+          dispatch({ type: 'ticket/fixed', ticketId: t.id, cause: cause!, part, note: note.trim() || undefined, photo, by: user.id });
           onClose();
         }}
       >
-        Mark fixed
+        Send fix report
       </Button>
-      {!cause && <p className="t-small mt-2 text-center text-muted">Pick a cause to continue</p>}
+      {(!cause || !part) && <p className="t-small mt-2 text-center text-muted">Pick the part and the cause to send the report</p>}
     </Sheet>
   );
 }
@@ -1120,19 +1067,6 @@ export function PreviousScreen() {
 }
 
 // ================= Lab: report a failed test =================
-/** Routine tests run at the start of each shift (every 8 hours). The last three, newest first. */
-function routineSlots(now: number) {
-  const out: number[] = [];
-  for (let d = 0; d < 2 && out.length < 3; d++) {
-    const day = mill(millDayKey(now - d * DAY));
-    for (const h of [22, 14, 6]) {
-      const at = day + h * HOUR;
-      if (at <= now && out.length < 3) out.push(at);
-    }
-  }
-  return out.sort((a, b) => b - a);
-}
-
 export function FailScreen() {
   const s = useMillState();
   const now = useNow();
@@ -1142,8 +1076,6 @@ export function FailScreen() {
   const [frameId, setFrameId] = useState<string>();
   const [test, setTest] = useState<TestKind>('count');
   const [raw, setRaw] = useState('');
-  const slots = useMemo(() => routineSlots(now), [Math.floor(now / HOUR)]);
-  const [lastPass, setLastPass] = useState<number>(slots[0]);
   const frame = frameId ? s.frames.find((f) => f.id === frameId) : undefined;
   const product = frame ? productOfFrame(s, frame.id) : undefined;
   const rule = product ? ruleFor(s, product.id, test) : undefined;
@@ -1152,9 +1084,7 @@ export function FailScreen() {
   const inside = value !== undefined && !invalid && withinRule(rule, value);
   const allowed = user.role === 'tester' || user.role === 'qc';
   const ready = !!frame && value !== undefined && !invalid && !inside && allowed;
-  const kg = product ? roundKg((product.kgPerHour * (now - lastPass)) / HOUR) : 0;
   const sup = frame ? supervisorFor(s, frame.id, now) : undefined;
-  const label = (t: number) => `${sameMillDay(t, now) ? 'Today' : dayMonth(t)} ${hhmm(t)}`;
 
   return (
     <Page title="Report a failed test" sub="Frame and lot are on the sample label" back="/app">
@@ -1163,7 +1093,7 @@ export function FailScreen() {
         onSubmit={(e) => {
           e.preventDefault();
           if (!ready) return;
-          dispatch({ type: 'result/enter', frameId: frame!.id, test, value: value!, lastPassAt: lastPass, by: user.id });
+          dispatch({ type: 'result/enter', frameId: frame!.id, test, value: value!, by: user.id });
           const t = useMill.getState().state.tickets.filter((x) => x.frameId === frame!.id && x.status !== 'closed').at(-1);
           nav(t ? `/app/ticket/${t.id}` : '/app');
         }}
@@ -1215,16 +1145,6 @@ export function FailScreen() {
             {inside && <p className="t-small mt-3 text-ok">This is inside the limit. Only report readings outside it.</p>}
           </div>
         )}
-        <Field label="When did this frame last pass?">
-          <div role="radiogroup" aria-label="Last passed" className="grid grid-cols-3 gap-2">
-            {slots.map((t) => (
-              <Choice key={t} selected={lastPass === t} onClick={() => setLastPass(t)} className="text-center">
-                {label(t)}
-              </Choice>
-            ))}
-          </div>
-          <p className="t-small mt-1 text-muted">From the register. The yarn made since then is held{kg ? `, about ${kg} kg` : ''}.</p>
-        </Field>
         <Button size="lg" block type="submit" variant="danger" disabled={!ready}>
           Report failed test
         </Button>

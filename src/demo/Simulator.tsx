@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Close, Pause, Play, Renew } from '@carbon/icons-react';
 import { useMill, useMillState, useNow } from '../store/store';
 import { productOfFrame } from '../engine/reducer';
-import { HOUR, dateTime, hhmm, mill, millDayKey, shiftAt } from '../engine/time';
+import { dateTime, shiftAt } from '../engine/time';
 import { Button, cx } from '../ui/primitives';
 
 /** Simulated lab instruments and winding sensors. Demo only, clearly labelled. */
@@ -128,14 +128,14 @@ function SimulatorPanel({ onClose }: { onClose: () => void }) {
                 onClick={() => {
                   const v = Number(value);
                   if (Number.isNaN(v)) return;
-                  dispatch({ type: 'result/enter', frameId: frame, test: forFrame?.test ?? 'count', value: v, requestId: forFrame?.id, lastPassAt: forFrame ? undefined : lastSlot(now), by: 'rohan' });
+                  dispatch({ type: 'result/enter', frameId: frame, test: forFrame?.test ?? 'count', value: v, requestId: forFrame?.id, by: 'rohan' });
                 }}
               >
                 {forFrame ? 'Enter lab result' : 'Lab reports a fail'}
               </Button>
             </div>
             <p className="t-small -mt-1 text-muted">
-              {forFrame ? `Answers the open ${forFrame.reason === 'retest' ? 're-test' : 'urgent test'} on ${frame}` : `As the lab tester would from the phone, last pass at ${hhmm(lastSlot(now))}`}
+              {forFrame ? `Answers the open ${forFrame.reason === 'retest' ? 're-test' : 'urgent test'} on ${frame}` : 'As the lab tester would from the phone'}
             </p>
             <Button
               variant="secondary"
@@ -179,11 +179,4 @@ function SimulatorPanel({ onClose }: { onClose: () => void }) {
       </div>
     </section>
   );
-}
-
-/** The most recent routine test slot (start of a shift: 06, 14, 22). */
-function lastSlot(now: number) {
-  const day = mill(millDayKey(now));
-  const cands = [day - 2 * HOUR, day + 6 * HOUR, day + 14 * HOUR, day + 22 * HOUR].filter((t) => t <= now);
-  return Math.max(...cands);
 }
