@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 const DEMO_HREF = import.meta.env.VITE_STANDALONE === '1' ? '#demo' : '/demo';
 import type { Rule, Severity, ShiftId, User } from '../engine/types';
 import { USERS } from '../engine/seed';
-import { useDispatch, useMillState, useNow, useUser } from '../store/store';
+import { useDispatch, useMill, useMillState, useNow, useUser } from '../store/store';
 import { findProduct, withinRule, userName } from '../engine/reducer';
 import { currentRouting, mergedRouting, readDocument, rulesAsText, type FoundRule, type FoundSet } from '../engine/rulesText';
 import { pdfToText } from './pdfText';
@@ -594,6 +594,48 @@ function LimitTables() {
 }
 
 // ---------- Account ----------
+/** Clear what was done in the demo (raised tickets, fixes, skipped time). The month of history stays. In a jury room it clears every device. */
+function ClearDemo() {
+  const s = useMillState();
+  const reset = useMill((x) => x.reset);
+  const added = useMill((x) => x.events.length) - 1;
+  const open = s.tickets.filter((t) => t.status !== 'closed').length;
+  const [sure, setSure] = useState(false);
+  const [done, setDone] = useState(false);
+  return (
+    <Panel
+      title="Demo data"
+      sub={done ? 'Cleared. Back to the start of the demo.' : added > 0 ? `${added} change${added === 1 ? '' : 's'} made in the demo · ${open} alert${open === 1 ? '' : 's'} open` : 'Nothing done in the demo yet.'}
+      aside={
+        sure ? (
+          <span className="flex gap-2">
+            <button type="button" onClick={() => setSure(false)} className="t-small-strong h-9 rounded-full border border-line px-4 hover:bg-sunken">
+              Keep
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                reset();
+                setSure(false);
+                setDone(true);
+              }}
+              className="t-small-strong h-9 rounded-full bg-critical px-4 text-on-critical hover:bg-[var(--critical-hover)]"
+            >
+              Clear demo alerts
+            </button>
+          </span>
+        ) : (
+          <button type="button" disabled={added <= 0} onClick={() => setSure(true)} className="t-small-strong h-9 rounded-full border border-line px-4 hover:bg-sunken disabled:opacity-45">
+            Clear demo alerts
+          </button>
+        )
+      }
+    >
+      <p className="t-small text-muted">Removes the tickets raised, fixes and time skips from the demo. The month of past alerts stays.</p>
+    </Panel>
+  );
+}
+
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const monthYear = (ym: string) => {
   const [y, m] = ym.split('-').map(Number);
@@ -619,6 +661,7 @@ export function AccountPage() {
   return (
     <div className="mx-auto flex max-w-[1180px] flex-col gap-5">
       <PageHead title="Account" sub="Your profile, the people on the floor and how you get notified" />
+      <ClearDemo />
       <Panel title="Switch view" sub="Leave the dashboard for another part of QC Alert">
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {(
