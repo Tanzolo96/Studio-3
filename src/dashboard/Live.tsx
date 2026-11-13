@@ -1,14 +1,14 @@
-// Overview: alerts, not machines. What failed, who owns it, how long it has been open,
-// what is waiting for a decision, and how this month went. Machines are not connected,
-// so a frame appears only as a field on a ticket.
+// Live alerts: the dashboard is the record and the go-between. It shows every alert,
+// who it was sent to, who answered, how long the fix took and what the fix report said.
+// Nothing is decided here: people act on their phones.
 import { useMemo, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowRight, Checkmark } from '@carbon/icons-react';
-import type { Hold, MillState, Ticket, User } from '../engine/types';
+import type { MillState, Ticket, User } from '../engine/types';
 import { useMillState, useNow, useUser } from '../store/store';
-import { bySeverityThenAge, decisionNotices, escalation, holdNeedsApproval, holdNudge, median, openHolds } from '../engine/selectors';
-import { covers, failWord, frameWord, holdKg, roundKg, ruleFor, supervisorFor, userName, withUnit } from '../engine/reducer';
-import { topCauses } from '../engine/analytics';
+import { bySeverityThenAge, escalation, median, messagesFor, waitingOn, type Message } from '../engine/selectors';
+import { covers, failWord, frameWord, ruleFor, withUnit } from '../engine/reducer';
+import { topCauses, yarnSaved } from '../engine/analytics';
 import { DAY, HOUR, ago, dayMonth, hhmm, mill, millDayKey, millHour, shiftAt, timer } from '../engine/time';
 import { BarList } from '../ui/charts';
 import { cx, SeverityBadge, SeverityShape } from '../ui/primitives';
@@ -21,26 +21,31 @@ export function Overview() {
   const user = useUser('dash');
   // The plant head gets his decision desk (dashboard/plant.tsx).
   if (user.role === 'plant') return <PlantHome />;
-  return <FloorOverview />;
+  return <LiveAlerts />;
 }
 
-function FloorOverview() {
+function LiveAlerts() {
   const s = useMillState();
   const now = useNow();
   const user = useUser('dash');
   const nav = useNavigate();
-  const role = user.role;
-
-  const live = s.tickets.filter((t) => t.status !== 'closed' && t.status !== 'fixed' && t.severity !== 'minor').sort(bySeverityThenAge);
-  const scoped = role === 'supervisor' ? live.filter((t) => covers(user, t.frameId) || t.seenBy === user.id) : role === 'plant' ? live.filter((t) => escalation(t, now).level >= 2) : live;
-  const awaitingRetest = s.tickets.filter((t) => t.status === 'fixed' && !t.fixConfirmedAt).filter((t) => role !== 'supervisor' || covers(user, t.frameId));
-  const holds = openHolds(s).sort((a, b) => a.from - b.from);
-  const approvals = holds.filter(holdNeedsApproval);
-  const notices = decisionNotices(s, user, now);
+  const mine = (t: Ticket) => user.role !== 'supervisor' || covers(user, t.frameId) || t.seenBy === user.id;
+  const live = s.tickets.filter((t) => t.status !== 'closed' && t.status !== 'fixed' && t.severity !== 'minor' && mine(t)).sort(bySeverityThenAge);
+  const retest = s.tickets.filter((t) => t.status === 'fixed' && mine(t));
   const h = millHour(now);
   const greet = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
   const weekday = WEEKDAY[new Date(now + 5.5 * HOUR).getUTCDay()];
-  const title = role === 'supervisor' ? 'My shift' : role === 'plant' ? 'Plant overview' : 'Overview';
+  const recent = useMemo(
+    () =>
+      s.tickets
+        .filter((t) => now - t.createdAt < DAY && mine(t))
+        .flatMap((t) => messagesFor(s, t, now).map((m) => ({ ...m, t })))
+        .filter((m) => m.at <= now)
+        .sort((a, b) => b.at - a.at)
+        .slice(0, 8),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [s, Math.floor(now / 30000)],
+  );
 
   return (
     <div className="mx-auto flex max-w-[1180px] flex-col gap-6">
@@ -52,83 +57,61 @@ function FloorOverview() {
           <h1 className="t-page mt-1">
             {greet}, {user.name.split(' ')[0]}
           </h1>
-          <p className="t-small mt-1 text-muted">{title}: only failed tests show here. On a day with no fails there is nothing to do.</p>
+          <p className="t-small mt-1 text-muted">Every alert, who it went to and who answered. People act on their phones; this is the record.</p>
         </div>
-        <StatusPill n={scoped.length} critical={scoped.some((t) => t.severity === 'critical')} />
+        <StatusPill n={live.length} critical={live.some((t) => t.severity === 'critical')} />
       </header>
 
-      {/* 1. Live alerts */}
-      <Panel title="Live alerts" sub={scoped.length ? `${scoped.length} failed test${scoped.length > 1 ? 's' : ''} not fixed yet` : role === 'plant' ? 'Nothing escalated to you' : 'No open alerts'}>
-        {scoped.length ? (
+      <Panel title="Live alerts" sub={live.length ? `${live.length} not fixed yet` : 'Nothing open'}>
+        {live.length ? (
           <div className="flex flex-col gap-3">
-            {scoped.map((t) => (
+            {live.map((t) => (
               <AlertRow key={t.id} s={s} t={t} now={now} onOpen={() => nav(`/dashboard/tickets/${t.id}`)} />
             ))}
           </div>
         ) : (
-          <Calm text={role === 'supervisor' ? 'No failed tests on your frames. A new one rings your phone first.' : 'No failed test is waiting for anyone.'} />
+          <Calm text={user.role === 'supervisor' ? 'No failed tests on your frames. A new one rings your phone first.' : 'No failed test is waiting for anyone.'} />
         )}
       </Panel>
 
-      {(notices.length > 0 || awaitingRetest.length > 0) && (
-        <div className={cx('grid gap-6', awaitingRetest.length > 0 && notices.length > 0 && 'lg:grid-cols-2')}>
-          {awaitingRetest.length > 0 && (
-            <Panel title="Fixed, waiting for the lab re-test" sub="Nothing closes on a promise: a pass confirms the fix, a fail sends it back to the line">
-              <ul className="divide-y divide-[var(--line)]">
-                {awaitingRetest.map((t) => {
-                  const hold = t.holdId ? s.holds.find((x) => x.id === t.holdId) : undefined;
-                  const r = s.requests.find((q) => q.ticketId === t.id && q.reason === 'retest' && q.status === 'pending');
-                  return (
-                    <li key={t.id}>
-                      <Link to={`/dashboard/tickets/${t.id}`} className="flex items-center gap-3 py-2.5 hover:bg-sunken">
-                        <SeverityShape level={t.severity} />
-                        <span className="t-small-strong w-16">{t.frameId}</span>
-                        <span className="t-small flex-1 text-ink">
-                          {`Re-test ${r ? `due ${hhmm(r.dueAt)}` : 'asked'}`}
-                          {hold && hold.status === 'on_hold' ? ` · ${roundKg(holdKg(hold, now))} kg held` : ''}
-                        </span>
-                        <ArrowRight size={16} className="text-muted" />
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            </Panel>
-          )}
-          {notices.length > 0 && (
-            <Panel title="Yarn to move" sub="The QC manager decided. Move the yarn and update the tag on the phone.">
-              <ul className="divide-y divide-[var(--line)]">
-                {notices.map((h) => (
-                  <li key={h.id} className="flex items-center gap-3 py-2.5">
-                    <span className="t-small-strong w-16">{h.frameId}</span>
-                    <span className="t-small flex-1">{h.status === 'released' ? 'Release: remove tag, send to winding' : h.status === 'reprocess' ? 'Reprocess: keep tag, move to reprocess' : 'Downgrade: keep tag, move to lower grade'}</span>
+      <div className={cx('grid gap-6', retest.length > 0 && 'lg:grid-cols-2')}>
+        {retest.length > 0 && (
+          <Panel title="Fixed, waiting for the lab re-test" sub="A pass closes it; a fail sends it back to the line">
+            <ul className="divide-y divide-[var(--line)]">
+              {retest.map((t) => {
+                const r = s.requests.find((q) => q.ticketId === t.id && q.reason === 'retest' && q.status === 'pending');
+                return (
+                  <li key={t.id}>
+                    <Link to={`/dashboard/tickets/${t.id}`} className="grid grid-cols-[14px_56px_minmax(0,1fr)_auto] items-center gap-2 py-2.5 hover:bg-sunken">
+                      <SeverityShape level={t.severity} />
+                      <span className="t-small-strong">{t.frameId}</span>
+                      <span className="t-small min-w-0 truncate">
+                        {t.part ?? 'Fixed'} · {t.cause?.toLowerCase()}
+                      </span>
+                      <span className="t-data text-[12px] text-muted">{r ? `due ${hhmm(r.dueAt)}` : 'asked'}</span>
+                    </Link>
                   </li>
-                ))}
-              </ul>
-            </Panel>
-          )}
-        </div>
-      )}
-
-      {/* 2. Waiting for a decision */}
-      {role !== 'supervisor' && (
+                );
+              })}
+            </ul>
+          </Panel>
+        )}
         <Panel
-          title={role === 'plant' ? 'Waiting for your sign-off' : 'Waiting for a decision'}
-          sub={role === 'plant' ? 'Releases against a failed test, and holds left undecided past the end of the shift' : 'Held yarn and how long it has waited. Reminder at 2 hours, plant head at the end of the shift.'}
+          title="Latest messages"
+          sub="What QC Alert sent, and who answered, last 24 hours"
           aside={
-            <Link to="/dashboard/held" className="t-small-strong flex items-center gap-1 text-brand-text hover:underline">
-              Held yarn <ArrowRight size={14} />
+            <Link to="/dashboard/messages" className="t-small-strong flex items-center gap-1 text-brand-text hover:underline">
+              All messages <ArrowRight size={14} />
             </Link>
           }
         >
-          <HoldList s={s} now={now} holds={role === 'plant' ? holds.filter((h) => holdNeedsApproval(h) || holdNudge(s, h, now) === 'plant') : holds} approvals={approvals} user={user} />
+          {recent.length ? <MessageList items={recent} showFrame /> : <Calm text="No messages in the last 24 hours." />}
         </Panel>
-      )}
+      </div>
 
-      {/* 3. Overall + 4. History */}
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
         <Overall s={s} now={now} />
-        <Recent s={s} now={now} user={user} />
+        <Recent s={s} user={user} />
       </div>
     </div>
   );
@@ -144,11 +127,7 @@ function StatusPill({ n, critical }: { n: number; critical: boolean }) {
         No live alerts
       </p>
     );
-  return (
-    <p className={cx('t-small-strong flex items-center gap-2 rounded-full px-4 py-2', critical ? 'bg-critical text-on-critical' : 'bg-major-soft text-major')}>
-      {n} live alert{n > 1 ? 's' : ''}
-    </p>
-  );
+  return <p className={cx('t-small-strong rounded-full px-4 py-2', critical ? 'bg-critical text-on-critical' : 'bg-major-soft text-major')}>{n} live alert{n > 1 ? 's' : ''}</p>;
 }
 
 function Calm({ text }: { text: string }) {
@@ -159,26 +138,44 @@ function Calm({ text }: { text: string }) {
   );
 }
 
-/** One failed test: what, how serious, who owns it, how long, and where it is in the nine steps. */
+/** Messages, newest first: who, how, what, and whether it went out or came back. */
+export function MessageList({ items, showFrame }: { items: (Message & { t?: Ticket })[]; showFrame?: boolean }) {
+  return (
+    <ol className="flex flex-col">
+      {items.map((m, i) => (
+        <li key={i} className="grid grid-cols-[44px_20px_minmax(0,1fr)] gap-x-2 border-b border-line py-2 last:border-b-0">
+          <span className="t-data pt-0.5 text-[12px] text-muted">{hhmm(m.at)}</span>
+          <span aria-label={m.dir === 'out' ? 'Sent' : 'Answer'} className={cx('t-small-strong pt-px text-center', m.dir === 'out' ? 'text-brand-text' : 'text-ok')}>
+            {m.dir === 'out' ? '→' : '←'}
+          </span>
+          <span className="min-w-0">
+            <span className="t-small-strong block">
+              {m.dir === 'out' ? `To ${m.who}` : m.who}
+              {showFrame && m.t && (
+                <Link to={`/dashboard/tickets/${m.t.id}`} className="t-small ml-2 text-muted hover:underline">
+                  {m.t.frameId}
+                </Link>
+              )}
+            </span>
+            <span className="t-small block text-ink">{m.text}</span>
+            <span className="t-small block text-muted">{m.how}</span>
+          </span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+/** One live alert: what failed, where it is, how long, who QC Alert is waiting on, the last message. */
 function AlertRow({ s, t, now, onOpen }: { s: MillState; t: Ticket; now: number; onOpen: () => void }) {
   const esc = escalation(t, now);
   const reading = t.readings[0];
   const rule = reading ? ruleFor(s, t.productId, reading.test) : undefined;
-  const hold = t.holdId ? s.holds.find((h) => h.id === t.holdId) : undefined;
-  const sup = supervisorFor(s, t.frameId, t.alertAt);
-  const owner = t.seenBy
-    ? `${userName(s, t.seenBy).split(' ')[0]} owns it`
-    : esc.level >= 2
-      ? 'Waiting on the plant head'
-      : esc.level === 1
-        ? 'Waiting on the QC manager'
-        : esc.backup
-          ? 'Waiting on the backup supervisor'
-          : `Waiting on ${sup ? sup.name.split(' ')[0] : 'the supervisor'}`;
+  const msgs = messagesFor(s, t, now);
+  const lastOut = [...msgs].reverse().find((m) => m.dir === 'out');
   const steps: [string, boolean][] = [
-    ['Seen', !!t.seenAt],
-    ...(hold ? ([['Held', !!hold.taggedAt]] as [string, boolean][]) : []),
-    ['Line', !!t.lineAction],
+    ['Alert', true],
+    ['Fixing', !!t.seenAt],
     ['Fixed', !!t.fixedAt],
     ['Re-test', !!t.fixConfirmedAt],
   ];
@@ -198,14 +195,18 @@ function AlertRow({ s, t, now, onOpen }: { s: MillState; t: Ticket; now: number;
           {t.reopened ? <span className="t-small-strong text-critical">Re-test failed, reopened</span> : null}
         </div>
         <p className="t-section mt-2">
-          {frameWord(t.frameId)} · {reading ? `${failWord(rule, reading.test, reading.value)}` : t.title}
+          {frameWord(t.frameId)} · {reading ? failWord(rule, reading.test, reading.value) : t.title}
         </p>
         <p className="t-small text-ink">
-          {reading ? `${withUnit(reading.test, reading.value)} (limit ${rule?.min ?? '–'}–${rule?.max ?? '–'})` : ''} · Lot {t.lotId}
-          {hold ? ` · ${roundKg(holdKg(hold, now))} kg held${hold.taggedAt ? '' : ', not tagged yet'}` : ''}
+          {reading ? `${withUnit(reading.test, reading.value)} (limit ${rule?.min ?? '–'}–${rule?.max ?? '–'}) · ` : ''}Lot {t.lotId}
         </p>
+        {lastOut && (
+          <p className="t-small mt-1 text-muted">
+            Last sent {hhmm(lastOut.at)}: to {lastOut.who}
+          </p>
+        )}
       </div>
-      <ol className="flex min-w-[240px] gap-1.5" aria-label="Steps">
+      <ol className="flex min-w-[220px] gap-1.5" aria-label="Steps">
         {steps.map(([w, done]) => (
           <li key={w} className="flex flex-1 flex-col gap-1">
             <span className={cx('h-1.5 rounded-full', done ? (critical ? 'bg-critical' : 'bg-major-fill') : 'bg-[var(--grid)]')} />
@@ -215,44 +216,10 @@ function AlertRow({ s, t, now, onOpen }: { s: MillState; t: Ticket; now: number;
       </ol>
       <div className="min-w-[150px] text-right">
         <p className={cx('t-stat', !t.seenAt && esc.timer === 'over' ? 'text-critical' : 'text-ink')}>{timer(now - t.alertAt)}</p>
-        <p className="t-small text-muted">open · {owner}</p>
+        <p className="t-small text-muted">{t.seenAt ? `${waitingOn(s, t, now)} · ${timer(now - (t.workingAt ?? t.seenAt))}` : `Waiting on ${waitingOn(s, t, now)}`}</p>
         {t.waitingPart && <p className="t-small text-major">Paused: waiting for {t.waitingPart.toLowerCase()}</p>}
       </div>
     </button>
-  );
-}
-
-function HoldList({ s, now, holds, approvals, user }: { s: MillState; now: number; holds: Hold[]; approvals: Hold[]; user: User }) {
-  if (!holds.length) return <Calm text="No held yarn is waiting." />;
-  return (
-    <ul className="divide-y divide-[var(--line)]">
-      {holds.map((h) => {
-        const t = s.tickets.find((x) => x.id === h.ticketId);
-        const nudge = holdNudge(s, h, now);
-        const waited = now - (t?.createdAt ?? h.from);
-        const needs = approvals.includes(h);
-        return (
-          <li key={h.id}>
-            <Link to="/dashboard/held" className="grid grid-cols-[64px_minmax(0,1fr)_auto] items-center gap-3 py-3 hover:bg-sunken">
-              <span className="t-small-strong">{h.frameId}</span>
-              <span className="min-w-0">
-                <span className="t-small-strong block">
-                  {roundKg(holdKg(h, now))} kg · Lot {h.lotId}
-                  {!h.taggedAt && <span className="ml-2 text-major">not tagged yet</span>}
-                </span>
-                <span className="t-small block text-muted">
-                  {needs ? 'Release asked against a failed test: needs the plant head' : h.retest === 'passed' ? 'Re-test passed: ready to decide' : h.retest === 'failed' ? 'Re-test failed' : h.retest === 'pending' ? 'Re-test in the lab' : 'Not re-tested yet'}
-                </span>
-              </span>
-              <span className="text-right">
-                <span className={cx('t-data block', nudge !== 'none' ? 'text-critical' : 'text-ink')}>waiting {ago(waited)}</span>
-                <span className="t-small block text-muted">{needs ? (user.role === 'plant' ? 'Approve' : 'With plant head') : nudge === 'plant' ? 'Plant head told' : nudge === 'qc' ? 'Reminder sent' : 'Decide'}</span>
-              </span>
-            </Link>
-          </li>
-        );
-      })}
-    </ul>
   );
 }
 
@@ -260,20 +227,19 @@ function Overall({ s, now }: { s: MillState; now: number }) {
   const data = useMemo(() => {
     const since = mill(millDayKey(now)) - 29 * DAY;
     const month = s.tickets.filter((t) => t.createdAt >= since && t.createdAt <= now && t.severity !== 'minor');
-    const seen = month.filter((t) => t.seenAt).map((t) => t.seenAt! - t.alertAt);
-    const fix = month.filter((t) => t.fixedAt).map((t) => t.fixedAt! - t.alertAt);
-    const holds = s.holds.filter((h) => month.some((t) => t.id === h.ticketId));
-    const held = holds.reduce((a, h) => a + holdKg(h, now), 0);
-    const released = holds.filter((h) => h.status === 'released').reduce((a, h) => a + holdKg(h, now), 0);
+    const answer = month.filter((t) => t.seenAt).map((t) => t.seenAt! - t.alertAt);
+    const fixing = month.filter((t) => t.fixedAt && t.workingAt).map((t) => t.fixedAt! - t.workingAt!);
+    const parts = new Map<string, number>();
+    for (const t of month) if (t.part) parts.set(t.part, (parts.get(t.part) ?? 0) + 1);
     const repeat = new Map<string, number>();
     for (const t of month) repeat.set(t.frameId, (repeat.get(t.frameId) ?? 0) + 1);
     return {
       faults: month.length,
-      seen: median(seen),
-      fix: median(fix),
-      held,
-      released,
+      answer: median(answer),
+      fixing: median(fixing),
+      made: yarnSaved(s, now, since).avgHeld,
       causes: topCauses(month).slice(0, 5),
+      parts: [...parts.entries()].map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 5),
       repeats: [...repeat.entries()].filter(([, n]) => n >= 2).sort((a, b) => b[1] - a[1]).slice(0, 4),
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -281,7 +247,7 @@ function Overall({ s, now }: { s: MillState; now: number }) {
   return (
     <Panel
       title="This month"
-      sub="Last 30 days, critical and major"
+      sub="Last 30 days, critical and major, from the fix reports"
       aside={
         <Link to="/dashboard/report" className="t-small-strong flex items-center gap-1 text-brand-text hover:underline">
           Monthly report <ArrowRight size={14} />
@@ -290,22 +256,24 @@ function Overall({ s, now }: { s: MillState; now: number }) {
     >
       <dl className="grid grid-cols-2 gap-x-6 gap-y-4">
         <Num label="Faults" value={String(data.faults)} />
-        <Num label="Median to Seen" value={data.seen ? timer(data.seen) : '–'} note="limit 5:00" bad={!!data.seen && data.seen > 5 * 60000} />
-        <Num label="Median to fixed" value={data.fix ? ago(data.fix) : '–'} />
-        <Num label="Yarn held" value={`${roundKg(data.held).toLocaleString('en-IN')} kg`} note={`${roundKg(data.released).toLocaleString('en-IN')} kg released`} />
+        <Num label="Median time to I’m fixing" value={data.answer ? timer(data.answer) : '–'} note="limit 5:00" bad={!!data.answer && data.answer > 5 * 60000} />
+        <Num label="Median fixing time" value={data.fixing ? ago(data.fixing) : '–'} />
+        <Num label="Yarn made before the fix" value={data.made ? `${Math.round(data.made)} kg` : '–'} note="per critical alert, about 250 kg before QC Alert" />
       </dl>
       <div className="mt-5 grid gap-6 sm:grid-cols-2">
         <div>
-          <p className="t-small-strong mb-2 text-muted">Top causes</p>
-          {data.causes.length ? <BarList items={data.causes} /> : <p className="t-small text-muted">No fixes yet.</p>}
+          <p className="t-small-strong mb-2 text-muted">Parts fixed most</p>
+          {data.parts.length ? <BarList items={data.parts} /> : <p className="t-small text-muted">No fix reports yet.</p>}
         </div>
         <div>
-          <p className="t-small-strong mb-2 text-muted">Frames that repeat</p>
+          <p className="t-small-strong mb-2 text-muted">Causes</p>
+          {data.causes.length ? <BarList items={data.causes} /> : <p className="t-small text-muted">No fix reports yet.</p>}
+          <p className="t-small-strong mt-4 mb-2 text-muted">Frames that repeat</p>
           {data.repeats.length ? (
             <ul className="flex flex-col gap-1.5">
               {data.repeats.map(([f, n]) => (
                 <li key={f} className="flex items-center justify-between">
-                  <Link to={`/dashboard/tickets?frame=${f}`} className="t-small-strong hover:underline">
+                  <Link to={`/dashboard/tickets?frame=${f}&tab=all`} className="t-small-strong hover:underline">
                     {f}
                   </Link>
                   <span className="t-small text-muted">{n} faults</span>
@@ -331,7 +299,7 @@ function Num({ label, value, note, bad }: { label: string; value: ReactNode; not
   );
 }
 
-function Recent({ s, now, user }: { s: MillState; now: number; user: User }) {
+function Recent({ s, user }: { s: MillState; user: User }) {
   const list = s.tickets
     .filter((t) => t.status === 'closed' && (user.role !== 'supervisor' || covers(user, t.frameId)))
     .sort((a, b) => (b.closedAt ?? 0) - (a.closedAt ?? 0))
@@ -339,7 +307,7 @@ function Recent({ s, now, user }: { s: MillState; now: number; user: User }) {
   return (
     <Panel
       title="History"
-      sub="Every past fault: cause, response times, yarn and decision"
+      sub="Closed alerts with their fix reports"
       aside={
         <Link to="/dashboard/tickets" className="t-small-strong flex items-center gap-1 text-brand-text hover:underline">
           All <ArrowRight size={14} />
@@ -347,25 +315,20 @@ function Recent({ s, now, user }: { s: MillState; now: number; user: User }) {
       }
     >
       <ul className="divide-y divide-[var(--line)]">
-        {list.map((t) => {
-          const hold = t.holdId ? s.holds.find((h) => h.id === t.holdId) : undefined;
-          return (
-            <li key={t.id}>
-              <Link to={`/dashboard/tickets/${t.id}`} className="grid grid-cols-[14px_56px_minmax(0,1fr)_auto] items-center gap-2 py-2.5 hover:bg-sunken">
-                <SeverityShape level={t.severity} />
-                <span className="t-small-strong">{t.frameId}</span>
-                <span className="t-small min-w-0 truncate">
-                  {t.closeReason === 'sample_error' ? 'False alarm' : t.cause ?? 'Closed'}
-                  {t.raisedBy ? ' · raised by hand' : t.seenAt ? ` · seen in ${timer(t.seenAt - t.alertAt)}` : ''}
-                  {hold ? ` · ${roundKg(holdKg(hold, now))} kg ${hold.status === 'released' ? 'released' : hold.status}` : ''}
-                </span>
-                <span className="t-data text-[12px] text-muted">{dayMonth(t.createdAt)}</span>
-              </Link>
-            </li>
-          );
-        })}
+        {list.map((t) => (
+          <li key={t.id}>
+            <Link to={`/dashboard/tickets/${t.id}`} className="grid grid-cols-[14px_56px_minmax(0,1fr)_auto] items-center gap-2 py-2.5 hover:bg-sunken">
+              <SeverityShape level={t.severity} />
+              <span className="t-small-strong">{t.frameId}</span>
+              <span className="t-small min-w-0 truncate">
+                {t.closeReason === 'sample_error' ? 'False alarm' : [t.part, t.cause].filter(Boolean).join(' · ') || 'Closed'}
+                {t.fixedAt && t.workingAt ? ` · fixed in ${ago(t.fixedAt - t.workingAt)}` : ''}
+              </span>
+              <span className="t-data text-[12px] text-muted">{dayMonth(t.createdAt)}</span>
+            </Link>
+          </li>
+        ))}
       </ul>
     </Panel>
   );
 }
-

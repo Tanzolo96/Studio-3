@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Checkmark } from '@carbon/icons-react';
 import type { Hold, MillState, Severity, ShiftId, Ticket, User } from '../engine/types';
 import { useDispatch, useMillState, useNow, useUser } from '../store/store';
-import { bySeverityThenAge, escalation, frameView, holdNeedsApproval, holdNudge, isEscalated, openHolds, type FrameStateKind } from '../engine/selectors';
+import { bySeverityThenAge, escalation, frameView, holdNeedsApproval, holdNudge, isEscalated, messagesFor, openHolds, type FrameStateKind } from '../engine/selectors';
 import { frameWord, holdKg, lotOf, roundKg, ruleFor, userName } from '../engine/reducer';
 import { MAKES, OFFLINE_NOTE, OUTCOME_WORD, SEVERITY, STATUS_WORD, TEST, frameSources } from '../engine/vocab';
 import { ago, dateTime, dayMonth, hhmm, hmm } from '../engine/time';
@@ -12,6 +12,7 @@ import { ReadingGauge, ResponseTimer, readingLine, ticketChip, ticketMeta } from
 import { Timeline } from '../ui/timeline';
 import { SegmentMeter } from '../ui/charts';
 import { PageHead } from './DashShell';
+import { MessageList } from './Live';
 
 function Section({ title, children, aside, className }: { title: string; children: ReactNode; aside?: ReactNode; className?: string }) {
   return (
@@ -200,18 +201,15 @@ export function TicketDetailPage() {
   const esc = escalation(t, now);
   const reading = t.readings.at(-1);
   const rule = reading && t.kind === 'test_fail' ? ruleFor(s, t.productId, reading.test) : undefined;
-  const hold = t.holdId ? s.holds.find((h) => h.id === t.holdId) : undefined;
-  // The nine steps, as the people involved see them.
+  // Alert -> Fixing -> Fixed + report -> re-test -> closed, with who did each.
   const steps: { label: string; at?: number; who?: string }[] = [
     { label: 'Reported', at: t.createdAt, who: t.readings[0] ? s.results.find((r) => r.id === t.readings[0].resultId)?.by : t.raisedBy },
-    { label: 'Seen', at: t.seenAt, who: t.seenBy },
-    ...(hold ? [{ label: 'Held', at: hold.taggedAt, who: hold.taggedBy }] : []),
-    { label: t.lineAction === 'stopped' ? 'Line stopped' : t.lineAction === 'corrected' ? 'Corrected' : 'Line', at: t.lineActionAt },
+    { label: 'Fixing', at: t.seenAt, who: t.seenBy },
     { label: 'Fixed', at: t.fixedAt, who: t.fixedBy },
     { label: 'Re-test passed', at: t.fixConfirmedAt },
-    ...(hold ? [{ label: 'Yarn decided', at: hold.closedAt }] : []),
     { label: 'Closed', at: t.closedAt },
   ];
+  const msgs = messagesFor(s, t, now);
   return (
     <div className="max-w-[1180px]">
       <BackLink to="/dashboard/tickets">Tickets</BackLink>
@@ -243,6 +241,39 @@ export function TicketDetailPage() {
               </li>
             ))}
           </ol>
+          {(t.fixedAt || t.part) && (
+            <Section title="Fix report">
+              <dl className="grid grid-cols-2 gap-4 rounded-[14px] border border-line bg-raised p-4 shadow-raised sm:grid-cols-4">
+                <div>
+                  <dt className="t-small text-muted">Part of the machine</dt>
+                  <dd className="t-body-strong">{t.part ?? 'Not given'}</dd>
+                </div>
+                <div>
+                  <dt className="t-small text-muted">Cause</dt>
+                  <dd className="t-body-strong">{t.cause ?? '–'}</dd>
+                </div>
+                <div>
+                  <dt className="t-small text-muted">Fixing time</dt>
+                  <dd className="t-body-strong">{t.fixedAt && t.workingAt ? ago(t.fixedAt - t.workingAt) : '–'}</dd>
+                </div>
+                <div>
+                  <dt className="t-small text-muted">Reported by</dt>
+                  <dd className="t-body-strong">{t.fixedBy ? userName(s, t.fixedBy) : '–'}</dd>
+                </div>
+                {t.note && (
+                  <div className="col-span-full">
+                    <dt className="t-small text-muted">Note</dt>
+                    <dd className="t-body">{t.note}</dd>
+                  </div>
+                )}
+              </dl>
+            </Section>
+          )}
+          <Section title="Messages">
+            <div className="rounded-[14px] border border-line bg-raised p-4 shadow-raised">
+              {msgs.length ? <MessageList items={msgs} /> : <p className="t-small text-muted">No messages yet.</p>}
+            </div>
+          </Section>
           <Section title="Timeline">
             <div className="rounded-[14px] border border-line bg-raised shadow-raised p-4">
               <Timeline s={s} t={t} now={now} />
@@ -261,11 +292,10 @@ export function TicketDetailPage() {
               <p className="t-small-strong mb-2 text-muted">Response</p>
               <ResponseTimer elapsed={esc.elapsed} limitMins={t.seenMins} state={esc.timer} level={esc.level} frozen={!!t.seenAt || t.status === 'closed'} />
               <p className="t-small mt-3 text-muted">
-                Not seen: backup supervisor at {t.seenMins} min, QC manager at {t.escalateQcMins}, plant head at {t.escalatePhMins}.
+                If nobody taps I’m fixing: backup supervisor at {t.seenMins} min, QC manager at {t.escalateQcMins}, plant head at {t.escalatePhMins}.
               </p>
             </div>
           )}
-          {hold && <HoldCard s={s} h={hold} now={now} compact />}
           {t.sisterFrames.length > 0 && (
             <div className="rounded-[14px] border border-line bg-raised shadow-raised p-4">
               <p className="t-small-strong mb-2 text-muted">Other frames on Lot {t.lotId} (ticked by the supervisor)</p>

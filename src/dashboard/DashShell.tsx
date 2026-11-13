@@ -1,9 +1,8 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Asleep, Chip, Dashboard, Idea, Light, Locked, Notification, Report, Rule, Search, Task, UserAvatar } from '@carbon/icons-react';
+import { ArrowLeft, ArrowRight, Asleep, Chat, Dashboard, Light, Notification, Report, Rule, Search, Task, UserAvatar } from '@carbon/icons-react';
 import { useMillState, useNow, useSession, useTheme, useUser } from '../store/store';
-import { heldKg, isEscalated } from '../engine/selectors';
-import { roundKg } from '../engine/reducer';
+import { isEscalated } from '../engine/selectors';
 import { cx } from '../ui/primitives';
 import { ROLE_WORD } from '../app/Person';
 import { SimulatorDock } from '../demo/Simulator';
@@ -11,10 +10,10 @@ import { SimulatorDock } from '../demo/Simulator';
 const ICON: Record<string, ReactNode> = {
   Overview: <Dashboard size={18} />,
   'My shift': <Dashboard size={18} />,
+  'Live alerts': <Dashboard size={18} />,
   Tickets: <Task size={18} />,
-  'Held yarn': <Locked size={18} />,
-  Machines: <Chip size={18} />,
-  'AI insights': <Idea size={18} />,
+  History: <Task size={18} />,
+  Messages: <Chat size={18} />,
   'Monthly report': <Report size={18} />,
   'Monthly review': <Report size={18} />,
   Rules: <Rule size={18} />,
@@ -25,19 +24,19 @@ type Role = 'supervisor' | 'qc' | 'plant';
 /** roles: who sees the item in the sidebar. Left out = everyone. */
 const NAV: { group: string; items: { to: string; label: string; end?: boolean; roles?: Role[] }[] }[] = [
   {
-    group: 'Operations',
+    group: 'Alerts',
     items: [
-      { to: '/dashboard', label: 'Overview', end: true },
-      { to: '/dashboard/tickets', label: 'Tickets', roles: ['supervisor', 'qc'] },
-      { to: '/dashboard/held', label: 'Held yarn' },
+      { to: '/dashboard', label: 'Live alerts', end: true },
+      { to: '/dashboard/tickets', label: 'History' },
+      { to: '/dashboard/messages', label: 'Messages' },
     ],
   },
   {
-    group: 'Insight',
+    group: 'Setup',
     items: [
+      { to: '/dashboard/rules', label: 'Rules' },
       { to: '/dashboard/report', label: 'Monthly report', roles: ['qc'] },
       { to: '/dashboard/review', label: 'Monthly review', roles: ['plant'] },
-      { to: '/dashboard/rules', label: 'Rules', roles: ['qc'] },
       { to: '/dashboard/account', label: 'Account' },
     ],
   },
@@ -65,7 +64,6 @@ export function DashShell() {
   }, [picker]);
   const live = s.tickets.filter((t) => t.status !== 'closed' && t.status !== 'fixed');
   const urgent = live.some((t) => t.severity === 'critical' || isEscalated(t, now));
-  const kg = roundKg(heldKg(s, now));
 
   return (
     <div data-theme={surfaceTheme} className="flex min-h-dvh gap-3 bg-surface p-3 text-ink">
@@ -86,13 +84,12 @@ export function DashShell() {
             <div key={g.group} className="flex flex-col gap-1">
               <p className="t-label px-5 pb-1 text-[11px] text-neutral">{g.group}</p>
               {g.items.map((n) => (
-            <NavItem key={n.to} to={n.to} end={n.end} label={n.to === '/dashboard' && user.role === 'supervisor' ? 'My shift' : n.label}>
-              {n.label === 'Tickets' && live.length > 0 && (
+            <NavItem key={n.to} to={n.to} end={n.end} label={n.to === '/dashboard' && user.role === 'plant' ? 'Decisions' : n.label}>
+              {n.label === 'Live alerts' && live.length > 0 && (
                 <span className={cx('t-data grid h-6 min-w-6 place-items-center rounded-[6px] px-1.5 text-[13px]', urgent ? 'bg-critical-soft text-critical' : 'bg-minor-soft text-minor')}>
                   {live.length}
                 </span>
               )}
-              {n.label === 'Held yarn' && kg > 0 && <span className="t-data rounded-[6px] bg-held-soft px-1.5 text-[13px] text-held">{kg} kg</span>}
             </NavItem>
               ))}
             </div>
@@ -191,10 +188,8 @@ export function PageHead({ title, sub, actions }: { title: string; sub?: ReactNo
 }
 
 const TITLES: [string, string][] = [
-  ['/dashboard/tickets', 'Tickets'],
-  ['/dashboard/held', 'Held yarn'],
-  ['/dashboard/machines', 'Machines'],
-  ['/dashboard/insights', 'AI insights'],
+  ['/dashboard/tickets', 'History'],
+  ['/dashboard/messages', 'Messages'],
   ['/dashboard/report', 'Monthly report'],
   ['/dashboard/review', 'Monthly review'],
   ['/dashboard/case', 'Decision'],
@@ -204,10 +199,9 @@ const TITLES: [string, string][] = [
 
 function TopBar({ live, urgent }: { live: number; urgent: boolean }) {
   const nav = useNavigate();
-  const user = useUser('dash');
   const { pathname } = useLocation();
   const [q, setQ] = useState('');
-  const title = TITLES.find(([p]) => pathname.startsWith(p))?.[1] ?? (user.role === 'supervisor' ? 'My shift' : 'Overview');
+  const title = TITLES.find(([p]) => pathname.startsWith(p))?.[1] ?? 'Live alerts';
   const go = () => {
     const n = q.trim().replace(/\D/g, '');
     if (n) nav(`/dashboard/tickets?frame=RF-${n.padStart(2, '0')}&tab=all`);

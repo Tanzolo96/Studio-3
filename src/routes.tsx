@@ -2,7 +2,8 @@ import { Link, Navigate, type RouteObject } from 'react-router-dom';
 import { AppShell } from './app/AppShell';
 import { AlertsScreen, FailScreen, PreviousScreen, RaiseScreen, TestEntryScreen, TicketScreen } from './app/screens';
 import { DashShell } from './dashboard/DashShell';
-import { HeldYarn, TicketDetailPage, Tickets } from './dashboard/pages';
+import { TicketDetailPage, Tickets } from './dashboard/pages';
+import { MessagesPage } from './dashboard/messages';
 import { Report } from './dashboard/Overview';
 import { Overview } from './dashboard/Live';
 import { CasePage, PlantReview } from './dashboard/plant';
@@ -66,7 +67,9 @@ export const dashRoutes: RouteObject = {
     { index: true, element: <Overview /> },
     { path: 'tickets', element: <Tickets /> },
     { path: 'tickets/:id', element: <TicketDetailPage /> },
-    { path: 'held', element: <HeldYarn /> },
+    // No held yarn in the app: the old page redirects to live alerts.
+    { path: 'held', element: <Navigate to="/dashboard" replace /> },
+    { path: 'messages', element: <MessagesPage /> },
     // Machines are not connected, so there are no machine pages: a frame is a field on a ticket.
     { path: 'machines', element: <Navigate to="/dashboard/tickets" replace /> },
     { path: 'machines/:id', element: <Navigate to="/dashboard/tickets" replace /> },
