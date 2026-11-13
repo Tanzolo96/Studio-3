@@ -28,7 +28,7 @@ writeFileSync(
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-visual">
 <meta name="theme-color" content="#161616">
 <link rel="icon" href="data:image/svg+xml,${encodeURIComponent(icon)}">
 <link rel="manifest" href="manifest.webmanifest">
