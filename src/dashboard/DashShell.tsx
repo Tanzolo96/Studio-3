@@ -51,6 +51,7 @@ export function DashShell() {
   const s = useMillState();
   const now = useNow();
   const user = useUser('dash');
+  const go = useNavigate();
   const { theme, setTheme, setUser } = useSession();
   const [picker, setPicker] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
@@ -129,6 +130,8 @@ export function DashShell() {
                       onClick={() => {
                         setUser('dash', id);
                         setPicker(false);
+                        // A new person starts on their own overview, not on the last person's page.
+                        go('/dashboard');
                       }}
                       className={cx('flex w-full items-center justify-between gap-2 px-3 py-2 text-left hover:bg-sunken', u.id === user.id && 'bg-brand-soft')}
                     >
@@ -150,7 +153,10 @@ export function DashShell() {
       <div className="flex min-w-0 flex-1 flex-col gap-3">
         <TopBar live={live.length} urgent={urgent} />
         <main id="main" className="min-w-0 flex-1 px-4 pt-4 pb-24">
-          <Outlet />
+          {/* Keyed by person so a switch always draws that person's page fresh. */}
+          <div key={user.id} className="contents">
+            <Outlet />
+          </div>
         </main>
       </div>
     </div>
