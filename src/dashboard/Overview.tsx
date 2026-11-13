@@ -466,12 +466,12 @@ export function Report() {
         <ReportStat label="Frame with most alerts" value={top ? top.name : '–'} note={top ? `${top.value} alert${top.value === 1 ? '' : 's'} this month` : 'No alerts'} tone={top && top.value >= 3 ? 'bad' : undefined} />
       </section>
 
-      <Panel title="Alerts per day" sub="Last 30 days · every alert · click a day to see its alerts" className="anim-in">
-        <DayCards s={s} now={now} picked={dayKey} onPick={setDayKey} />
-        <div className="mt-5 border-t border-line pt-4">
-          <p className="t-small-strong mb-1">
-            {isToday ? 'Today' : DAYS_FULL[(new Date(dayStart0 + 5.5 * 3600000).getUTCDay() + 6) % 7]}, {dayMonth(dayStart0)} · {dayList.length} alert{dayList.length === 1 ? '' : 's'}
-          </p>
+      <div className="anim-in grid gap-4 xl:grid-cols-2" style={{ '--i': 1 } as CSSProperties}>
+        <CalendarPanel s={s} now={now} onOpen={() => {}} pickedKey={dayKey} onPick={setDayKey} />
+        <Panel
+          title={`${isToday ? 'Today' : DAYS_FULL[(new Date(dayStart0 + 5.5 * 3600000).getUTCDay() + 6) % 7]}, ${dayMonth(dayStart0)}`}
+          sub={`${dayList.length} alert${dayList.length === 1 ? '' : 's'} · click a day on the calendar`}
+        >
           {dayList.length ? (
             <ul className="flex flex-col divide-y divide-[var(--line)]">
               {dayList.map((x) => (
@@ -496,8 +496,8 @@ export function Report() {
           ) : (
             <p className="t-small text-muted">No alerts on this day.</p>
           )}
-        </div>
-      </Panel>
+        </Panel>
+      </div>
 
       <div className="anim-in grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]" style={{ '--i': 2 } as CSSProperties}>
         <Panel title="How fast alerts were fixed" sub="Each bar is one critical or major alert, newest at the top: waiting for someone to start, then fixing">
@@ -506,58 +506,6 @@ export function Report() {
         <Panel title="Top causes" sub="What fixed frames had in common">
           {a.causes.length ? <BarList items={a.causes} /> : <p className="t-small text-muted">No fixed tickets yet.</p>}
         </Panel>
-      </div>
-    </div>
-  );
-}
-
-/** One card per day for the last 30 days: the number of critical and major alerts, coloured by how many. */
-function DayCards({ s, now, picked, onPick }: { s: MillState; now: number; picked: string; onPick: (k: string) => void }) {
-  const today = mill(millDayKey(now));
-  const days = Array.from({ length: 30 }, (_, i) => {
-    const start = today - (29 - i) * DAY;
-    const n = s.tickets.filter((t) => t.createdAt >= start && t.createdAt < start + DAY && t.createdAt <= now).length;
-    return { start, key: millDayKey(start), n };
-  });
-  const tone = (n: number) => (n === 0 ? 'bg-sunken text-muted' : n === 1 ? 'bg-ok text-on-brand' : n === 2 ? 'bg-major-fill text-ink' : 'bg-critical text-on-critical');
-  const by = (f: (n: number) => boolean) => days.filter((d) => f(d.n)).length;
-  return (
-    <div>
-      <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(15, minmax(0, 1fr))' }}>
-        {days.map((d, i) => {
-          const on = d.key === picked;
-          return (
-            <button
-              key={d.start}
-              type="button"
-              onClick={() => onPick(d.key)}
-              aria-pressed={on}
-              aria-label={`${dayMonth(d.start)}: ${d.n} alert${d.n === 1 ? '' : 's'}`}
-              className="flex flex-col items-center gap-1"
-            >
-              <span
-                className={cx('anim-pop grid h-12 w-full place-items-center rounded-[8px] text-[15px] font-semibold tabular-nums transition-transform hover:scale-105', tone(d.n), on && 'outline outline-2 outline-offset-2 outline-[var(--ink)]')}
-                style={{ '--i': i } as CSSProperties}
-              >
-                {d.n === 0 ? '–' : d.n}
-              </span>
-              <span className={cx('t-data text-[11px]', d.start === today || on ? 'font-semibold text-ink' : 'text-muted')}>
-                {d.start === today ? 'Today' : i === 0 || dayMonth(d.start).startsWith('01') ? dayMonth(d.start) : dayMonth(d.start).split(' ')[0]}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-        <p className="t-small-strong">
-          {by((n) => n >= 3)} bad day{by((n) => n >= 3) === 1 ? '' : 's'} with 3 or more alerts · {by((n) => n === 0)} days with none
-        </p>
-        <div className="t-small flex flex-wrap items-center gap-4 text-muted">
-          <span className="flex items-center gap-1.5"><span className="size-3 rounded-[3px] bg-ok" /> 1 alert</span>
-          <span className="flex items-center gap-1.5"><span className="size-3 rounded-[3px] bg-major-fill" /> 2 alerts</span>
-          <span className="flex items-center gap-1.5"><span className="size-3 rounded-[3px] bg-critical" /> 3 or more</span>
-          <span className="flex items-center gap-1.5"><span className="size-3 rounded-[3px] bg-sunken" /> None</span>
-        </div>
       </div>
     </div>
   );
@@ -687,7 +635,7 @@ function CalendarPanel({ s, now, onOpen, pickedKey, onPick }: { s: MillState; no
   const byDay = useMemo(() => {
     const m = new Map<string, Ticket[]>();
     for (const t of s.tickets) {
-      if (t.createdAt > now || t.severity === 'minor') continue;
+      if (t.createdAt > now) continue;
       const k = millDayKey(t.createdAt);
       m.set(k, [...(m.get(k) ?? []), t]);
     }
@@ -698,8 +646,9 @@ function CalendarPanel({ s, now, onOpen, pickedKey, onPick }: { s: MillState; no
     const k = key(i + 1);
     const list = byDay.get(k) ?? [];
     if (k > todayKey) return 'future';
-    if (list.some((t) => t.severity === 'critical')) return 'critical';
-    if (list.length) return 'major';
+    if (list.length >= 3) return 'critical';
+    if (list.length === 2) return 'major';
+    if (list.length === 1) return 'one';
     return k >= firstKey ? 'calm' : 'none';
   });
   const count = (kind: string) => kinds.filter((x) => x === kind).length;
@@ -709,7 +658,7 @@ function CalendarPanel({ s, now, onOpen, pickedKey, onPick }: { s: MillState; no
   return (
     <Panel
       title={`${MONTH_NAMES[view.m]} ${view.y}`}
-      sub="Critical and major alerts"
+      sub="Alerts per day · click a day to see them"
       aside={
         <div className="flex gap-1">
           <button type="button" aria-label="Previous month" onClick={() => step(-1)} className={btn}>
@@ -724,15 +673,15 @@ function CalendarPanel({ s, now, onOpen, pickedKey, onPick }: { s: MillState; no
       <div className="mb-4 grid grid-cols-3 gap-2">
         <div className="rounded-[8px] bg-critical-soft px-3 py-2">
           <p className="t-stat !text-[20px] !leading-[24px] text-critical">{count('critical')}</p>
-          <p className="t-small text-critical">Critical days</p>
+          <p className="t-small text-critical">Days with 3+</p>
         </div>
         <div className="rounded-[8px] bg-major-soft px-3 py-2">
           <p className="t-stat !text-[20px] !leading-[24px] text-major">{count('major')}</p>
-          <p className="t-small text-major">Major days</p>
+          <p className="t-small text-major">Days with 2</p>
         </div>
         <div className="rounded-[8px] bg-ok-soft px-3 py-2">
-          <p className="t-stat !text-[20px] !leading-[24px] text-ok">{count('calm')}</p>
-          <p className="t-small text-ok">Calm days</p>
+          <p className="t-stat !text-[20px] !leading-[24px] text-ok">{count('one')}</p>
+          <p className="t-small text-ok">Days with 1</p>
         </div>
       </div>
       <div className="grid grid-cols-7 gap-1 text-center">
@@ -759,34 +708,35 @@ function CalendarPanel({ s, now, onOpen, pickedKey, onPick }: { s: MillState; no
               style={{ '--i': i } as CSSProperties}
               aria-label={`${d} ${MONTH_NAMES[view.m]}, ${list.length} alert${list.length === 1 ? '' : 's'}`}
               className={cx(
-                'anim-pop t-small relative mx-auto flex size-10 items-center justify-center rounded-[10px] font-medium transition-transform hover:scale-110',
-                isPicked
-                  ? 'bg-brand font-semibold text-on-brand'
-                  : kind === 'critical'
+                'anim-pop t-small relative mx-auto flex h-11 w-full max-w-12 flex-col items-center justify-center gap-1 rounded-[10px] font-medium transition-transform hover:scale-105',
+                isPicked && 'outline outline-2 outline-offset-1 outline-[var(--ink)]',
+                kind === 'critical'
                     ? 'bg-critical-soft text-critical'
                     : kind === 'major'
                       ? 'bg-major-soft text-major'
-                      : kind === 'calm'
+                      : kind === 'one'
                         ? 'bg-ok-soft text-ok'
                         : kind === 'future'
                           ? 'text-neutral'
                           : 'text-muted',
-                k === todayKey && !isPicked && 'ring-2 ring-[var(--brand)]',
+                k === todayKey && 'font-bold',
               )}
             >
-              {d}
-              {list.length > 1 && (
-                <span className={cx('absolute -top-1 -right-1 grid h-4 min-w-4 place-items-center rounded-full px-1 text-[10px] font-semibold', isPicked ? 'bg-ink text-surface' : kind === 'critical' ? 'bg-critical text-on-critical' : 'bg-major-fill text-ink')}>{list.length}</span>
-              )}
+              <span className="leading-none">{d}</span>
+              <span className="flex h-1.5 gap-0.5" aria-hidden>
+                {Array.from({ length: Math.min(3, list.length) }, (_, j) => (
+                  <span key={j} className={cx('size-1.5 rounded-full', kind === 'critical' ? 'bg-critical' : kind === 'major' ? 'bg-major-fill' : 'bg-ok')} />
+                ))}
+              </span>
             </button>
           );
         })}
       </div>
       <ul className="t-small mt-3 flex flex-wrap gap-x-4 gap-y-1 text-muted" aria-label="Legend">
-        <li className="flex items-center gap-1.5"><span className="size-2.5 rounded-[3px] bg-critical" />Critical</li>
-        <li className="flex items-center gap-1.5"><span className="size-2.5 rounded-[3px] bg-major-fill" />Major</li>
-        <li className="flex items-center gap-1.5"><span className="size-2.5 rounded-[3px] bg-ok" />Calm</li>
-        <li className="flex items-center gap-1.5"><span className="size-2.5 rounded-[3px] bg-brand" />Selected</li>
+        <li className="flex items-center gap-1.5"><span className="size-2.5 rounded-[3px] bg-ok" />1 alert</li>
+        <li className="flex items-center gap-1.5"><span className="size-2.5 rounded-[3px] bg-major-fill" />2 alerts</li>
+        <li className="flex items-center gap-1.5"><span className="size-2.5 rounded-[3px] bg-critical" />3 or more</li>
+        <li className="flex items-center gap-1.5"><span className="size-2.5 rounded-[3px] outline outline-2 outline-[var(--ink)]" />Picked day</li>
       </ul>
       {!onPick && (<div className="mt-4 border-t border-line pt-3">
         <p className="t-small-strong mb-2">{picked === todayKey ? 'Today' : dayMonth(mill(picked))}</p>
@@ -804,7 +754,7 @@ function CalendarPanel({ s, now, onOpen, pickedKey, onPick }: { s: MillState; no
             {day.length > 3 && <li className="t-small px-1 text-muted">and {day.length - 3} more</li>}
           </ul>
         ) : (
-          <p className="t-small text-muted">No critical or major alerts.</p>
+          <p className="t-small text-muted">No alerts.</p>
         )}
       </div>)}
     </Panel>
