@@ -12,6 +12,7 @@ import { cx, Empty, SeverityBadge, StatusChip } from '../ui/primitives';
 import { InsightCard, readingLine, ticketChip } from '../ui/cards';
 import { BarList, Dial, SegmentMeter, CountUp, Ring, Sparkline } from '../ui/charts';
 import { PageHead } from './DashShell';
+import { PrintReport } from './printReport';
 import { PlantHome } from './plant';
 
 export function Panel({ title, sub, aside, children, className }: { title: string; sub?: string; aside?: ReactNode; children: ReactNode; className?: string }) {
@@ -443,7 +444,9 @@ export function Report() {
   const seenNow = [...a.trend].reverse().find((p) => p.mins !== null)?.mins ?? null;
   const top = a.frames[0];
   return (
-    <div className="mx-auto flex max-w-[1240px] flex-col gap-5">
+    <>
+    <PrintReport s={s} now={now} />
+    <div className="screen-only mx-auto flex max-w-[1240px] flex-col gap-5">
       <PageHead
         title="Monthly report"
         sub="Last 30 days"
@@ -474,6 +477,7 @@ export function Report() {
         </Panel>
       </div>
     </div>
+    </>
   );
 }
 

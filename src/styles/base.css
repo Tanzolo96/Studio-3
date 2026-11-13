@@ -121,11 +121,44 @@ p { margin: 0; text-wrap: pretty; }
 .demo-phone .phone { max-height: calc(100dvh - 104px); }
 
 /* Monthly report "Download PDF": print only the page content */
+/* Download PDF: only the printed report (.print-only) prints, as an A4 document in black on white. */
+.print-only { display: none; }
 @media print {
-  nav, aside, header[role='banner'], .no-print { display: none !important; }
-  main { overflow: visible !important; }
-  body { background: #fff; }
+  nav, aside, header[role='banner'], .no-print, .screen-only { display: none !important; }
+  .print-only { display: block !important; }
+  main { overflow: visible !important; padding: 0 !important; }
+  html, body, [data-theme] { background: #fff !important; color: #111 !important; }
+  @page { size: A4; margin: 14mm 14mm 16mm; @bottom-right { content: 'Page ' counter(page) ' of ' counter(pages); font: 8pt Inter, Arial, sans-serif; color: #777; } @bottom-left { content: 'QC Alert · Monthly quality report'; font: 8pt Inter, Arial, sans-serif; color: #777; } }
 }
+.qcr { font: 9pt/1.45 Inter, Arial, sans-serif; color: #111; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.qcr h1 { font-size: 18pt; line-height: 1.15; font-weight: 700; margin: 2pt 0 0; letter-spacing: -0.01em; }
+.qcr h2 { font-size: 9.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; margin: 0 0 6pt; padding-bottom: 3pt; border-bottom: 1.5pt solid #111; }
+.qcr section { margin-top: 14pt; break-inside: avoid; }
+.qcr .qcr-break { break-before: page; break-inside: auto; margin-top: 0; }
+.qcr-head { display: flex; justify-content: space-between; gap: 16pt; padding-bottom: 10pt; border-bottom: 3pt solid #FF5A1F; }
+.qcr-kicker { font-size: 8pt; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #FF5A1F; margin: 0; }
+.qcr-sub { margin: 3pt 0 0; color: #555; }
+.qcr-meta { border-collapse: collapse; font-size: 8pt; }
+.qcr-meta th { text-align: left; color: #777; font-weight: 500; padding: 1pt 8pt 1pt 0; white-space: nowrap; }
+.qcr-meta td { font-weight: 600; padding: 1pt 0; white-space: nowrap; }
+.qcr-lead { font-size: 10pt; margin: 0 0 8pt; }
+.qcr-table { width: 100%; border-collapse: collapse; font-size: 8.5pt; }
+.qcr-table th { text-align: left; font-weight: 600; color: #444; background: #f1f1ef; padding: 4pt 6pt; border-bottom: 1pt solid #bbb; }
+.qcr-table td { padding: 3.5pt 6pt; border-bottom: 0.5pt solid #ddd; vertical-align: top; }
+.qcr-table tr { break-inside: avoid; }
+.qcr-table td.ok { color: #1e7b3c; font-weight: 600; }
+.qcr-table td.bad { color: #c8231b; font-weight: 600; }
+.qcr-log { font-size: 7.8pt; }
+.qcr-log td, .qcr-log th { padding: 3pt 4pt; }
+.qcr-list { list-style: decimal; margin: 0; padding-left: 16pt; display: grid; gap: 3pt; font-size: 9.5pt; }
+.qcr-two { display: grid; grid-template-columns: 1.15fr 1fr; gap: 14pt; }
+.qcr-bar { display: inline-block; width: 50pt; height: 5pt; background: #eee; vertical-align: middle; margin-right: 4pt; }
+.qcr-bar span { display: block; height: 100%; background: #FF5A1F; }
+.qcr-note { margin: -2pt 0 6pt; color: #666; font-size: 8pt; }
+.qcr-sign { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16pt; margin-top: 26pt; font-size: 8pt; color: #555; }
+.qcr-sign span { display: block; border-top: 0.75pt solid #111; margin-bottom: 4pt; height: 22pt; }
+.qcr-sign b { color: #111; }
+.qcr-foot { margin-top: 18pt; font-size: 7.5pt; color: #888; }
 
 /* Dropdowns: one look everywhere. Our own chevron, inset to match the text padding, so pills read balanced.
    Unlayered on purpose so it wins over per-element padding utilities. */
