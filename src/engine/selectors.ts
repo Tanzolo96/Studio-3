@@ -143,7 +143,7 @@ export function heldKg(s: MillState, now: number) {
 }
 export const holdNeedsApproval = (h: Hold) => {
   const d = h.decisions.at(-1);
-  return !!d && d.needsApproval && !d.approvedBy;
+  return !!d && d.needsApproval && !d.approvedBy && !d.sentBack;
 };
 
 export function median(xs: number[]) {

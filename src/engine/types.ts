@@ -22,12 +22,14 @@ export interface Product {
   nominalNe: number;
   kgPerHour: number; // per ring frame
   cvWarnPct: number; // winding-sensor early-warning threshold (CV rise, %)
+  buyer: string; // "Buyer B"
 }
 
 export interface Lot {
   id: string; // "2417"
   productId: string;
   startedAt: number;
+  dispatchAt?: number; // when this lot must leave for the buyer
 }
 
 export interface Frame {
@@ -172,6 +174,7 @@ export interface Ticket {
   fixConfirmedAt?: number;
   /** How many times a failed re-test sent this ticket back to the line. */
   reopened?: number;
+  waitingParts?: { at: number; note: string };
   events: TicketEvent[];
 }
 
@@ -186,6 +189,8 @@ export interface Decision {
   needsApproval: boolean;
   approvedBy?: string;
   approvedAt?: number;
+  approvedReason?: string;
+  sentBack?: { by: string; at: number; reason: string };
 }
 
 export interface Hold {
@@ -207,6 +212,17 @@ export interface Hold {
   movedAt?: number;
 }
 
+export type FrameOutcome = 'overhaul' | 'procedure' | 'watch';
+
+export interface FrameDecision {
+  id: string;
+  at: number;
+  by: string;
+  frameId: string;
+  outcome: FrameOutcome;
+  reason: string;
+}
+
 export interface Clock {
   simAt: number; // sim time at anchor
   realAt: number; // wall time at anchor
@@ -226,6 +242,7 @@ export interface MillState {
   holds: Hold[];
   drift: Record<string, { cvPct: number; at: number }>; // latest winding-sensor drift per frame
   rovingChanges: { frameId: string; at: number }[];
+  frameDecisions: FrameDecision[];
   seq: { ticket: number; hold: number; request: number; result: number };
 }
 
@@ -255,7 +272,10 @@ export type MillEvent = Base &
     | { type: 'rule/set'; ruleId: string; min?: number; max?: number; severity: Severity; escalateQcMins: number; escalatePhMins: number }
     | { type: 'hold/retest'; holdId: string }
     | { type: 'hold/decide'; holdId: string; outcome: Exclude<HoldOutcome, 'retest'>; reason: string }
-    | { type: 'hold/approve'; holdId: string }
+    | { type: 'hold/approve'; holdId: string; reason?: string }
+    | { type: 'hold/sendBack'; holdId: string; reason: string }
+    | { type: 'frame/decide'; frameId: string; outcome: FrameOutcome; reason: string }
+    | { type: 'ticket/needsParts'; ticketId: string; note: string }
   );
 
 export type MillEventInput = MillEvent extends infer E

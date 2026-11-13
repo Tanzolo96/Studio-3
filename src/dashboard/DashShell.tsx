@@ -16,6 +16,7 @@ const ICON: Record<string, ReactNode> = {
   Machines: <Chip size={18} />,
   'AI insights': <Idea size={18} />,
   'Monthly report': <Report size={18} />,
+  'Monthly review': <Report size={18} />,
   Rules: <Rule size={18} />,
   Account: <UserAvatar size={18} />,
 };
@@ -27,14 +28,15 @@ const NAV: { group: string; items: { to: string; label: string; end?: boolean; r
     group: 'Operations',
     items: [
       { to: '/dashboard', label: 'Overview', end: true },
-      { to: '/dashboard/tickets', label: 'Tickets' },
+      { to: '/dashboard/tickets', label: 'Tickets', roles: ['supervisor', 'qc'] },
       { to: '/dashboard/held', label: 'Held yarn' },
     ],
   },
   {
     group: 'Insight',
     items: [
-      { to: '/dashboard/report', label: 'Monthly report', roles: ['qc', 'plant'] },
+      { to: '/dashboard/report', label: 'Monthly report', roles: ['qc'] },
+      { to: '/dashboard/review', label: 'Monthly review', roles: ['plant'] },
       { to: '/dashboard/rules', label: 'Rules', roles: ['qc'] },
       { to: '/dashboard/account', label: 'Account' },
     ],
@@ -194,6 +196,8 @@ const TITLES: [string, string][] = [
   ['/dashboard/machines', 'Machines'],
   ['/dashboard/insights', 'AI insights'],
   ['/dashboard/report', 'Monthly report'],
+  ['/dashboard/review', 'Monthly review'],
+  ['/dashboard/case', 'Decision'],
   ['/dashboard/rules', 'Rules'],
   ['/dashboard/account', 'Account'],
 ];

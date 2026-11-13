@@ -64,6 +64,7 @@ Machines and lab instruments are **simulated**. Everything else runs for real in
 | Hosting | claude.ai artifact (single HTML file) for now. Vercel planned with Supabase | Zero setup; a link that works today |
 | Raise ticket | Goes straight to the supervisor queue. Raised by a supervisor = starts as Seen | No QC review step |
 | Held yarn | Only the QC manager decides; the plant head approves a release against a failed or missing re-test | From the brief |
+| Plant head | Decides only what is above the QC manager: releases against a failed test (approve, ask for a re-test, or send back, reason required), what to do with a frame that keeps failing (3+ critical or major alerts in 30 days: fix the changeover, overhaul, or keep watching), and takes charge of alerts that reach 20 min (call, never Seen) | He judges people and machines over weeks; doing ticket steps would undercut the supervisor and the QC manager |
 | After Seen | No escalation after Seen in v1; elapsed time is shown | Brief only times Seen |
 | AI insights | Rules over the real data, worded from templates, labelled AI with confidence and evidence. No live LLM | Stable in front of a jury |
 | Language | English v1, all words in code so Hindi/Gujarati can be added later | |
@@ -85,7 +86,7 @@ Machines and lab instruments are **simulated**. Everything else runs for real in
 | Lab tester | Rohan Desai (A), Meena Joshi (B), Deepak Rao (C) | App | Urgent test requests ranked by risk, enter results, mark sample error |
 | Fitter | Suresh Kumar, Imran Shaikh (A), Raju Patil (B), Harish Mehta (C) | App | Repair jobs, mark repair done |
 | QC manager | Priya Shah | Dashboard + app for escalations | Only role that edits Rules and decides on held yarn. Escalation at 10 min |
-| Plant head | Mohit Maheshwari | Dashboard | Sees everything, approves overrides, final escalation at 20 min |
+| Plant head | Mohit Maheshwari | Dashboard (decision desk, case pages, monthly review) + app for escalations and approvals | Approves or sends back releases against a failed test, decides on repeat-fault frames, final escalation at 20 min. No Seen, Start work or Mark fixed; no Tickets or Machines in his nav (deep links still work) |
 
 Shifts: **A 06:00–14:00, B 14:00–22:00, C 22:00–06:00** (usual Indian mill shifts; matches the posters, where Krish is on A shift with 12 frames). Alerts go to the supervisor on shift who looks after that frame. People with no frame range cover the whole floor.
 
@@ -116,6 +117,8 @@ Hold: `on_hold → released | reprocess | downgrade`. A release without a passed
   - **Critical → contain**: hold yarn since the last good test on that frame (kg = rate × hours, keeps growing until Fixed), flag sister frames (same lot), send urgent sister tests (due in 15 min).
 - **Sample error** → if no real failing reading is left: hold released, sister tests cancelled, ticket closed as a false alarm (counted in reports).
 - **Re-test of held yarn** → records passed/failed on the hold; never raises a new alert.
+- **Plant head** (`hold/approve` with reason, `hold/sendBack`, `frame/decide`) → recorded with name, time and reason; `src/engine/plant.ts` builds his case list and decision log. Lots carry `dispatchAt` and products a `buyer`, so a release shows its deadline.
+- **Fitter can't fix it yet** (`ticket/needsParts`) → the job shows what is missing until the repair is done.
 - **Fixed** → hold stops growing; ticket closes at once if nothing is held, else when the QC manager decides.
 
 ### Escalation is pure time (`src/engine/selectors.ts`)

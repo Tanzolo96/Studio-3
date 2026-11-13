@@ -11,6 +11,7 @@ import { Button, Choice, cx, Empty, Field, SeverityBadge, SeverityShape, TextFie
 import { ReadingGauge, ResponseTimer, TicketCard, ticketMeta } from '../ui/cards';
 import { Timeline } from '../ui/timeline';
 import { readPhoto, Sheet } from './Sheet';
+import { FloorCard, PlantEscalationBlock, PlantPhoneHome, pastCauses } from './plantPhone';
 
 function Page({ title, sub, back, children }: { title: string; sub?: string; back?: string; children: ReactNode }) {
   return (
@@ -65,6 +66,11 @@ function OperatorHome({ user }: { user: User }) {
 }
 
 function MyTickets({ user }: { user: User }) {
+  if (user.role === 'plant') return <PlantPhoneHome user={user} />;
+  return <MyTicketsList user={user} />;
+}
+
+function MyTicketsList({ user }: { user: User }) {
   const s = useMillState();
   const now = useNow();
   const nav = useNavigate();
@@ -110,9 +116,13 @@ function MyTickets({ user }: { user: User }) {
           <p className="t-small-strong text-muted">
             {live.length} need{live.length === 1 ? 's' : ''} attention
           </p>
-          {live.map((t) => (
-            <TicketCard key={t.id} s={s} t={t} now={now} onOpen={() => nav(`/app/ticket/${t.id}`)} />
-          ))}
+          {live.map((t) =>
+            user.role === 'supervisor' ? (
+              <FloorCard key={t.id} s={s} t={t} now={now} user={user} onOpen={() => nav(`/app/ticket/${t.id}`)} />
+            ) : (
+              <TicketCard key={t.id} s={s} t={t} now={now} onOpen={() => nav(`/app/ticket/${t.id}`)} />
+            ),
+          )}
         </div>
       )}
       {waitingRetest.length > 0 && (
@@ -199,7 +209,6 @@ function TestRequests({ user }: { user: User }) {
 function RepairJobs({ user }: { user: User }) {
   const s = useMillState();
   const now = useNow();
-  const dispatch = useDispatch();
   const jobs = fitterJobs(s, user.id);
   return (
     <Page title="Repair jobs" sub={`${user.shift} shift · ${first(user)} · ${jobs.length} open`}>
@@ -208,7 +217,20 @@ function RepairJobs({ user }: { user: User }) {
       ) : (
         <ul className="flex flex-col gap-3">
           {jobs.map((t) => (
-            <li key={t.id} className="rounded-[10px] border border-line bg-raised p-4 shadow-raised">
+            <RepairJob key={t.id} s={s} t={t} now={now} user={user} />
+          ))}
+        </ul>
+      )}
+    </Page>
+  );
+}
+
+function RepairJob({ s, t, now, user }: { s: MillState; t: Ticket; now: number; user: User }) {
+  const dispatch = useDispatch();
+  const [parts, setParts] = useState<string | null>(null);
+  const past = pastCauses(s, t);
+  return (
+            <li className="rounded-[10px] border border-line bg-raised p-4 shadow-raised">
               <div className="flex items-center justify-between">
                 <SeverityBadge level={t.severity} />
                 <span className="t-data text-[13px] text-muted">sent {ago(now - (t.events.findLast((e) => e.kind === 'fitter_assigned')?.at ?? now))} ago</span>
@@ -218,14 +240,54 @@ function RepairJobs({ user }: { user: User }) {
               <p className="t-small mt-1 text-muted">
                 {ticketMeta(s, t)} · from {userName(s, t.seenBy)}
               </p>
+              {past.length > 0 && (
+                <div className="mt-3 rounded-[10px] bg-sunken px-3 py-2.5">
+                  <p className="t-small-strong">Fixed on this frame before</p>
+                  <ul className="mt-1 flex flex-col gap-0.5">
+                    {past.map((p) => (
+                      <li key={p.at} className="t-small flex justify-between gap-3">
+                        <span>{p.cause}</span>
+                        <span className="t-data text-[12px] text-muted">{dayMonth(p.at)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {t.waitingParts && (
+                <p className="t-small mt-3 rounded-[10px] bg-major-soft px-3 py-2.5 text-ink">
+                  <span className="t-small-strong">Waiting for parts:</span> {t.waitingParts.note}. Krish can see this.
+                </p>
+              )}
               <Button size="lg" block className="mt-4" onClick={() => dispatch({ type: 'ticket/repairDone', ticketId: t.id, by: user.id })}>
                 Mark repair done
               </Button>
+              {!t.waitingParts && parts === null && (
+                <Button size="lg" block variant="ghost" className="mt-2" onClick={() => setParts('')}>
+                  Can't fix it now
+                </Button>
+              )}
+              {parts !== null && (
+                <form
+                  className="mt-3 flex flex-col gap-2"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (parts.trim().length < 3) return;
+                    dispatch({ type: 'ticket/needsParts', ticketId: t.id, note: parts.trim(), by: user.id });
+                    setParts(null);
+                  }}
+                >
+                  <TextField label="What do you need?" value={parts} onChange={(e) => setParts(e.target.value)} hint="For example: top roller cot from the store" autoFocus />
+                  <div className="flex gap-2">
+                    <Button type="submit" block disabled={parts.trim().length < 3}>
+                      Tell Krish
+                    </Button>
+                    <Button type="button" variant="ghost" onClick={() => setParts(null)}>
+                      Cancel
+                    </Button>
+                  </div>
+                </form>
+              )}
             </li>
-          ))}
-        </ul>
-      )}
-    </Page>
   );
 }
 
@@ -271,8 +333,9 @@ function TicketDetail({ s, t, now, user }: { s: MillState; t: Ticket; now: numbe
   const lastReading = t.readings.at(-1);
   const rule = reading && t.kind === 'test_fail' ? ruleFor(s, t.productId, reading.test) : undefined;
   const hold = t.holdId ? s.holds.find((h) => h.id === t.holdId) : undefined;
-  const canAct = user.role === 'supervisor' || user.role === 'qc' || user.role === 'plant';
-  const isSupervisor = user.role === 'supervisor' || user.role === 'qc';
+  // The plant head reads and calls; the supervisor (or the QC manager covering) acts.
+  const canAct = user.role === 'supervisor' || user.role === 'qc';
+  const isSupervisor = canAct;
   const fitter = t.fitterId ? userName(s, t.fitterId) : undefined;
   const product = s.products.find((p) => p.id === t.productId)!;
   const retest = s.requests.find((r) => r.ticketId === t.id && r.reason === 'retest' && r.status === 'pending');
@@ -463,6 +526,7 @@ function TicketDetail({ s, t, now, user }: { s: MillState; t: Ticket; now: numbe
           <p className="t-small text-ink">{panel.line}</p>
         </div>
       </section>
+      {user.role === 'plant' && !closed && <PlantEscalationBlock s={s} t={t} now={now} />}
 
       {t.status === 'open' && t.severity !== 'minor' && (
         <section className="mt-4">
@@ -743,6 +807,7 @@ export function TestEntryScreen() {
   const req = s.requests.find((r) => r.id === id);
   const [raw, setRaw] = useState('');
   const [saved, setSaved] = useState<string>();
+  const [confirm, setConfirm] = useState(false);
   if (!req) return <Page title="Request not found" back="/app">{null}</Page>;
   const product = productOfFrame(s, req.frameId);
   const rule = ruleFor(s, product.id, req.test);
@@ -808,6 +873,10 @@ export function TestEntryScreen() {
         onSubmit={(e) => {
           e.preventDefault();
           if (value === undefined || invalid || (user.role !== 'tester' && user.role !== 'qc')) return;
+          if (!withinRule(rule, value) && req.reason !== 'retest' && !confirm) {
+            setConfirm(true);
+            return;
+          }
           const ev = dispatch({ type: 'result/enter', frameId: req.frameId, test: req.test, value, requestId: req.id, by: user.id });
           const r = useMillStateSnapshot().results.findLast((x) => x.requestId === req.id && x.at === ev.at);
           setSaved(r?.id);
@@ -820,7 +889,10 @@ export function TestEntryScreen() {
           inputMode="decimal"
           autoComplete="off"
           value={raw}
-          onChange={(e) => setRaw(e.target.value)}
+          onChange={(e) => {
+            setRaw(e.target.value);
+            setConfirm(false);
+          }}
           unit={TEST[req.test].unit}
           error={invalid ? 'Enter a number, like 29.8' : undefined}
           hint={rule ? `Limit for ${product.short}: ${rule.min ?? '–'} to ${rule.max ?? '–'}` : undefined}
@@ -831,9 +903,26 @@ export function TestEntryScreen() {
             <p className="t-small mt-3 text-critical">Saving this alerts the supervisor{rule?.severity === 'critical' ? ' and holds the yarn' : ''}.</p>
           )}
         </div>
-        <Button size="lg" block type="submit" disabled={value === undefined || invalid || (user.role !== 'tester' && user.role !== 'qc')}>
-          Save result
-        </Button>
+        {confirm && value !== undefined ? (
+          <div className="anim-fade flex flex-col gap-3 rounded-[10px] border border-critical bg-critical-soft p-4" role="alertdialog" aria-label="Check the reading">
+            <p className="t-body-strong text-ink">
+              Is {value} {TEST[req.test].unit} right?
+            </p>
+            <p className="t-small text-ink">
+              It is outside {rule?.min ?? '–'} to {rule?.max ?? '–'}. Saving it {rule?.severity === 'critical' ? 'rings the supervisor and holds the yarn' : 'alerts the supervisor'}. Read the instrument once more before you save.
+            </p>
+            <Button size="lg" block type="submit" variant="danger">
+              Yes, save {value} {TEST[req.test].unit}
+            </Button>
+            <Button size="lg" block type="button" variant="ghost" onClick={() => setConfirm(false)}>
+              Change the reading
+            </Button>
+          </div>
+        ) : (
+          <Button size="lg" block type="submit" disabled={value === undefined || invalid || (user.role !== 'tester' && user.role !== 'qc')}>
+            Save result
+          </Button>
+        )}
         {user.role !== 'tester' && user.role !== 'qc' && <p className="t-small text-center text-muted">Only the lab tester and the QC manager enter results.</p>}
       </form>
     </Page>

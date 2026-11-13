@@ -13,10 +13,18 @@ import { DAY, HOUR, ago, dayMonth, hhmm, mill, millDayKey, millHour, shiftAt, ti
 import { BarList } from '../ui/charts';
 import { cx, SeverityBadge, SeverityShape } from '../ui/primitives';
 import { Panel } from './Overview';
+import { PlantHome } from './plant';
 
 const WEEKDAY = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 export function Overview() {
+  const user = useUser('dash');
+  // The plant head gets his decision desk (dashboard/plant.tsx).
+  if (user.role === 'plant') return <PlantHome />;
+  return <FloorOverview />;
+}
+
+function FloorOverview() {
   const s = useMillState();
   const now = useNow();
   const user = useUser('dash');
