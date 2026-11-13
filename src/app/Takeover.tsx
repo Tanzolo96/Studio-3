@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { MillState, Ticket, User } from '../engine/types';
 import { escalation, takeoversFor } from '../engine/selectors';
-import { covers, frameWord, ruleFor } from '../engine/reducer';
+import { covers, frameWord, limitFor } from '../engine/reducer';
 import { hhmm } from '../engine/time';
 import { Button, cx, SeverityShape } from '../ui/primitives';
 import { ReadingGauge, ResponseTimer } from '../ui/cards';
@@ -41,7 +41,7 @@ function Takeover({ s, t, user, now, more }: { s: MillState; t: Ticket; user: Us
   const esc = escalation(t, now);
   const product = s.products.find((p) => p.id === t.productId)!;
   const reading = t.readings.at(-1);
-  const rule = reading && t.kind === 'test_fail' ? ruleFor(s, t.productId, reading.test) : undefined;
+  const rule = reading && t.kind === 'test_fail' ? limitFor(s, t.productId, reading) : undefined;
   const critical = t.severity === 'critical';
   const done = t.events.filter((e) => e.kind === 'contained' && e.at >= t.alertAt - 1).map((e) => e.text);
   const escalatedToMe = user.role !== 'supervisor' || !covers(user, t.frameId);

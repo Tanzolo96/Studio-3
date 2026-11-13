@@ -16,10 +16,13 @@ export function readingLine(s: MillState, t: Ticket) {
   const r = t.readings.at(-1);
   if (!r) return t.raisedBy ? 'Raised by hand' : '';
   if (r.test === 'cv' && t.kind !== 'test_fail') return `CV +${r.value.toFixed(1)}%`;
+  // The limit that applied when the alert fired (kept on the reading), so history stays true after rules change.
   const rule = ruleFor(s, t.productId, r.test);
+  const min = r.min !== undefined || r.max !== undefined ? r.min : rule?.min;
+  const max = r.min !== undefined || r.max !== undefined ? r.max : rule?.max;
   const unit = TEST[r.test].unit;
-  const lim = rule?.min !== undefined && rule?.max !== undefined ? `${fmt(r.test, rule.min)}–${fmt(r.test, rule.max)}` : rule?.min !== undefined ? `min ${fmt(r.test, rule.min)}` : `max ${fmt(r.test, rule!.max!)}`;
-  return `${fmt(r.test, r.value)}${unit ? ` ${unit}` : ''} (${lim})`;
+  const lim = min !== undefined && max !== undefined ? `${fmt(r.test, min)}–${fmt(r.test, max)}` : min !== undefined ? `min ${fmt(r.test, min)}` : max !== undefined ? `max ${fmt(r.test, max)}` : '';
+  return `${fmt(r.test, r.value)}${unit ? ` ${unit}` : ''}${lim ? ` (${lim})` : ''}`;
 }
 
 export function ticketMeta(s: MillState, t: Ticket) {

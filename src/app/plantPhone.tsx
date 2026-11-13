@@ -6,7 +6,7 @@ import { ArrowLeft, Checkmark, ChevronRight, Phone } from '@carbon/icons-react';
 import type { MillState, Ticket, User } from '../engine/types';
 import { useDispatch, useMillState, useNow, useUser } from '../store/store';
 import { escalation } from '../engine/selectors';
-import { frameWord, roundKg, ruleFor, userName } from '../engine/reducer';
+import { frameWord, roundKg, limitFor, userName } from '../engine/reducer';
 import { plantCases, releaseCase } from '../engine/plant';
 import { TEST } from '../engine/vocab';
 import { DAY, MIN, ago, dayMonth, hhmm, timer } from '../engine/time';
@@ -19,7 +19,7 @@ export function readingWords(s: MillState, t: Ticket) {
   const r = t.readings.at(-1);
   if (!r) return t.raisedBy ? 'Raised by hand' : '';
   if (r.test === 'cv' && t.kind !== 'test_fail') return `Winding sensor CV up ${r.value.toFixed(1)}%`;
-  const rule = ruleFor(s, t.productId, r.test);
+  const rule = limitFor(s, t.productId, r);
   const u = TEST[r.test].unit;
   const d = TEST[r.test].decimals;
   const v = `${r.value.toFixed(d)}${u ? ` ${u}` : ''}`;
@@ -184,7 +184,7 @@ export function PhoneCase() {
   const c = releaseCase(s, hold, now);
   const t = c.ticket;
   const r = t?.readings.at(-1);
-  const rule = t && r ? ruleFor(s, t.productId, r.test) : undefined;
+  const rule = t && r ? limitFor(s, t.productId, r) : undefined;
   const last = hold.decisions.at(-1);
   const pending = hold.status === 'on_hold' && last?.needsApproval && !last.approvedBy && !last.sentBack;
   const kg = roundKg(c.kg);

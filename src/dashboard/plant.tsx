@@ -7,7 +7,7 @@ import { ArrowLeft, ArrowRight, Phone } from '@carbon/icons-react';
 import type { MillState, Ticket } from '../engine/types';
 import { useDispatch, useMillState, useNow, useUser } from '../store/store';
 import { escalation } from '../engine/selectors';
-import { frameWord, roundKg, ruleFor, userName } from '../engine/reducer';
+import { frameWord, roundKg, limitFor, userName } from '../engine/reducer';
 import { BASELINE_KG } from '../engine/analytics';
 import { insights } from '../engine/insights';
 import { frameAlerts, frameCase, lastFrameDecision, plantCases, plantLog, releaseCase, responseDots, type FrameCase, type PlantCase, type ReleaseCase } from '../engine/plant';
@@ -55,7 +55,7 @@ function DecisionCard({ s, c, now, i }: { s: MillState; c: PlantCase; now: numbe
   const open = () => nav(`/dashboard/case/${c.id}`);
   if (c.kind === 'release') {
     const r = c.ticket?.readings.at(-1);
-    const rule = c.ticket && r ? ruleFor(s, c.ticket.productId, r.test) : undefined;
+    const rule = c.ticket && r ? limitFor(s, c.ticket.productId, r) : undefined;
     return (
       <article className="anim-in grid gap-3 rounded-[12px] border border-line-strong bg-raised p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center" style={stagger(i)}>
         <div className="flex min-w-0 flex-col gap-1.5">
@@ -341,7 +341,7 @@ function ReleaseCasePage({ s, c, now }: { s: MillState; c: ReleaseCase; now: num
   const pending = c.hold.status === 'on_hold' && c.hold.decisions.at(-1)?.needsApproval && !c.hold.decisions.at(-1)?.approvedBy && !c.hold.decisions.at(-1)?.sentBack;
   const t = c.ticket;
   const r = t?.readings.at(-1);
-  const rule = t && r ? ruleFor(s, t.productId, r.test) : undefined;
+  const rule = t && r ? limitFor(s, t.productId, r) : undefined;
   const retestReq = s.requests.filter((q) => q.holdId === c.hold.id && q.resultId).at(-1);
   const retest = retestReq ? s.results.find((x) => x.id === retestReq.resultId) : undefined;
   const history = frameAlerts(s, c.hold.frameId, now - 30 * DAY, now).length;

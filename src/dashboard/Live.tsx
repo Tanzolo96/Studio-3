@@ -7,7 +7,7 @@ import { ArrowRight, Checkmark } from '@carbon/icons-react';
 import type { MillState, Ticket, User } from '../engine/types';
 import { useMillState, useNow, useUser } from '../store/store';
 import { bySeverityThenAge, escalation, median, messagesFor, waitingOn, type Message } from '../engine/selectors';
-import { covers, failWord, frameWord, ruleFor, withUnit } from '../engine/reducer';
+import { covers, failWord, frameWord, limitFor, withUnit } from '../engine/reducer';
 import { topCauses, yarnSaved } from '../engine/analytics';
 import { DAY, HOUR, ago, dayMonth, hhmm, mill, millDayKey, millHour, shiftAt, timer } from '../engine/time';
 import { BarList } from '../ui/charts';
@@ -170,7 +170,7 @@ export function MessageList({ items, showFrame }: { items: (Message & { t?: Tick
 function AlertRow({ s, t, now, onOpen }: { s: MillState; t: Ticket; now: number; onOpen: () => void }) {
   const esc = escalation(t, now);
   const reading = t.readings[0];
-  const rule = reading ? ruleFor(s, t.productId, reading.test) : undefined;
+  const rule = reading ? limitFor(s, t.productId, reading) : undefined;
   const msgs = messagesFor(s, t, now);
   const lastOut = [...msgs].reverse().find((m) => m.dir === 'out');
   const steps: [string, boolean][] = [

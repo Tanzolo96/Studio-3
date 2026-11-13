@@ -14,11 +14,23 @@ export const productOfFrame = (s: MillState, frameId: string): Product => {
   const lot = lotOf(s, frameOf(s, frameId).lotId);
   return s.products.find((p) => p.id === lot.productId)!;
 };
+/** A yarn nobody has made can go entirely; one with lots or alerts stays, with no limits. */
+function dropUnusedProduct(s: MillState, productId: string) {
+  const used = s.lots.some((l) => l.productId === productId) || s.tickets.some((t) => t.productId === productId);
+  if (!used) s.products = s.products.filter((p) => p.id !== productId);
+}
+
 /** A yarn by its name and buyer ("40s combed" + "Buyer A"), forgiving about case and spacing. */
 export function findProduct(s: MillState, yarn: string, buyer: string): Product | undefined {
   const norm = (x: string) => x.toLowerCase().replace(/\s+/g, ' ').trim();
   const b = norm(buyer);
   return s.products.find((p) => norm(p.buyer) === b && (norm(p.name) === norm(`${yarn}, ${buyer}`) || norm(p.name).startsWith(norm(yarn))));
+}
+/** The limit an alert's reading was judged against: the one saved on the reading, else today's rule. */
+export function limitFor(s: MillState, productId: string, r: { test: TestKind; min?: number; max?: number }): { test: TestKind; min?: number; max?: number } | undefined {
+  if (r.min !== undefined || r.max !== undefined) return { test: r.test, min: r.min, max: r.max };
+  const rule = s.rules.find((x) => x.productId === productId && x.test === r.test);
+  return rule ? { test: r.test, min: rule.min, max: rule.max } : undefined;
 }
 export const ruleFor = (s: MillState, productId: string, test: TestKind): Rule | undefined =>
   s.rules.find((r) => r.productId === productId && r.test === test);
@@ -36,7 +48,7 @@ export const covers = (u: { frames?: [number, number] }, frameId: string) => {
 export const supervisorFor = (s: MillState, frameId: string, at: number) =>
   s.users.find((u) => u.role === 'supervisor' && u.shift === shiftAt(at) && covers(u, frameId));
 
-export function withinRule(rule: Rule | undefined, value: number) {
+export function withinRule(rule: Pick<Rule, 'min' | 'max'> | undefined, value: number) {
   if (!rule) return true;
   if (rule.min !== undefined && value < rule.min) return false;
   if (rule.max !== undefined && value > rule.max) return false;
@@ -50,14 +62,15 @@ export function withUnit(test: TestKind, v: number) {
   const u = TEST[test].unit;
   return u ? `${fmt(test, v)} ${u}` : fmt(test, v);
 }
-export function limitText(rule: Pick<Rule, 'min' | 'max' | 'test'>) {
+export function limitText(rule: Pick<Rule, 'min' | 'max' | 'test'> | undefined) {
+  if (!rule || (rule.min === undefined && rule.max === undefined)) return 'not set';
   const t = rule.test;
   if (rule.min !== undefined && rule.max !== undefined) return `${fmt(t, rule.min)}–${fmt(t, rule.max)}`;
   if (rule.min !== undefined) return `min ${fmt(t, rule.min)}`;
   return `max ${fmt(t, rule.max!)}`;
 }
 /** Floor words for a failing reading ("Too thick"), never codes. */
-export function failWord(rule: Rule | undefined, test: TestKind, v: number) {
+export function failWord(rule: Pick<Rule, 'min' | 'max'> | undefined, test: TestKind, v: number) {
   if (rule?.min !== undefined && v < rule.min) return TEST[test].tooLow;
   if (rule?.max !== undefined && v > rule.max) return TEST[test].tooHigh;
   return 'Within limit';
@@ -272,12 +285,12 @@ export function apply(s: MillState, e: MillEvent): void {
           t.seenAt = undefined;
           t.seenBy = undefined;
         }
-        log(t, e.at, 'upgraded', `Lab test failed: ${withUnit(e.test, e.value)} (limit ${limitText(rule!)}). Raised to ${severity}.`, e.by);
+        log(t, e.at, 'upgraded', `Lab test failed: ${withUnit(e.test, e.value)} (limit ${limitText(rule)}). Raised to ${severity}.`, e.by);
       } else {
         t = newTicket(s, e.at, e.frameId, 'test_fail', severity, title, rule);
         t.test = e.test;
         t.readings.push(reading);
-        log(t, e.at, 'created', `${TEST[e.test].name} ${withUnit(e.test, e.value)} is outside the limit ${limitText(rule!)}`, e.by);
+        log(t, e.at, 'created', `${TEST[e.test].name} ${withUnit(e.test, e.value)} is outside the limit ${limitText(rule)}`, e.by);
       }
       if (req?.reason === 'sister' && parent) {
         log(parent, e.at, 'note', `${frameWord(e.frameId)} sister check failed: ${withUnit(e.test, e.value)}. Opened ${t.id}.`, e.by);
@@ -524,9 +537,15 @@ export function apply(s: MillState, e: MillEvent): void {
       const product = s.products.find((p) => p.id === e.productId);
       if (!product) return;
       s.rules = s.rules.filter((r) => r.productId !== product.id);
-      // A yarn nobody has made can go entirely; one with lots or alerts stays, with no limits.
-      const used = s.lots.some((l) => l.productId === product.id) || s.tickets.some((t) => t.productId === product.id);
-      if (!used) s.products = s.products.filter((p) => p.id !== product.id);
+      dropUnusedProduct(s, product.id);
+      return;
+    }
+
+    case 'rule/remove': {
+      const rule = s.rules.find((r) => r.id === e.ruleId);
+      if (!rule) return;
+      s.rules = s.rules.filter((r) => r.id !== rule.id);
+      if (!s.rules.some((r) => r.productId === rule.productId)) dropUnusedProduct(s, rule.productId);
       return;
     }
 

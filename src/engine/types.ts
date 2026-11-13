@@ -304,6 +304,8 @@ export type MillEvent = Base &
     | { type: 'ruleset/add'; yarn: string; buyer: string; source: string; limits: SetLimit[] }
     /** Remove a whole rule set: every limit for that yarn. */
     | { type: 'ruleset/remove'; productId: string }
+    /** Remove one limit from a set. The last one out removes the set. */
+    | { type: 'rule/remove'; ruleId: string }
     | { type: 'ticket/raise'; frameId: string; problem: string; severity: Severity; note?: string; photo?: string }
     | { type: 'ticket/handover'; ticketId: string; note: string }
     | { type: 'ticket/sisters'; ticketId: string; frameIds: string[] }

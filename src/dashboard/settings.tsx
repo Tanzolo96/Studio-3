@@ -387,12 +387,14 @@ function LimitTables() {
   const [error, setError] = useState('');
   const [saved, setSaved] = useState<string | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
+  const [dropping, setDropping] = useState<string | null>(null);
   const [removed, setRemoved] = useState('');
   const since = now - 30 * 86_400_000;
   const runningOn = (pid: string) => s.frames.filter((f) => s.lots.find((l) => l.id === f.lotId)?.productId === pid);
 
   const start = (r: Rule) => {
     setEditing(r.id);
+    setDropping(null);
     setError('');
     setDraft({ min: r.min?.toString() ?? '', max: r.max?.toString() ?? '', severity: r.severity, qc: String(r.escalateQcMins), ph: String(r.escalatePhMins) });
   };
@@ -431,7 +433,10 @@ function LimitTables() {
         </p>
       </div>
       {removed && <p className="t-small-strong text-ok">{removed}</p>}
-      {s.products.map((p) => {
+      {[...s.products]
+        .map((p) => ({ p, added: Math.max(0, ...s.rules.filter((r) => r.productId === p.id && r.source).map((r) => r.updatedAt)) }))
+        .sort((a, b) => b.added - a.added)
+        .map(({ p, added }) => {
         const rules = s.rules.filter((r) => r.productId === p.id);
         const frames = runningOn(p.id);
         const source = rules.find((r) => r.source)?.source;
@@ -447,7 +452,8 @@ function LimitTables() {
         return (
           <Panel
             key={p.id}
-            title={p.name}
+            className={added && now - added < 6 * 3_600_000 ? 'anim-in border-brand' : undefined}
+            title={added && now - added < 6 * 3_600_000 ? `${p.name} · just added` : p.name}
             sub={`Nominal count ${p.nominalNe} Ne · ${frames.length ? `${frames.length} frame${frames.length > 1 ? 's' : ''} running it` : 'no frame running it now'}${source ? ` · from ${source}, ${dayMonth(rules[0].updatedAt)}` : ''}`}
             aside={
               canEdit && !confirm ? (
@@ -482,14 +488,14 @@ function LimitTables() {
               </div>
             )}
             <div className="-mx-5 overflow-x-auto">
-              <table className="w-full min-w-[620px] table-fixed text-left">
+              <table className="w-full min-w-[760px] table-fixed text-left">
                 <colgroup>
+                  <col className="w-[20%]" />
+                  <col className="w-[11%]" />
+                  <col className="w-[11%]" />
+                  <col className="w-[15%]" />
+                  <col className="w-[17%]" />
                   <col className="w-[26%]" />
-                  <col className="w-[12%]" />
-                  <col className="w-[12%]" />
-                  <col className="w-[16%]" />
-                  <col className="w-[18%]" />
-                  <col className="w-[16%]" />
                 </colgroup>
                 <thead>
                   <tr className="t-label text-[10px] text-muted">
@@ -527,8 +533,8 @@ function LimitTables() {
                         </td>
                         <td className="t-small py-3">
                           {on ? (
-                            <span>
-                              {im.next} of {im.total} would fail <span className={cx(im.next > im.now ? 'text-critical' : im.next < im.now ? 'text-ok' : 'text-muted')}>(now {im.now})</span>
+                            <span className="block pr-3">
+                              {im.next} of {im.total} would fail <span className={cx('block', im.next > im.now ? 'text-critical' : im.next < im.now ? 'text-ok' : 'text-muted')}>(now {im.now})</span>
                             </span>
                           ) : (
                             <span className="text-muted">
@@ -539,12 +545,25 @@ function LimitTables() {
                         <td className="px-5 py-3 text-right">
                           {canEdit ? (
                             on ? (
-                              <span className="flex justify-end gap-2">
+                              <span className="flex justify-end gap-2 whitespace-nowrap">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (dropping !== r.id) return setDropping(r.id);
+                                    dispatch({ type: 'rule/remove', ruleId: r.id, by: user.id } as never);
+                                    setEditing(null);
+                                    setDropping(null);
+                                    setRemoved(`Removed the ${TEST[r.test].name} limit from ${p.name}.`);
+                                  }}
+                                  className={cx('t-small-strong h-9 rounded-full px-3', dropping === r.id ? 'bg-critical text-on-critical hover:bg-[var(--critical-hover)]' : 'text-critical hover:bg-critical-soft')}
+                                >
+                                  {dropping === r.id ? 'Confirm remove' : 'Remove'}
+                                </button>
                                 <button type="button" onClick={() => setEditing(null)} className="t-small-strong h-9 rounded-full border border-line px-3 hover:bg-sunken">
                                   Cancel
                                 </button>
                                 <button type="button" onClick={() => save(r)} className="t-small-strong h-9 rounded-full bg-brand px-4 text-on-brand hover:bg-[var(--brand-hover)]">
-                                  Save rule
+                                  Save
                                 </button>
                               </span>
                             ) : (
@@ -696,7 +715,7 @@ export function AccountPage() {
         </div>
       </Panel>
 
-      <Panel title="People and roles" sub={`${s.users.length} people · click a name to see their details`}>
+      <Panel title="People and roles" sub={`${s.users.length} people`}>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {roles.map((r) => {
             const people = s.users.filter((u) => u.role === r);
@@ -708,22 +727,10 @@ export function AccountPage() {
                 <ul className="flex flex-col gap-1.5">
                   {people.map((u) => (
                     <li key={u.id}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setViewing(u.id);
-                          window.scrollTo({ top: 0, behavior: 'smooth' });
-                          document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' });
-                        }}
-                        aria-label={`See ${u.name}'s details`}
-                        className={cx('-mx-2 flex w-[calc(100%+16px)] items-center gap-2.5 rounded-[8px] px-2 py-1 text-left hover:bg-sunken', user.id === u.id && 'bg-brand-soft')}
-                      >
-                        <span className="grid size-7 shrink-0 place-items-center rounded-full bg-sunken text-[10px] font-semibold">{u.name.split(' ').map((p) => p[0]).join('')}</span>
-                        <span className="min-w-0 flex-1">
-                          <span className="t-small block">{u.name}</span>
-                          <span className="t-small block truncate text-muted">{profileOf(u.id).email}</span>
-                        </span>
-                        <span className="t-small shrink-0 text-muted">{u.shift === 'G' ? 'Day' : `${u.shift} shift`}</span>
+                      <button type="button" onClick={() => { setViewing(u.id); document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' }); window.scrollTo({ top: 0, behavior: 'smooth' }); }} aria-label={`See ${u.name}'s details`} className="group flex w-full items-center gap-2.5 text-left">
+                        <span className="grid size-7 place-items-center rounded-full bg-sunken text-[10px] font-semibold">{u.name.split(' ').map((p) => p[0]).join('')}</span>
+                        <span className={cx('t-small flex-1 group-hover:underline', user.id === u.id && !isMe && 't-small-strong')}>{u.name}</span>
+                        <span className="t-small text-muted">{u.shift === 'G' ? 'Day' : `${u.shift} shift`}</span>
                       </button>
                     </li>
                   ))}

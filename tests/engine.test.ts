@@ -181,40 +181,39 @@ describe('rules', () => {
 
 describe('rule sets: add and remove a whole yarn at a time', () => {
 
-  it('reads the same three sets from the CSV and from the PDF text', () => {
+  it('reads the same set from the CSV and from the PDF text', () => {
     const s = seedState();
-    const a = readDocument(csv, s);
-    const b = readDocument(pdfText, s);
-    for (const doc of [a, b]) {
-      expect(doc.sets.map((x) => `${x.yarn}|${x.buyer}`)).toEqual(['40s combed|Buyer A', '30s combed|Buyer 2', '20s carded|Buyer 1']);
-      expect(doc.sets[0].limits.find((l) => l.test === 'count')).toEqual({ test: 'count', min: 39.4, max: 40.6, severity: 'critical' });
-      expect(doc.sets[0].limits.find((l) => l.test === 'csp')).toMatchObject({ min: 2350, max: undefined, severity: 'major' });
-      expect(doc.sets[2].limits.find((l) => l.test === 'cv')).toMatchObject({ max: 14, severity: 'critical' });
+    for (const doc of [readDocument(csv, s), readDocument(pdfText, s)]) {
+      expect(doc.sets.map((x) => `${x.yarn}|${x.buyer}`)).toEqual(['30s combed|Buyer 2']);
+      expect(doc.sets[0].limits.find((l) => l.test === 'count')).toEqual({ test: 'count', min: 29.6, max: 30.4, severity: 'critical' });
+      expect(doc.sets[0].limits.find((l) => l.test === 'csp')).toMatchObject({ min: 2250, max: undefined, severity: 'major' });
+      expect(doc.sets[0].limits.find((l) => l.test === 'cv')).toMatchObject({ max: 14, severity: 'major' });
+      expect(doc.rules.filter((r) => r.kind !== 'note')).toHaveLength(0);
     }
-    // The PDF's general rules still come through as the alert chain.
-    expect(b.rules.filter((r) => r.kind === 'routing')).toHaveLength(3);
   });
 
-  it('adding a set replaces that yarn, a new buyer adds a yarn, and removing takes the whole set out', () => {
+  it('adding a set replaces that yarn, a new buyer adds a yarn, and sets or single limits can be removed', () => {
     const s = seedState();
-    const { sets } = readDocument(csv, s);
+    const table = ['yarn,buyer,test,lower,upper,severity', '40s combed,Buyer A,Count,39.4,40.6,critical', '40s combed,Buyer A,CSP,2350,,major', csv.split('\n').slice(1).join('\n')].join('\n');
+    const { sets } = readDocument(table, s);
+    expect(sets).toHaveLength(2);
     const before = s.products.length;
     for (const x of sets) run(s, DEMO_START, { type: 'ruleset/add', yarn: x.yarn, buyer: x.buyer, source: 'rules.csv', limits: x.limits, by: 'priya' });
-    // 40s combed, Buyer A already existed: its limits are replaced, not duplicated.
-    const p40 = s.products.find((p) => p.id === 'p40')!;
+    // 40s combed, Buyer A already existed: its limits are replaced by the two in the file.
     const r40 = s.rules.filter((r) => r.productId === 'p40');
-    expect(r40).toHaveLength(4);
+    expect(r40).toHaveLength(2);
     expect(r40.find((r) => r.test === 'count')).toMatchObject({ min: 39.4, max: 40.6, source: 'rules.csv' });
-    expect(p40.name).toBe('40s combed, Buyer A');
-    // Two new buyers, two new yarns.
-    expect(s.products).toHaveLength(before + 2);
+    // A new buyer is a new yarn.
+    expect(s.products).toHaveLength(before + 1);
     const b2 = s.products.find((p) => p.buyer === 'Buyer 2')!;
     expect(b2.short).toBe('30s');
-    expect(s.rules.filter((r) => r.productId === b2.id)).toHaveLength(4);
-    // Remove an unused set: the yarn goes too.
+    expect(s.rules.filter((r) => r.productId === b2.id)).toHaveLength(3);
+    // Remove one limit: the rest of the set stays.
+    run(s, DEMO_START + MIN, { type: 'rule/remove', ruleId: `${b2.id}-csp`, by: 'priya' });
+    expect(s.rules.filter((r) => r.productId === b2.id).map((r) => r.test).sort()).toEqual(['count', 'cv']);
+    // Remove the whole unused set: the yarn goes too.
     run(s, DEMO_START + MIN, { type: 'ruleset/remove', productId: b2.id, by: 'priya' });
     expect(s.products.some((p) => p.id === b2.id)).toBe(false);
-    expect(s.rules.some((r) => r.productId === b2.id)).toBe(false);
     // Remove a set that frames are running: limits go, the yarn stays (its history needs it).
     run(s, DEMO_START + MIN, { type: 'ruleset/remove', productId: 'p40', by: 'priya' });
     expect(s.rules.some((r) => r.productId === 'p40')).toBe(false);

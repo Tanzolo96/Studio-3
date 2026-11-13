@@ -4,7 +4,7 @@ import { ArrowLeft, Camera, Checkmark, ChevronRight } from '@carbon/icons-react'
 import type { MillState, Severity, TestKind, Ticket, User } from '../engine/types';
 import { useDispatch, useMill, useMillState, useNow, useUser } from '../store/store';
 import { decisionNotices, escalation, fitterJobs, labBacklog, median, myTickets, pendingRequests, seenTimes, timeline } from '../engine/selectors';
-import { covers, failWord, frameWord, routineSlotsBefore, yarnMadeSince, holdKg, lotOf, productOfFrame, roundKg, ruleFor, supervisorFor, userName, withinRule, withUnit } from '../engine/reducer';
+import { covers, failWord, frameWord, routineSlotsBefore, yarnMadeSince, holdKg, lotOf, productOfFrame, roundKg, limitFor, ruleFor, supervisorFor, userName, withinRule, withUnit } from '../engine/reducer';
 import { CAUSE_HINT, CAUSES, MACHINE_PARTS, RAISE_PROBLEMS, TEST } from '../engine/vocab';
 import { ago, dayMonth, hhmm, monthName, sameMillDay, shiftAt, timer } from '../engine/time';
 import { Button, Choice, cx, Empty, Field, SeverityBadge, SeverityShape, TextField } from '../ui/primitives';
@@ -330,7 +330,7 @@ function TicketDetail({ s, t, now, user }: { s: MillState; t: Ticket; now: numbe
   const esc = escalation(t, now);
   const reading = t.readings.find((r) => r.at === t.alertAt) ?? t.readings[0];
   const lastReading = t.readings.at(-1);
-  const rule = reading && t.kind === 'test_fail' ? ruleFor(s, t.productId, reading.test) : undefined;
+  const rule = reading && t.kind === 'test_fail' ? limitFor(s, t.productId, reading) : undefined;
   const hold = t.holdId ? s.holds.find((h) => h.id === t.holdId) : undefined;
   // The plant head reads and calls; the supervisor (or the QC manager covering) acts.
   // The supervisor (or QC manager covering), and the machine operator on his own frames, fix and report.

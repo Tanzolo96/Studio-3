@@ -4,7 +4,7 @@ import { ArrowLeft, Checkmark } from '@carbon/icons-react';
 import type { Hold, MillState, Severity, ShiftId, Ticket, User } from '../engine/types';
 import { useDispatch, useMillState, useNow, useUser } from '../store/store';
 import { bySeverityThenAge, escalation, frameView, holdNeedsApproval, holdNudge, isEscalated, messagesFor, openHolds, type FrameStateKind } from '../engine/selectors';
-import { frameWord, holdKg, lotOf, roundKg, ruleFor, userName } from '../engine/reducer';
+import { frameWord, holdKg, lotOf, roundKg, limitFor, userName } from '../engine/reducer';
 import { MAKES, OFFLINE_NOTE, OUTCOME_WORD, SEVERITY, STATUS_WORD, TEST, frameSources } from '../engine/vocab';
 import { ago, dateTime, dayMonth, hhmm, hmm } from '../engine/time';
 import { Button, Choice, cx, Empty, SeverityBadge, StatusChip } from '../ui/primitives';
@@ -183,7 +183,7 @@ export function TicketDetailPage() {
     );
   const esc = escalation(t, now);
   const reading = t.readings.at(-1);
-  const rule = reading && t.kind === 'test_fail' ? ruleFor(s, t.productId, reading.test) : undefined;
+  const rule = reading && t.kind === 'test_fail' ? limitFor(s, t.productId, reading) : undefined;
   // Alert -> Fixing -> Fixed + report -> re-test -> closed, with who did each.
   const steps: { label: string; at?: number; who?: string }[] = [
     { label: 'Reported', at: t.createdAt, who: t.readings[0] ? s.results.find((r) => r.id === t.readings[0].resultId)?.by : t.raisedBy },
