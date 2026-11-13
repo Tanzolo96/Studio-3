@@ -19,7 +19,7 @@ function rng(seed: number) {
   };
 }
 
-export const USERS: User[] = [
+const PEOPLE: User[] = [
   // A shift runs two supervisors, 12 frames each (as on our role cards). B and C run one for the floor.
   { id: 'krish', name: 'Krish Patel', role: 'supervisor', shift: 'A', frames: [1, 12], phone: '+91 98250 41173' },
   { id: 'farhan', name: 'Farhan Qureshi', role: 'supervisor', shift: 'A', frames: [13, 24], phone: '+91 98240 77319' },
@@ -36,6 +36,23 @@ export const USERS: User[] = [
   { id: 'priya', name: 'Priya Shah', role: 'qc', shift: 'G', phone: '+91 97234 61908' },
   { id: 'mohit', name: 'Mohit Maheshwari', role: 'plant', shift: 'G' },
 ];
+
+// Profile details for the Account page. Emails follow the mill's pattern: first.last@lnjb.com.
+const FEMALE = new Set(['priya', 'meena']);
+const DEPT: Record<User['role'], string> = { operator: 'Ring spinning', supervisor: 'Ring spinning', tester: 'Quality lab', fitter: 'Maintenance', qc: 'Quality', plant: 'Plant management' };
+const BOSS: Record<User['role'], string | undefined> = { operator: 'krish', supervisor: 'mohit', tester: 'priya', fitter: 'mohit', qc: 'mohit', plant: undefined };
+const LANG: string[][] = [['Gujarati', 'Hindi'], ['Hindi'], ['Hindi', 'Marathi'], ['Hindi', 'English'], ['Gujarati', 'Hindi', 'English']];
+export const USERS: User[] = PEOPLE.map((u, i) => ({
+  ...u,
+  phone: u.phone ?? `+91 9${(8124 + i * 137).toString().slice(0, 4)} ${(30517 + i * 4211).toString().slice(0, 5)}`,
+  email: `${u.name.toLowerCase().split(' ').join('.')}@lnjb.com`,
+  gender: FEMALE.has(u.id) ? 'Female' : 'Male',
+  empId: `LNJ-${(1042 + i * 37).toString()}`,
+  department: DEPT[u.role],
+  joined: `20${String(12 + ((i * 3) % 12)).padStart(2, '0')}-${String(1 + ((i * 5) % 12)).padStart(2, '0')}`,
+  languages: u.role === 'qc' || u.role === 'plant' ? ['English', 'Hindi', 'Gujarati'] : LANG[i % LANG.length],
+  reportsTo: u.role === 'operator' ? (u.frames?.[0] === 13 ? 'farhan' : 'krish') : BOSS[u.role],
+}));
 
 const PRODUCTS: Product[] = [
   { id: 'p30', name: '30s combed, Buyer B', short: '30s', nominalNe: 30, kgPerHour: 30, cvWarnPct: 2.0, buyer: 'Buyer B' },

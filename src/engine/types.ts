@@ -11,6 +11,16 @@ export interface User {
   role: RoleId;
   shift: ShiftId | 'G'; // G = general shift (office hours)
   phone?: string;
+  email?: string;
+  gender?: 'Male' | 'Female' | 'Other';
+  /** Employee number, as on the mill's ID card. */
+  empId?: string;
+  department?: string;
+  /** Month they joined the mill, "2019-06". */
+  joined?: string;
+  languages?: string[];
+  /** Who they report to (user id). */
+  reportsTo?: string;
   /** Frames this person looks after (by number, inclusive). Unset = the whole floor. */
   frames?: [number, number];
 }

@@ -1,6 +1,7 @@
 // Rules (QC manager edits, everyone else reads) and Account (profile, people, shifts, notifications).
-import { useRef, useState } from 'react';
-import type { Rule, Severity, ShiftId } from '../engine/types';
+import { useRef, useState, type ReactNode } from 'react';
+import type { Rule, Severity, ShiftId, User } from '../engine/types';
+import { USERS } from '../engine/seed';
 import { useDispatch, useMillState, useNow, useUser } from '../store/store';
 import { findProduct, withinRule, userName } from '../engine/reducer';
 import { currentRouting, mergedRouting, readDocument, rulesAsText, type FoundRule, type FoundSet } from '../engine/rulesText';
@@ -572,11 +573,24 @@ function LimitTables() {
 }
 
 // ---------- Account ----------
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const monthYear = (ym: string) => {
+  const [y, m] = ym.split('-').map(Number);
+  return `${MONTHS[m - 1]} ${y}`;
+};
 export function AccountPage() {
   const s = useMillState();
   const now = useNow();
-  const user = useUser('dash');
+  const me = useUser('dash');
   const here = shiftAt(now);
+  const [viewing, setViewing] = useState<string | null>(null);
+  // Details come from the stored user, filled in from the seed for older saved states.
+  const profileOf = (id: string) => {
+    const u = s.users.find((x) => x.id === id) ?? me;
+    return { ...USERS.find((x) => x.id === u.id), ...Object.fromEntries(Object.entries(u).filter(([, v]) => v !== undefined)) } as User;
+  };
+  const user = profileOf(viewing ?? me.id);
+  const isMe = user.id === me.id;
   const [prefs, setPrefs] = useState({ sound: true, escalations: true, daily: false, weekly: true });
   const roles = ['operator', 'supervisor', 'tester', 'fitter', 'qc', 'plant'] as const;
   const shifts: ShiftId[] = ['A', 'B', 'C'];
@@ -585,7 +599,16 @@ export function AccountPage() {
     <div className="mx-auto flex max-w-[1180px] flex-col gap-5">
       <PageHead title="Account" sub="Your profile, the people on the floor and how you get notified" />
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
-        <Panel title="Your profile">
+        <Panel
+          title={isMe ? 'Your profile' : 'Profile'}
+          aside={
+            !isMe ? (
+              <button type="button" onClick={() => setViewing(null)} className="t-small-strong h-8 shrink-0 rounded-full border border-line px-3 hover:bg-sunken">
+                Back to mine
+              </button>
+            ) : undefined
+          }
+        >
           <div className="flex items-center gap-4">
             <span className="grid size-14 place-items-center rounded-full bg-brand-soft text-[18px] font-semibold text-brand-text">{user.name.split(' ').map((p) => p[0]).join('')}</span>
             <div>
@@ -595,15 +618,26 @@ export function AccountPage() {
               </p>
             </div>
           </div>
-          <dl className="t-small mt-5 grid grid-cols-2 gap-3">
-            <div>
-              <dt className="text-muted">Phone</dt>
-              <dd className="t-small-strong">{user.phone ?? 'Not added'}</dd>
-            </div>
-            <div>
-              <dt className="text-muted">Can change rules</dt>
-              <dd className="t-small-strong">{user.role === 'qc' ? 'Yes' : 'No'}</dd>
-            </div>
+          <dl className="t-small mt-5 grid grid-cols-2 gap-x-4 gap-y-3.5">
+            {(
+              [
+                ['Email', user.email ? <a href={`mailto:${user.email}`} className="break-all text-brand-text hover:underline">{user.email}</a> : undefined],
+                ['Phone', user.phone],
+                ['Gender', user.gender],
+                ['Employee ID', user.empId],
+                ['Department', user.department],
+                ['Reports to', user.reportsTo ? `${userName(s, user.reportsTo)} (${ROLE_WORD[profileOf(user.reportsTo).role]})` : user.role === 'plant' ? 'Mill management' : undefined],
+                ['Joined', user.joined ? monthYear(user.joined) : undefined],
+                ['Languages', user.languages?.join(', ')],
+                ['Frames', user.frames ? `Frames ${user.frames[0]}–${user.frames[1]}` : 'Whole floor'],
+                ['Can change rules', user.role === 'qc' ? 'Yes' : 'No'],
+              ] as [string, ReactNode][]
+            ).filter(([k]) => k !== 'Frames' || user.role === 'supervisor' || user.role === 'operator').map(([k, v]) => (
+              <div key={k} className="min-w-0">
+                <dt className="text-muted">{k}</dt>
+                <dd className="t-small-strong">{v ?? 'Not added'}</dd>
+              </div>
+            ))}
           </dl>
         </Panel>
         <Panel title="Notifications" sub="Preview only, saved on this screen until accounts go live">
@@ -662,7 +696,7 @@ export function AccountPage() {
         </div>
       </Panel>
 
-      <Panel title="People and roles" sub={`${s.users.length} people`}>
+      <Panel title="People and roles" sub={`${s.users.length} people · click a name to see their details`}>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {roles.map((r) => {
             const people = s.users.filter((u) => u.role === r);
@@ -673,10 +707,24 @@ export function AccountPage() {
                 </p>
                 <ul className="flex flex-col gap-1.5">
                   {people.map((u) => (
-                    <li key={u.id} className="flex items-center gap-2.5">
-                      <span className="grid size-7 place-items-center rounded-full bg-sunken text-[10px] font-semibold">{u.name.split(' ').map((p) => p[0]).join('')}</span>
-                      <span className="t-small flex-1">{u.name}</span>
-                      <span className="t-small text-muted">{u.shift === 'G' ? 'Day' : `${u.shift} shift`}</span>
+                    <li key={u.id}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setViewing(u.id);
+                          window.scrollTo({ top: 0, behavior: 'smooth' });
+                          document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' });
+                        }}
+                        aria-label={`See ${u.name}'s details`}
+                        className={cx('-mx-2 flex w-[calc(100%+16px)] items-center gap-2.5 rounded-[8px] px-2 py-1 text-left hover:bg-sunken', user.id === u.id && 'bg-brand-soft')}
+                      >
+                        <span className="grid size-7 shrink-0 place-items-center rounded-full bg-sunken text-[10px] font-semibold">{u.name.split(' ').map((p) => p[0]).join('')}</span>
+                        <span className="min-w-0 flex-1">
+                          <span className="t-small block">{u.name}</span>
+                          <span className="t-small block truncate text-muted">{profileOf(u.id).email}</span>
+                        </span>
+                        <span className="t-small shrink-0 text-muted">{u.shift === 'G' ? 'Day' : `${u.shift} shift`}</span>
+                      </button>
                     </li>
                   ))}
                 </ul>
