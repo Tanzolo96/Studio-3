@@ -10,7 +10,7 @@ import { BASELINE_KG, dailyAlerts, frameStateCounts, seenTrend, shiftResponse, t
 import { DAY, ago, dayMonth, hhmm, mill, millDayKey, shiftAt, shiftEndsAt, timer } from '../engine/time';
 import { cx, Empty, SeverityBadge, StatusChip } from '../ui/primitives';
 import { InsightCard, readingLine, ticketChip } from '../ui/cards';
-import { BarList, Dial, SegmentMeter, CountUp, Ring, Sparkline, ShiftBars, TrendArea } from '../ui/charts';
+import { BarList, Dial, SegmentMeter, CountUp, Ring, Sparkline, ShiftBars } from '../ui/charts';
 import { PageHead } from './DashShell';
 import { PlantHome } from './plant';
 
@@ -564,16 +564,51 @@ export function Report() {
       </div>
 
       <div className="anim-in grid gap-4" style={{ '--i': 3 } as CSSProperties}>
-        <Panel title="How fast someone starts fixing" sub="Median minutes from alert to “I’m fixing”, rolling 7 days">
-          <TrendArea
-            points={a.trend}
-            limit={5}
-            limitLabel="5 min limit"
-            format={(v) => `${v.toFixed(1)} min to I’m fixing`}
-            dayLabel={dayMonth}
-            label="Median minutes to Seen over the last 30 days, against the 5 minute limit"
-          />
+        <Panel title="How fast someone starts fixing" sub="Last 30 days · one cell per day · the day's median minutes from alert to “I’m fixing”">
+          <FixingStrip s={s} now={now} />
         </Panel>
+      </div>
+    </div>
+  );
+}
+
+/** One cell per day for the last 30 days, coloured by that day's median time to "I'm fixing". */
+function FixingStrip({ s, now }: { s: MillState; now: number }) {
+  const today = mill(millDayKey(now));
+  const days = Array.from({ length: 30 }, (_, i) => {
+    const start = today - (29 - i) * DAY;
+    const mins = s.tickets
+      .filter((t) => t.severity !== 'minor' && t.createdAt >= start && t.createdAt < start + DAY && t.createdAt <= now && (t.seenAt ?? t.workingAt))
+      .map((t) => ((t.seenAt ?? t.workingAt)! - t.alertAt) / 60000);
+    return { start, n: mins.length, med: median(mins) };
+  });
+  const tone = (m?: number) => (m === undefined ? 'bg-sunken text-muted' : m > 5 ? 'bg-critical text-on-critical' : m > 4 ? 'bg-major-fill text-ink' : 'bg-ok text-on-brand');
+  const late = days.filter((d) => d.med !== undefined && d.med > 5).length;
+  const withAlerts = days.filter((d) => d.med !== undefined).length;
+  return (
+    <div>
+      <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(15, minmax(0, 1fr))' }}>
+        {days.map((d, i) => (
+          <div
+            key={d.start}
+            title={d.med === undefined ? `${dayMonth(d.start)}: no alerts` : `${dayMonth(d.start)}: ${d.n} alert${d.n === 1 ? '' : 's'}, median ${d.med.toFixed(1)} min`}
+            className="flex flex-col items-center gap-1"
+          >
+            <span className={cx('anim-pop grid h-12 w-full place-items-center rounded-[8px] text-[15px] font-semibold tabular-nums', tone(d.med))}>{d.med === undefined ? '–' : d.med < 1 ? '<1' : Math.round(d.med)}</span>
+            <span className={cx('t-data text-[11px]', d.start === today ? 'font-semibold text-ink' : 'text-muted')}>{d.start === today ? 'Today' : i === 0 || dayMonth(d.start).startsWith('01') ? dayMonth(d.start) : dayMonth(d.start).split(' ')[0]}</span>
+          </div>
+        ))}
+      </div>
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+        <p className="t-small-strong">
+          {late ? `${late} of ${withAlerts} days were late (over 5 min)` : `Every day with alerts was on time`}
+        </p>
+        <div className="t-small flex flex-wrap items-center gap-4 text-muted">
+          <span className="flex items-center gap-1.5"><span className="size-3 rounded-[3px] bg-ok" /> Under 4 min</span>
+          <span className="flex items-center gap-1.5"><span className="size-3 rounded-[3px] bg-major-fill" /> 4–5 min</span>
+          <span className="flex items-center gap-1.5"><span className="size-3 rounded-[3px] bg-critical" /> Over 5 min, late</span>
+          <span className="flex items-center gap-1.5"><span className="size-3 rounded-[3px] bg-sunken" /> No alerts</span>
+        </div>
       </div>
     </div>
   );
