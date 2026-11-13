@@ -288,7 +288,7 @@ function Overall({ s, now }: { s: MillState; now: number }) {
         </Link>
       }
     >
-      <dl className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4">
+      <dl className="grid grid-cols-2 gap-x-6 gap-y-4">
         <Num label="Faults" value={String(data.faults)} />
         <Num label="Median to Seen" value={data.seen ? timer(data.seen) : '–'} note="limit 5:00" bad={!!data.seen && data.seen > 5 * 60000} />
         <Num label="Median to fixed" value={data.fix ? ago(data.fix) : '–'} />
