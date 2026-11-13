@@ -61,6 +61,8 @@ await phone.getByRole('link', { name: /Count test on Frame 12/ }).click();
 await phone.getByLabel(/Reading/).fill('28.9');
 await shot(phone, '06-app-rohan-enter-result');
 await phone.getByRole('button', { name: 'Save result' }).click();
+await shot(phone, '06b-app-rohan-check-reading');
+await phone.getByRole('button', { name: /Yes, save/ }).click();
 await shot(phone, '07-app-rohan-saved');
 
 // 3. Critical
@@ -94,7 +96,7 @@ await shot(phone, '14-app-suresh-jobs');
 await phone.getByRole('button', { name: 'Mark repair done' }).click();
 await phone.goto(`${BASE}/app?as=krish`);
 await phone.getByRole('link', { name: /Back/ }).count();
-await phone.getByRole('button', { name: /Count test failed/ }).first().click();
+await phone.getByRole('button', { name: /count test failed/i }).first().click();
 await phone.getByRole('button', { name: 'Mark fixed' }).click();
 await phone.getByRole('radio', { name: 'Draft setting slipped' }).click();
 await shot(phone, '15-app-krish-fixed-sheet');

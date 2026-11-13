@@ -5,6 +5,7 @@ import { escalation, frameView, heldKg, openHolds, takeoversFor, timeline } from
 import { MIN } from '../src/engine/time';
 import { alertHeat } from '../src/engine/analytics';
 import { predictAll, predictFrame } from '../src/engine/predict';
+import { plantCases, plantLog, holdOutcomes } from '../src/engine/plant';
 import type { MillEvent, MillEventInput, MillState } from '../src/engine/types';
 
 let n = 0;
@@ -175,5 +176,77 @@ describe('rules', () => {
     expect(r.updatedBy).toBe('priya');
     run(s, DEMO_START + MIN, { type: 'rule/set', ruleId: r.id, min: 30, max: 20, severity: 'minor', escalateQcMins: 5, escalatePhMins: 9, by: 'priya' } as never);
     expect(r.min).toBe(10);
+  });
+});
+
+describe('plant head decisions', () => {
+  const pending = (s: MillState) => {
+    run(s, DEMO_START, { type: 'result/enter', frameId: 'RF-12', test: 'count', value: 28.9, by: 'rohan' });
+    const t = s.tickets.at(-1)!;
+    run(s, DEMO_START + MIN, { type: 'ticket/fixed', ticketId: t.id, cause: 'Draft setting slipped', by: 'krish' });
+    const h = s.holds.find((x) => x.id === t.holdId)!;
+    run(s, DEMO_START + 5 * MIN, { type: 'hold/decide', holdId: h.id, outcome: 'release', reason: 'Buyer B accepts 0.1 Ne', by: 'priya' });
+    return { t, h };
+  };
+
+  it('starts with the two repeat frames waiting and knows each lot\'s buyer and dispatch', () => {
+    const s = seedState();
+    const cases = plantCases(s, DEMO_START);
+    expect(cases.map((c) => c.id)).toEqual(['RF-12', 'RF-17']);
+    const rf12 = cases[0];
+    expect(rf12.kind === 'frame' && rf12.afterRoving).toBeGreaterThanOrEqual(3);
+    expect(s.lots.find((l) => l.id === '2417')!.dispatchAt).toBeGreaterThan(DEMO_START);
+    expect(s.products.find((p) => p.id === 'p30')!.buyer).toBe('Buyer B');
+  });
+
+  it('a release against a failed test reaches him first, with the approval reason recorded', () => {
+    const s = seedState();
+    const { h } = pending(s);
+    expect(plantCases(s, DEMO_START + 6 * MIN)[0]).toMatchObject({ kind: 'release', id: h.id, deadline: s.lots.find((l) => l.id === h.lotId)!.dispatchAt });
+    run(s, DEMO_START + 9 * MIN, { type: 'hold/approve', holdId: h.id, reason: 'Buyer confirmed by phone', by: 'mohit' });
+    expect(h.decisions.at(-1)!.approvedReason).toBe('Buyer confirmed by phone');
+    expect(plantLog(s)[0].text).toContain('Released RF-12');
+  });
+
+  it('sending a release back returns the lot to the QC manager', () => {
+    const s = seedState();
+    const { h } = pending(s);
+    run(s, DEMO_START + 9 * MIN, { type: 'hold/sendBack', holdId: h.id, reason: 'Re-test first', by: 'mohit' });
+    expect(h.status).toBe('on_hold');
+    expect(plantCases(s, DEMO_START + 10 * MIN).some((c) => c.id === h.id)).toBe(false);
+    run(s, DEMO_START + 11 * MIN, { type: 'hold/approve', holdId: h.id, by: 'mohit' });
+    expect(h.status).toBe('on_hold');
+    run(s, DEMO_START + 12 * MIN, { type: 'hold/decide', holdId: h.id, outcome: 'reprocess', reason: 'Too far out', by: 'priya' });
+    expect(h.status).toBe('reprocess');
+  });
+
+  it('a frame decision clears the case until the frame fails again', () => {
+    const s = seedState();
+    run(s, DEMO_START, { type: 'frame/decide', frameId: 'RF-12', outcome: 'procedure', reason: 'Check draft after every roving change', by: 'mohit' });
+    expect(plantCases(s, DEMO_START + MIN).map((c) => c.id)).toEqual(['RF-17']);
+    run(s, DEMO_START + 2 * MIN, { type: 'result/enter', frameId: 'RF-12', test: 'count', value: 28.9, by: 'rohan' });
+    expect(plantCases(s, DEMO_START + 3 * MIN).some((c) => c.id === 'RF-12')).toBe(true);
+  });
+
+  it('counts holds that turned out fine', () => {
+    const s = seedState();
+    const o = holdOutcomes(s, DEMO_START - 30 * 24 * 60 * MIN, DEMO_START);
+    expect(o.fine.length).toBeGreaterThan(0);
+    expect(o.fine.length).toBeLessThan(o.holds.length);
+  });
+});
+
+describe('fitter needs parts', () => {
+  it('marks the job waiting and clears it when the repair is done', () => {
+    const s = seedState();
+    run(s, DEMO_START, { type: 'result/enter', frameId: 'RF-12', test: 'count', value: 28.9, by: 'rohan' });
+    const t = s.tickets.at(-1)!;
+    run(s, DEMO_START + MIN, { type: 'ticket/seen', ticketId: t.id, by: 'krish' });
+    run(s, DEMO_START + 2 * MIN, { type: 'ticket/working', ticketId: t.id, by: 'krish' });
+    run(s, DEMO_START + 3 * MIN, { type: 'ticket/assignFitter', ticketId: t.id, fitterId: 'suresh', by: 'krish' });
+    run(s, DEMO_START + 4 * MIN, { type: 'ticket/needsParts', ticketId: t.id, note: 'Top roller cot from store', by: 'suresh' });
+    expect(t.waitingParts?.note).toBe('Top roller cot from store');
+    run(s, DEMO_START + 30 * MIN, { type: 'ticket/repairDone', ticketId: t.id, by: 'suresh' });
+    expect(t.waitingParts).toBeUndefined();
   });
 });

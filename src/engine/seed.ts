@@ -20,9 +20,9 @@ function rng(seed: number) {
 }
 
 export const USERS: User[] = [
-  { id: 'krish', name: 'Krish Patel', role: 'supervisor', shift: 'B' },
-  { id: 'vikram', name: 'Vikram Singh', role: 'supervisor', shift: 'A' },
-  { id: 'anil', name: 'Anil Rathod', role: 'supervisor', shift: 'C' },
+  { id: 'krish', name: 'Krish Patel', role: 'supervisor', shift: 'B', phone: '+91 98250 41173' },
+  { id: 'vikram', name: 'Vikram Singh', role: 'supervisor', shift: 'A', phone: '+91 98795 20614' },
+  { id: 'anil', name: 'Anil Rathod', role: 'supervisor', shift: 'C', phone: '+91 99099 38452' },
   { id: 'rohan', name: 'Rohan Desai', role: 'tester', shift: 'B' },
   { id: 'meena', name: 'Meena Joshi', role: 'tester', shift: 'A' },
   { id: 'deepak', name: 'Deepak Rao', role: 'tester', shift: 'C' },
@@ -30,24 +30,24 @@ export const USERS: User[] = [
   { id: 'imran', name: 'Imran Shaikh', role: 'fitter', shift: 'B' },
   { id: 'ramesh', name: 'Ramesh Yadav', role: 'fitter', shift: 'A' },
   { id: 'harish', name: 'Harish Mehta', role: 'fitter', shift: 'C' },
-  { id: 'priya', name: 'Priya Shah', role: 'qc', shift: 'G' },
+  { id: 'priya', name: 'Priya Shah', role: 'qc', shift: 'G', phone: '+91 97234 61908' },
   { id: 'mohit', name: 'Mohit Maheshwari', role: 'plant', shift: 'G' },
 ];
 
 const PRODUCTS: Product[] = [
-  { id: 'p30', name: '30s combed, Buyer B', short: '30s', nominalNe: 30, kgPerHour: 30, cvWarnPct: 2.0 },
-  { id: 'p40', name: '40s combed, Buyer A', short: '40s', nominalNe: 40, kgPerHour: 22, cvWarnPct: 2.0 },
-  { id: 'p20', name: '20s carded, Buyer C', short: '20s', nominalNe: 20, kgPerHour: 42, cvWarnPct: 2.5 },
-  { id: 'p60', name: '60s compact, Buyer A', short: '60s', nominalNe: 60, kgPerHour: 14, cvWarnPct: 1.8 },
+  { id: 'p30', name: '30s combed, Buyer B', short: '30s', nominalNe: 30, kgPerHour: 30, cvWarnPct: 2.0, buyer: 'Buyer B' },
+  { id: 'p40', name: '40s combed, Buyer A', short: '40s', nominalNe: 40, kgPerHour: 22, cvWarnPct: 2.0, buyer: 'Buyer A' },
+  { id: 'p20', name: '20s carded, Buyer C', short: '20s', nominalNe: 20, kgPerHour: 42, cvWarnPct: 2.5, buyer: 'Buyer C' },
+  { id: 'p60', name: '60s compact, Buyer A', short: '60s', nominalNe: 60, kgPerHour: 14, cvWarnPct: 1.8, buyer: 'Buyer A' },
 ];
 
 const LOTS: Lot[] = [
-  { id: '2411', productId: 'p20', startedAt: mill('2026-10-28') },
-  { id: '2409', productId: 'p40', startedAt: mill('2026-10-26') },
-  { id: '2416', productId: 'p30', startedAt: mill('2026-10-30') },
-  { id: '2417', productId: 'p30', startedAt: mill('2026-11-02') },
-  { id: '2420', productId: 'p20', startedAt: mill('2026-11-01') },
-  { id: '2422', productId: 'p60', startedAt: mill('2026-10-29') },
+  { id: '2411', productId: 'p20', startedAt: mill('2026-10-28'), dispatchAt: mill('2026-11-09', '18:00') },
+  { id: '2409', productId: 'p40', startedAt: mill('2026-10-26'), dispatchAt: mill('2026-11-08', '18:00') },
+  { id: '2416', productId: 'p30', startedAt: mill('2026-10-30'), dispatchAt: mill('2026-11-10', '18:00') },
+  { id: '2417', productId: 'p30', startedAt: mill('2026-11-02'), dispatchAt: mill('2026-11-06', '18:00') },
+  { id: '2420', productId: 'p20', startedAt: mill('2026-11-01'), dispatchAt: mill('2026-11-07', '12:00') },
+  { id: '2422', productId: 'p60', startedAt: mill('2026-10-29'), dispatchAt: mill('2026-11-11', '18:00') },
 ];
 
 function lotForFrame(n: number) {
@@ -139,6 +139,7 @@ export function baseState(): MillState {
     holds: [],
     drift: {},
     rovingChanges: [],
+    frameDecisions: [],
     seq: { ticket: 1010, hold: 300, request: 500, result: results.length },
   };
 }

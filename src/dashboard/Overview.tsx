@@ -12,6 +12,7 @@ import { cx, Empty, SeverityBadge, StatusChip } from '../ui/primitives';
 import { InsightCard, readingLine, ticketChip } from '../ui/cards';
 import { BarList, Dial, SegmentMeter, CountUp, Ring, LedBoard, Sparkline, ShiftBars, TrendArea } from '../ui/charts';
 import { PageHead } from './DashShell';
+import { PlantHome } from './plant';
 
 export function Panel({ title, sub, aside, children, className }: { title: string; sub?: string; aside?: ReactNode; children: ReactNode; className?: string }) {
   return (
@@ -729,7 +730,7 @@ function CalendarPanel({ s, now, onOpen }: { s: MillState; now: number; onOpen: 
 export function Overview() {
   const user = useUser('dash');
   if (user.role === 'supervisor') return <ShiftOverview />;
-  if (user.role === 'plant') return <PlantOverview />;
+  if (user.role === 'plant') return <PlantHome />;
   return <QcOverview />;
 }
 
@@ -889,117 +890,6 @@ function WaitingForYou({ s, now }: { s: MillState; now: number }) {
 }
 
 // ---------- plant head: the big picture ----------
-function PlantOverview() {
-  const s = useMillState();
-  const now = useNow();
-  const nav = useNavigate();
-  const nowMin = Math.floor(now / 60000);
-  const a = useMemo(() => {
-    const since30 = mill(millDayKey(now)) - 29 * DAY;
-    const month = ticketsSince(s, since30, now);
-    const serious = month.filter((t) => t.severity !== 'minor');
-    const byFrame = new Map<string, number>();
-    for (const t of serious) byFrame.set(t.frameId, (byFrame.get(t.frameId) ?? 0) + 1);
-    return {
-      daily: dailyAlerts(s, now, 60),
-      saved: yarnSaved(s, now, since30),
-      frames: [...byFrame.entries()].sort((x, y) => y[1] - x[1]).slice(0, 5).map(([name, value]) => ({ name, value })),
-      month,
-    };
-    // recompute once a mill minute
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [s, nowMin]);
-  const live = s.tickets.filter((t) => t.status !== 'closed' && t.status !== 'fixed');
-  const toMe = live.filter((t) => escalation(t, now).level >= 2);
-  const waiting = s.holds.filter((h) => h.status === 'on_hold' && holdNeedsApproval(h));
-  const sum = (d: { critical: number; major: number }[]) => d.reduce((n, x) => n + x.critical + x.major, 0);
-  const alerts = sum(a.daily.slice(-30));
-  const before = sum(a.daily.slice(0, 30));
-  const states = frameStateCounts(s, now);
-  const calmDays = a.daily.slice(-30).filter((d) => d.critical === 0).length;
-  const doneCount = a.month.filter((t) => t.status === 'closed' || t.status === 'fixed').length;
-  const weekday = WEEKDAYS[new Date(now + 5.5 * 3600000).getUTCDay()];
-  return (
-    <div className="mx-auto flex max-w-[1240px] flex-col gap-5">
-      <header className="anim-in flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="t-page">Plant overview</h1>
-          <p className="t-small mt-0.5 text-muted">
-            {weekday} {dayMonth(now)} · last 30 days
-          </p>
-        </div>
-        <Link to="/dashboard/report" className="t-small-strong flex items-center gap-1 text-brand-text hover:underline">
-          Full monthly report <ArrowRight size={14} />
-        </Link>
-      </header>
-
-      <div className="grid gap-5 lg:grid-cols-2">
-        <Panel title="Waiting for your approval" sub={waiting.length ? `${waiting.length} big decision${waiting.length > 1 ? 's' : ''}` : 'Nothing waiting'} className="anim-in">
-          {waiting.length ? (
-            <ul className="divide-y divide-[var(--line)]">
-              {waiting.map((h) => (
-                <li key={h.id}>
-                  <Link to="/dashboard/held" className="flex items-center gap-4 py-2.5 hover:bg-sunken">
-                    <span className="t-body-strong">{h.frameId}</span>
-                    <span className="t-small flex-1 text-muted">
-                      Lot {h.lotId} · {roundKg(holdKg(h, now))} kg held
-                    </span>
-                    <span className="t-small-strong text-brand-text">Review</span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="t-small text-muted">Releases after a failed re-test and other overrides appear here.</p>
-          )}
-        </Panel>
-        <Panel title="Escalated to you" sub={toMe.length ? `${toMe.length} still open after 20 min` : 'Nothing escalated'} className="anim-in">
-          {toMe.length ? (
-            <ul className="divide-y divide-[var(--line)]">
-              {toMe.map((t) => (
-                <li key={t.id}>
-                  <button type="button" onClick={() => nav(`/dashboard/tickets/${t.id}`)} className="flex w-full items-center gap-3 py-2.5 text-left hover:bg-sunken">
-                    <SeverityBadge level={t.severity} />
-                    <span className="t-body-strong">{t.frameId}</span>
-                    <span className="t-small min-w-0 flex-1 truncate text-muted">{t.title}</span>
-                    <span className="t-data text-[12px] text-critical">{ago(now - t.alertAt)}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="t-small text-muted">Tickets nobody has handled for 20 minutes come straight to you.</p>
-          )}
-        </Panel>
-      </div>
-
-      <section className="grid gap-5 md:grid-cols-3" aria-label="Key numbers">
-        <Goal i={1} label="Yarn saved" value={<CountUp value={a.saved.saved} format={(v) => Math.round(v).toLocaleString('en-IN')} />} unit="kg" goal="30 days" badge={{ text: 'Estimate', tone: 'good' }} note={`${a.saved.incidents} holds against about ${BASELINE_KG} kg per incident before`} />
-        <Goal i={2} label="Alerts this month" value={<CountUp value={alerts} />} goal={`${before} before`} badge={alerts <= before ? { text: 'Fewer', tone: 'good' } : { text: `${alerts - before} more`, tone: 'bad' }} note="Critical and major, against the 30 days before" />
-        <Goal i={3} label="Held per incident" value={<CountUp value={a.saved.avgHeld} />} unit="kg" goal={`${BASELINE_KG} kg`} badge={{ text: `${Math.max(0, Math.round(100 - (a.saved.avgHeld / BASELINE_KG) * 100))}% less`, tone: 'good' }} note="Yarn held per incident against the old amount" />
-      </section>
-
-      <div className="anim-in grid gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]" style={{ '--i': 4 } as CSSProperties}>
-        <Panel title="Alerts per day" sub="Last 30 days · one lit dot = one alert">
-          <LedBoard data={a.daily.slice(-30)} dayLabel={dayMonth} label="Alerts per day for the last 30 days, by severity" />
-        </Panel>
-        <section className="divide-y divide-[var(--line)] rounded-[12px] border border-line bg-raised" aria-label="Health">
-          <GaugeRow i={0} label="Frames running" value={`${states.running}`} goal={`${s.frames.length}`} pct={Math.round((states.running / s.frames.length) * 100)} />
-          <GaugeRow i={1} label="Calm days, 30 days" value={`${calmDays}`} goal="30" pct={Math.round((calmDays / 30) * 100)} />
-          <GaugeRow i={2} label="Tickets resolved" value={`${doneCount}`} goal={`${a.month.length}`} pct={a.month.length ? Math.round((doneCount / a.month.length) * 100) : 100} />
-        </section>
-      </div>
-
-      <div className="anim-in" style={{ '--i': 5 } as CSSProperties}>
-        <Panel title="Frames with most alerts" sub="Critical and major, last 30 days">
-          {a.frames.length ? <BarList items={a.frames} format={(v) => `${v}`} /> : <p className="t-small text-muted">No alerts this month.</p>}
-        </Panel>
-      </div>
-    </div>
-  );
-}
-
-// ---------- the black attention panel, shared ----------
 function AttentionPanel({ s, now, tickets, title, recent = [] }: { s: MillState; now: number; tickets: Ticket[]; title: string; recent?: Ticket[] }) {
   const nav = useNavigate();
   const theme = useTheme('dash');

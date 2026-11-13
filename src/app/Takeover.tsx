@@ -10,8 +10,12 @@ import { playCritical, playMajor } from '../ui/sound';
 import { useDispatch } from '../store/store';
 
 /** Full-screen alert over any tab. The only way out is "Seen, I'm on it". */
+/** Takeovers the plant head has opened. He does not say Seen (that stays with the supervisor), so his phone stops ringing once he looks. */
+const acknowledged = new Set<string>();
+const takeoverKey = (t: Ticket, now: number) => `${t.id}:${t.alertAt}:${escalation(t, now).level}`;
+
 export function TakeoverLayer({ s, user, now }: { s: MillState; user: User; now: number }) {
-  const list = takeoversFor(s, user, now);
+  const list = takeoversFor(s, user, now).filter((x) => user.role !== 'plant' || !acknowledged.has(takeoverKey(x, now)));
   const t = list[0];
   const played = useRef(new Set<string>());
   const key = t ? `${t.id}:${t.alertAt}:${escalation(t, now).level}` : '';
@@ -104,11 +108,12 @@ function Takeover({ s, t, user, now, more }: { s: MillState; t: Ticket; user: Us
             block
             variant={critical ? 'danger' : 'primary'}
             onClick={() => {
-              dispatch({ type: 'ticket/seen', ticketId: t.id, by: user.id });
+              if (user.role === 'plant') acknowledged.add(takeoverKey(t, now));
+              else dispatch({ type: 'ticket/seen', ticketId: t.id, by: user.id });
               nav(`/app/ticket/${t.id}`);
             }}
           >
-            Seen, I’m on it
+            {user.role === 'plant' ? 'See who is on it' : 'Seen, I’m on it'}
           </Button>
         </div>
       </div>

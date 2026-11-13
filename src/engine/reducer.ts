@@ -351,7 +351,16 @@ export function apply(s: MillState, e: MillEvent): void {
       const t = s.tickets.find((x) => x.id === e.ticketId);
       if (!t || t.status !== 'working') return;
       t.repairDoneAt = e.at;
+      t.waitingParts = undefined;
       log(t, e.at, 'repair_done', 'Repair done, frame ready to check', e.by);
+      return;
+    }
+
+    case 'ticket/needsParts': {
+      const t = s.tickets.find((x) => x.id === e.ticketId);
+      if (!t || t.status !== 'working' || t.repairDoneAt) return;
+      t.waitingParts = { at: e.at, note: e.note };
+      log(t, e.at, 'note', `Fitter can't fix it yet: ${e.note}`, e.by);
       return;
     }
 
@@ -443,7 +452,8 @@ export function apply(s: MillState, e: MillEvent): void {
         ticketId: h.ticketId,
         holdId: h.id,
       });
-      if (t) log(t, e.at, 'note', `QC manager asked for a re-test of the held ${product.short} yarn`, e.by);
+      const asker = s.users.find((u) => u.id === e.by)?.role === 'plant' ? 'Plant head' : 'QC manager';
+      if (t) log(t, e.at, 'note', `${asker} asked for a re-test of the held ${product.short} yarn`, e.by);
       return;
     }
 
@@ -468,14 +478,31 @@ export function apply(s: MillState, e: MillEvent): void {
     case 'hold/approve': {
       const h = s.holds.find((x) => x.id === e.holdId);
       const d = h?.decisions.at(-1);
-      if (!h || !d || !d.needsApproval || d.approvedBy) return;
+      if (!h || !d || !d.needsApproval || d.approvedBy || d.sentBack) return;
       d.approvedBy = e.by;
       d.approvedAt = e.at;
+      if (e.reason) d.approvedReason = e.reason;
       h.status = 'released';
       h.closedAt = e.at;
       const t = s.tickets.find((x) => x.id === h.ticketId);
-      if (t) log(t, e.at, 'note', 'Plant head approved the release', e.by);
+      if (t) log(t, e.at, 'note', `Plant head approved the release${e.reason ? `: ${e.reason}` : ''}`, e.by);
       maybeCloseAfterHold(s, h, e.at, e.by);
+      return;
+    }
+
+    case 'hold/sendBack': {
+      const h = s.holds.find((x) => x.id === e.holdId);
+      const d = h?.decisions.at(-1);
+      if (!h || !d || !d.needsApproval || d.approvedBy || d.sentBack) return;
+      d.sentBack = { by: e.by, at: e.at, reason: e.reason };
+      const t = s.tickets.find((x) => x.id === h.ticketId);
+      if (t) log(t, e.at, 'note', `Plant head sent the release back to the QC manager: ${e.reason}`, e.by);
+      return;
+    }
+
+    case 'frame/decide': {
+      if (!s.frames.some((f) => f.id === e.frameId)) return;
+      s.frameDecisions.push({ id: `FD-${s.frameDecisions.length + 1}`, at: e.at, by: e.by, frameId: e.frameId, outcome: e.outcome, reason: e.reason });
       return;
     }
   }

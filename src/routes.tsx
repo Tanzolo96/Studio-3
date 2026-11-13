@@ -5,6 +5,8 @@ import { DashShell } from './dashboard/DashShell';
 import { HeldYarn, MachinesGrid, TicketDetailPage, Tickets } from './dashboard/pages';
 import { Overview, Report } from './dashboard/Overview';
 import { InsightsHub, MachineDetail } from './dashboard/machine';
+import { CasePage, PlantReview } from './dashboard/plant';
+import { PhoneCase } from './app/plantPhone';
 import { AccountPage, RulesPage } from './dashboard/settings';
 import { Kit } from './demo/Kit';
 
@@ -51,6 +53,7 @@ export const appRoutes: RouteObject = {
     { path: 'ticket/:id', element: <TicketScreen /> },
     { path: 'test/:id', element: <TestEntryScreen /> },
     { path: 'raise', element: <RaiseScreen /> },
+    { path: 'case/:id', element: <PhoneCase /> },
     { path: 'previous', element: <PreviousScreen /> },
   ],
 };
@@ -67,6 +70,8 @@ export const dashRoutes: RouteObject = {
     { path: 'machines/:id', element: <MachineDetail /> },
     { path: 'insights', element: <InsightsHub /> },
     { path: 'report', element: <Report /> },
+    { path: 'review', element: <PlantReview /> },
+    { path: 'case/:id', element: <CasePage /> },
     { path: 'rules', element: <RulesPage /> },
     { path: 'account', element: <AccountPage /> },
   ],
