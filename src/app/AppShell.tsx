@@ -6,6 +6,7 @@ import { fitterJobs, myTickets, pendingRequests } from '../engine/selectors';
 import { hhmm, shiftAt } from '../engine/time';
 import { cx } from '../ui/primitives';
 import { soundReady, unlock } from '../ui/sound';
+import { useLive } from '../store/live';
 import { TakeoverLayer } from './Takeover';
 import { Onboarding, PersonSheet } from './Person';
 
@@ -25,6 +26,26 @@ export function AppShell() {
   });
   const [sound, setSound] = useState(soundReady());
   const [person, setPerson] = useState(false);
+  const live = useLive();
+
+  // In a jury room the phone must not lock mid-demo: keep the screen on while the app is open.
+  useEffect(() => {
+    if (!live.room || !('wakeLock' in navigator)) return;
+    let lock: { release: () => Promise<void> } | undefined;
+    const take = () => {
+      if (document.visibilityState === 'visible')
+        (navigator as unknown as { wakeLock: { request: (t: 'screen') => Promise<{ release: () => Promise<void> }> } }).wakeLock
+          .request('screen')
+          .then((l) => (lock = l))
+          .catch(() => {});
+    };
+    take();
+    document.addEventListener('visibilitychange', take);
+    return () => {
+      document.removeEventListener('visibilitychange', take);
+      void lock?.release();
+    };
+  }, [live.room]);
 
   useEffect(() => {
     const as = params.get('as');
@@ -50,7 +71,10 @@ export function AppShell() {
     <div data-theme={theme} className="grid min-h-dvh place-items-center bg-surface text-ink sm:bg-[var(--surface-sunken)] sm:py-6">
       <div className="phone relative flex h-dvh w-full flex-col overflow-hidden bg-surface sm:h-[844px] sm:max-h-[calc(100dvh-48px)] sm:w-[390px] sm:rounded-[40px] sm:border-[10px] sm:border-[#0e0f11] sm:shadow-sheet">
         <div className="flex h-9 shrink-0 items-center justify-between px-5 pt-1 text-[13px] font-semibold tabular-nums">
-          <span className="font-mono">{hhmm(now)}</span>
+          <span className="flex items-center gap-2">
+            <span className="font-mono">{hhmm(now)}</span>
+            {live.room && <span aria-label={live.state === 'live' ? 'Live' : 'Not connected'} title={live.state === 'live' ? `Live · ${live.room}` : 'Not connected'} className={cx('size-2 rounded-full', live.state === 'live' ? 'bg-ok' : 'bg-critical')} />}
+          </span>
           <button type="button" onClick={() => setPerson(true)} className="t-small-strong -mr-2 flex h-9 items-center gap-2 rounded-full px-2 hover:bg-sunken" aria-label={`Signed in as ${user.name}. Switch person or theme`}>
             <span className="text-muted">
               {user.shift === 'G' ? 'Day' : `${user.shift} shift`}

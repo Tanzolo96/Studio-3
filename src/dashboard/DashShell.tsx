@@ -1,8 +1,9 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Asleep, Chat, Dashboard, Light, Notification, Report, Rule, Search, Task, UserAvatar } from '@carbon/icons-react';
+import { ArrowLeft, ArrowRight, Asleep, Chat, Dashboard, Light, Notification, QrCode, Report, Rule, Search, Task, UserAvatar } from '@carbon/icons-react';
 import { useMillState, useNow, useSession, useTheme, useUser } from '../store/store';
 import { isEscalated } from '../engine/selectors';
+import { useLive } from '../store/live';
 import { cx } from '../ui/primitives';
 import { ROLE_WORD } from '../app/Person';
 import { SimulatorDock } from '../demo/Simulator';
@@ -18,6 +19,7 @@ const ICON: Record<string, ReactNode> = {
   'Monthly review': <Report size={18} />,
   Rules: <Rule size={18} />,
   Account: <UserAvatar size={18} />,
+  'Jury demo': <QrCode size={18} />,
 };
 
 type Role = 'supervisor' | 'qc' | 'plant';
@@ -37,6 +39,7 @@ const NAV: { group: string; items: { to: string; label: string; end?: boolean; r
       { to: '/dashboard/rules', label: 'Rules' },
       { to: '/dashboard/report', label: 'Monthly report', roles: ['qc', 'plant'] },
       { to: '/dashboard/account', label: 'Account' },
+      { to: '/dashboard/jury', label: 'Jury demo' },
     ],
   },
 ];
@@ -196,7 +199,20 @@ const TITLES: [string, string][] = [
   ['/dashboard/case', 'Decision'],
   ['/dashboard/rules', 'Rules'],
   ['/dashboard/account', 'Account'],
+  ['/dashboard/jury', 'Jury demo'],
 ];
+
+/** Shows when this laptop is in a jury room, and how many devices are with it. */
+function LivePill() {
+  const { room, state, peers } = useLive();
+  if (!room) return null;
+  return (
+    <NavLink to="/dashboard/jury" className={cx('t-small-strong flex h-10 shrink-0 items-center gap-2 rounded-full px-4', state === 'live' ? 'bg-ok-soft text-ok' : 'bg-critical-soft text-critical')}>
+      <span className={cx('size-2 rounded-full', state === 'live' ? 'bg-ok' : 'bg-critical')} />
+      {state === 'live' ? `Live · ${peers.length} device${peers.length === 1 ? '' : 's'}` : state === 'connecting' ? 'Connecting' : 'Offline'}
+    </NavLink>
+  );
+}
 
 function TopBar({ live, urgent }: { live: number; urgent: boolean }) {
   const nav = useNavigate();
@@ -229,6 +245,7 @@ function TopBar({ live, urgent }: { live: number; urgent: boolean }) {
           className="t-small h-full w-full rounded-full bg-raised pr-4 pl-10 outline-none placeholder:text-[var(--neutral-state)] focus-visible:outline-2 focus-visible:outline-[var(--brand)]"
         />
       </label>
+      <LivePill />
       <NavLink to="/dashboard/tickets" aria-label={`${live} open tickets`} className={cx(iconBtn, 'relative bg-raised')}>
         <Notification size={18} />
         {live > 0 && <span className={cx('absolute top-1.5 right-1.5 size-2.5 rounded-full', urgent ? 'bg-critical' : 'bg-brand')} />}

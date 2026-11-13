@@ -1,3 +1,4 @@
+import './boot';
 import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createBrowserRouter, createMemoryRouter, RouterProvider } from 'react-router-dom';

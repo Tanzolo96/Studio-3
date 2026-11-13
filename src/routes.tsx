@@ -5,6 +5,7 @@ import { DashShell } from './dashboard/DashShell';
 import { TicketDetailPage, Tickets } from './dashboard/pages';
 import { MessagesPage } from './dashboard/messages';
 import { Report } from './dashboard/Overview';
+import { JuryPage } from './dashboard/jury';
 import { Overview } from './dashboard/Live';
 import { CasePage } from './dashboard/plant';
 import { PhoneCase } from './app/plantPhone';
@@ -79,6 +80,7 @@ export const dashRoutes: RouteObject = {
     { path: 'case/:id', element: <CasePage /> },
     { path: 'rules', element: <RulesPage /> },
     { path: 'account', element: <AccountPage /> },
+    { path: 'jury', element: <JuryPage /> },
   ],
 };
 

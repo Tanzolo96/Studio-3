@@ -5,8 +5,11 @@ import { DEMO_START, seedState } from '../engine/seed';
 import { MIN, nowFrom } from '../engine/time';
 import type { MillEvent, MillEventInput, MillState, User } from '../engine/types';
 import { localDriver } from './sync';
+import { currentRoom, liveDriver, liveReady, supabaseTransport } from './live';
 
-const driver = localDriver();
+// One browser: the local log. With a jury room (?room=...): the same log shared live with the other devices.
+const room = liveReady() ? currentRoom() : null;
+const driver = room ? liveDriver(localDriver(), supabaseTransport(room)) : localDriver();
 
 function build(events: MillEvent[]): MillState {
   const s = seedState();
@@ -60,7 +63,7 @@ export const useMill = create<Store>((set, get) => ({
   },
   reset() {
     const events = [startClock()];
-    driver.replace(events);
+    driver.replace(events, true);
     const state = build(events);
     set({ events, state, now: nowFrom(state.clock) });
   },
@@ -69,7 +72,8 @@ export const useMill = create<Store>((set, get) => ({
 // Follow other tabs, iframes and devices.
 driver.subscribe((events) => {
   const { events: mine, state } = useMill.getState();
-  const sameStart = events[0]?.id === mine[0]?.id;
+  // Fast path: the new log only adds events after ours. Otherwise rebuild from the start.
+  const sameStart = events[0]?.id === mine[0]?.id && (!mine.length || events[mine.length - 1]?.id === mine[mine.length - 1].id);
   if (sameStart && events.length >= mine.length) {
     if (events.length === mine.length) return;
     const next = structuredClone(state);

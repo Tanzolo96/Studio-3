@@ -5,7 +5,8 @@ import type { MillEvent } from '../engine/types';
 export interface SyncDriver {
   load(): MillEvent[];
   append(e: MillEvent): void;
-  replace(events: MillEvent[]): void;
+  /** announce: tell the other devices too (a demo reset). */
+  replace(events: MillEvent[], announce?: boolean): void;
   subscribe(onChange: (events: MillEvent[]) => void): () => void;
 }
 
