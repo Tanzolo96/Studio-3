@@ -83,14 +83,24 @@ export function ticketsSince(s: MillState, since: number, now: number) {
 
 export const sevOrder: Severity[] = ['critical', 'major', 'minor'];
 
+/** Where a ticket falls on the heat map: weekday (Mon = 0) and 3-hour block. */
+export function heatCell(t: Ticket): [number, number] {
+  const wd = (new Date(t.createdAt + 5.5 * 3600000).getUTCDay() + 6) % 7;
+  return [wd, Math.min(7, Math.floor(millHour(t.createdAt) / 3))];
+}
+
+/** Critical and major tickets in the heat map window, newest first. */
+export function heatTickets(s: MillState, now: number, days = 30): Ticket[] {
+  const since = dayStart(now) - (days - 1) * DAY;
+  return s.tickets.filter((t) => t.severity !== 'minor' && t.createdAt <= now && t.createdAt >= since).sort((a, b) => b.createdAt - a.createdAt);
+}
+
 /** Critical and major alerts by weekday (Mon first) and 3-hour block, over the last `days` days. */
 export function alertHeat(s: MillState, now: number, days = 30): number[][] {
-  const since = dayStart(now) - (days - 1) * DAY;
   const grid = Array.from({ length: 7 }, () => Array.from({ length: 8 }, () => 0));
-  for (const t of s.tickets) {
-    if (t.severity === 'minor' || t.createdAt > now || t.createdAt < since) continue;
-    const wd = (new Date(t.createdAt + 5.5 * 3600000).getUTCDay() + 6) % 7;
-    grid[wd][Math.min(7, Math.floor(millHour(t.createdAt) / 3))] += 1;
+  for (const t of heatTickets(s, now, days)) {
+    const [wd, block] = heatCell(t);
+    grid[wd][block] += 1;
   }
   return grid;
 }

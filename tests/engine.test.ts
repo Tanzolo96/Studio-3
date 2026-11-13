@@ -3,7 +3,7 @@ import { apply } from '../src/engine/reducer';
 import { DEMO_START, seedState } from '../src/engine/seed';
 import { escalation, frameView, messagesFor, myTickets, openHolds, pendingRequests, takeoversFor, waitingOn } from '../src/engine/selectors';
 import { MIN } from '../src/engine/time';
-import { alertHeat } from '../src/engine/analytics';
+import { alertHeat, heatCell, heatTickets } from '../src/engine/analytics';
 import { predictAll, predictFrame } from '../src/engine/predict';
 import { plantCases } from '../src/engine/plant';
 import { currentRouting, mergedRouting, readDocument, readRules, rulesAsText } from '../src/engine/rulesText';
@@ -356,5 +356,15 @@ describe('rules document reader', () => {
     const text = rulesAsText(s).join('\n');
     expect(text).toContain('within 5 minutes');
     expect(text).toContain('30s combed, Buyer B: count must be between 29.4 and 30.6 Ne');
+  });
+});
+
+describe('heat map drill-down', () => {
+  it('lists exactly the alerts behind each cell', () => {
+    const s = seedState();
+    const grid = alertHeat(s, DEMO_START);
+    const list = heatTickets(s, DEMO_START);
+    for (let r = 0; r < 7; r++)
+      for (let c = 0; c < 8; c++) expect(list.filter((t) => heatCell(t)[0] === r && heatCell(t)[1] === c).length).toBe(grid[r][c]);
   });
 });
