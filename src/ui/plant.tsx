@@ -7,6 +7,7 @@ import { frameAlerts, type ResponseDot } from '../engine/plant';
 import { escalation } from '../engine/selectors';
 import { holdKg, roundKg, userName } from '../engine/reducer';
 import { DAY, HOUR, MIN, dayMonth, hhmm, timer } from '../engine/time';
+import { SHIFTS } from '../engine/vocab';
 import { cx } from './primitives';
 
 /** Draw SVG charts at their real pixel width, so labels stay the same size on a wall screen and a laptop. */
@@ -183,7 +184,7 @@ export function CauseStrip({ s, frameIds, since, now, onPick, width = 640 }: { s
 }
 
 // ---------- shift dots: every alert as a dot, minutes to Seen and to fixed ----------
-const SHIFT_HOURS: Record<ShiftId, string> = { A: '00–08', B: '08–16', C: '16–24' };
+const SHIFT_HOURS: Record<ShiftId, string> = { A: SHIFTS.A.hours.replace(/:00/g, ''), B: SHIFTS.B.hours.replace(/:00/g, ''), C: SHIFTS.C.hours.replace(/:00/g, '') };
 const median = (v: number[]) => {
   if (!v.length) return null;
   const a = [...v].sort((p, q) => p - q);

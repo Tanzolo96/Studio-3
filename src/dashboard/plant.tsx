@@ -4,19 +4,19 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Phone } from '@carbon/icons-react';
-import type { Hold, MillState, Ticket } from '../engine/types';
+import type { MillState, Ticket } from '../engine/types';
 import { useDispatch, useMillState, useNow, useUser } from '../store/store';
-import { escalation, openHolds } from '../engine/selectors';
-import { frameWord, holdKg, roundKg, ruleFor, userName } from '../engine/reducer';
+import { escalation } from '../engine/selectors';
+import { frameWord, roundKg, ruleFor, userName } from '../engine/reducer';
 import { BASELINE_KG } from '../engine/analytics';
 import { insights } from '../engine/insights';
-import { frameAlerts, frameCase, holdOutcomes, lastFrameDecision, plantCases, plantLog, releaseCase, responseDots, type FrameCase, type PlantCase, type ReleaseCase } from '../engine/plant';
+import { frameAlerts, frameCase, lastFrameDecision, plantCases, plantLog, releaseCase, responseDots, type FrameCase, type PlantCase, type ReleaseCase } from '../engine/plant';
 import { DAY, HOUR, dateTime, dayMonth, hhmm, mill, millDayKey, millHour } from '../engine/time';
 import { TEST } from '../engine/vocab';
 import { cx, SeverityBadge } from '../ui/primitives';
 import { ReadingGauge } from '../ui/cards';
 import { CountUp } from '../ui/charts';
-import { AgeBar, CauseStrip, DeadlineCells, DecisionPanel, KgBlocks, Relay, ShiftDots, holdLine, stagger, stuckLine, waited } from '../ui/plant';
+import { CauseStrip, DeadlineCells, DecisionPanel, KgBlocks, Relay, ShiftDots, holdLine, stagger, stuckLine } from '../ui/plant';
 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const weekday = (t: number) => WEEKDAYS[new Date(t + 5.5 * HOUR).getUTCDay()];
@@ -77,7 +77,7 @@ function DecisionCard({ s, c, now, i }: { s: MillState; c: PlantCase; now: numbe
         <h3 className="t-section">{caseQuestion(c)}</h3>
         <p className="t-small text-muted">
           {c.alerts.length} alerts in 30 days · {c.topCause ? `${c.topCauseCount}× ${c.topCause.toLowerCase()}` : 'mixed causes'}
-          {c.afterRoving ? ` · ${c.afterRoving} right after a roving change` : ''} · {roundKg(c.kgHeld)} kg held
+          {c.afterRoving ? ` · ${c.afterRoving} right after a roving change` : ''}
         </p>
         <p className="t-small text-muted">No deadline. Decide this week.</p>
       </div>
@@ -130,63 +130,44 @@ function EscalationCard({ s, t, now, i }: { s: MillState; t: Ticket; now: number
   );
 }
 
-// ---------- yarn at risk ----------
-function heldAt(s: MillState, at: number) {
-  return s.holds.filter((h) => h.from <= at && (h.closedAt === undefined || h.closedAt > at)).reduce((n, h) => n + holdKg(h, at), 0);
-}
+// ---------- right now ----------
 
-function YarnAtRisk({ s, now, i }: { s: MillState; now: number; i: number }) {
-  const holds = openHolds(s).sort((a, b) => a.from - b.from);
-  const total = holds.reduce((n, h) => n + holdKg(h, now), 0);
-  const yesterday = heldAt(s, now - DAY);
-  const delta = Math.round(total - yesterday);
-  const stale = holds.filter((h) => now - h.from > DAY).length;
+/** Right now: every live alert and who QC Alert is waiting on. Replaces the old held-yarn panel. */
+function RightNow({ s, now, i }: { s: MillState; now: number; i: number }) {
+  const live = s.tickets.filter((t) => t.status !== 'closed' && t.severity !== 'minor' && t.createdAt <= now).sort((a, b) => a.alertAt - b.alertAt);
+  const WHO = ['the supervisor', 'the QC manager', 'you'];
   return (
-    <Section i={i} title="Yarn at risk" sub="On hold and waiting for a decision" aside={<TextLink to="/dashboard/held">Held yarn</TextLink>}>
-      <p className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <span className="t-stat">
-          <CountUp value={roundKg(total)} ms={400} /> <span className="t-body text-muted">kg</span>
-        </span>
-        <span className={cx('t-small-strong rounded-[6px] px-2 py-0.5', delta > 0 ? 'bg-major-soft text-major' : 'bg-sunken text-muted')}>
-          {delta === 0 ? 'Same as yesterday' : `${delta > 0 ? '+' : ''}${delta} kg since yesterday`}
-        </span>
-      </p>
-      <p className="t-small mt-1 text-muted">{holds.length ? `${holds.length} lot${holds.length > 1 ? 's' : ''}${stale ? `, ${stale} waiting over 24 h` : ''}` : 'Nothing on hold'}</p>
-      <ul className="mt-4 flex flex-col gap-4">
-        {holds.map((h) => (
-          <HoldRow key={h.id} s={s} h={h} now={now} />
-        ))}
-      </ul>
+    <Section i={i} title="Right now" sub="Live alerts and who QC Alert is waiting on" aside={<TextLink to="/dashboard/tickets">History</TextLink>}>
+      {live.length ? (
+        <ul className="flex flex-col divide-y divide-[var(--line)]">
+          {live.map((t) => {
+            const esc = escalation(t, now);
+            const line =
+              t.status === 'open'
+                ? `Nobody fixing yet · ${Math.floor((now - t.alertAt) / 60000)} min · waiting on ${WHO[esc.level]}`
+                : t.status === 'fixed'
+                  ? `Fixed by ${userName(s, t.fixedBy).split(' ')[0]} · waiting for the lab re-test`
+                  : `${userName(s, t.seenBy).split(' ')[0]} is fixing it${t.waitingPart ? ` · waiting for ${t.waitingPart.toLowerCase()}` : ''}`;
+            return (
+              <li key={t.id} className="flex items-center gap-3 py-2.5">
+                <SeverityBadge level={t.severity} />
+                <span className="min-w-0 flex-1">
+                  <span className="t-small-strong block">
+                    {frameWord(t.frameId)} · {t.title}
+                  </span>
+                  <span className={cx('t-small block', t.status === 'open' && esc.level > 0 ? 'text-critical' : 'text-muted')}>{line}</span>
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <p className="t-body text-muted">No live alerts. Every frame passed its last test or has been fixed.</p>
+      )}
     </Section>
   );
 }
 
-function HoldRow({ s, h, now }: { s: MillState; h: Hold; now: number }) {
-  const lot = s.lots.find((l) => l.id === h.lotId);
-  const product = lot && s.products.find((p) => p.id === lot.productId);
-  const age = now - h.from;
-  return (
-    <li className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-2">
-      <div className="min-w-0">
-        <p className="t-small-strong">
-          {h.frameId} <span className="font-normal text-muted">· Lot {h.lotId} · {product?.buyer}</span>
-        </p>
-        <KgBlocks kg={holdKg(h, now)} size="sm" className="mt-1.5" />
-      </div>
-      <p className="t-data self-start">{roundKg(holdKg(h, now))} kg</p>
-      <div className="col-span-2 flex flex-col gap-1">
-        <AgeBar ms={age} />
-        <p className={cx('t-small', age > DAY ? 'font-semibold text-major' : 'text-muted')}>
-          Waiting {waited(age)}
-          {!h.to ? ' · still growing' : ' · frame fixed'}
-          {lot?.dispatchAt ? ` · dispatch ${dayMonth(lot.dispatchAt)}` : ''}
-        </p>
-      </div>
-    </li>
-  );
-}
-
-// ---------- home ----------
 export function PlantHome() {
   const s = useMillState();
   const now = useNow();
@@ -257,7 +238,7 @@ export function PlantHome() {
         <Section title="Response by shift" sub="Every critical and major alert, last 14 days">
           <ShiftDots dots={data.dots} />
         </Section>
-        <YarnAtRisk s={s} now={now} i={0} />
+        <RightNow s={s} now={now} i={0} />
       </div>
 
       <Section
@@ -458,8 +439,9 @@ function FrameCasePage({ s, c, now }: { s: MillState; c: FrameCase; now: number 
   const causes = new Map<string, number>();
   all.forEach(({ t }) => t.cause && causes.set(t.cause, (causes.get(t.cause) ?? 0) + 1));
   const insight = insights(s, now).find((x) => x.kind === 'Repeat pattern' && x.target.endsWith(c.frameId));
-  const holds = s.holds.filter((h) => h.frameId === c.frameId && h.from >= c.since);
-  const kg = c.kgHeld;
+  // Bad yarn this frame made between each failed test and its fix (from the record).
+  const fixed = c.alerts.filter((t) => t.fixedAt);
+  const kg = fixed.reduce((n, t) => n + ((s.products.find((p) => p.id === t.productId)?.kgPerHour ?? 25) * (t.fixedAt! - t.alertAt)) / HOUR, 0);
   const rovingPattern = roving >= Math.ceil(all.length / 2);
   const cause = c.topCause?.toLowerCase() ?? 'the main cause';
   const decided = lastFrameDecision(s, c.frameId);
@@ -479,7 +461,7 @@ function FrameCasePage({ s, c, now }: { s: MillState; c: FrameCase; now: number 
   return (
     <CaseLayout
       title={`${c.frameId} keeps failing. Overhaul it, or fix how it's run?`}
-      by={<>{c.alerts.length} critical or major alerts in 30 days · {roundKg(kg)} kg held from this frame</>}
+      by={<>{c.alerts.length} critical or major alerts in 30 days · about {roundKg(kg)} kg made between failed tests and fixes</>}
       evidence={
         <>
           <Section i={0} title="When it failed" sub={`The pattern points to ${points}.`}>
@@ -513,7 +495,7 @@ function FrameCasePage({ s, c, now }: { s: MillState; c: FrameCase; now: number 
           </Section>
           <Section i={2} title="What it cost">
             <p className="t-stat">
-              <CountUp value={roundKg(kg)} ms={400} /> <span className="t-body text-muted">kg held in {holds.length} holds, last 30 days</span>
+              <CountUp value={roundKg(kg)} ms={400} /> <span className="t-body text-muted">kg made between failed tests and fixes, {fixed.length} alerts, last 30 days</span>
             </p>
             <KgBlocks kg={kg} className="mt-3" />
           </Section>
@@ -555,10 +537,14 @@ export function PlantReview() {
   const d = useMemo(() => {
     const since30 = mill(millDayKey(now)) - 29 * DAY;
     const since56 = mill(millDayKey(now)) - 35 * DAY;
-    const o = holdOutcomes(s, since30, now);
-    const sorted = [...o.kg].sort((a, b) => a - b);
+    // Yarn made between a failed test and the fix, per critical or major alert (measured from the record).
+    const fixedAlerts = s.tickets.filter((t) => t.severity !== 'minor' && t.createdAt >= since30 && t.createdAt <= now && t.fixedAt && t.fixedAt <= now);
+    const kg = fixedAlerts.map((t) => ((s.products.find((p) => p.id === t.productId)?.kgPerHour ?? 25) * (t.fixedAt! - t.alertAt)) / HOUR);
+    const sorted = [...kg].sort((a, b) => a - b);
     const med = sorted.length ? sorted[Math.floor(sorted.length / 2)] : 0;
-    const save = (base: number) => o.kg.reduce((n, k) => n + Math.max(0, base - k), 0);
+    const save = (base: number) => kg.reduce((n, k) => n + Math.max(0, base - k), 0);
+    const alerts30 = s.tickets.filter((t) => t.severity !== 'minor' && t.createdAt >= since30 && t.createdAt <= now);
+    const o = { incidents: fixedAlerts.length, falseAlarms: alerts30.filter((t) => t.closeReason === 'sample_error').length, total: alerts30.length };
     const counts = new Map<string, number>();
     for (const t of s.tickets) if (t.severity !== 'minor' && t.createdAt >= since56 && t.createdAt <= now) counts.set(t.frameId, (counts.get(t.frameId) ?? 0) + 1);
     const top = [...counts.entries()].filter(([, n]) => n >= 2).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([f]) => f);
@@ -577,7 +563,7 @@ export function PlantReview() {
         </p>
       </header>
 
-      <Section title="Is catching faults early paying off" sub="Yarn held per incident, against the amount lost before QC Alert">
+      <Section title="Is catching faults early paying off" sub="Bad yarn made per incident, before QC Alert and now">
         <div className="flex flex-col gap-4">
           <div className="grid grid-cols-[72px_minmax(0,1fr)_72px] items-center gap-3">
             <span className="t-small-strong">Before</span>
@@ -590,23 +576,14 @@ export function PlantReview() {
             <KgBlocks kg={d.med} />
             <span className="t-data text-right">{Math.round(d.med)} kg</span>
             <span />
-            <span className="t-small -mt-2 text-muted">Median held per incident, {d.o.holds.length} holds. Measured, so solid.</span>
+            <span className="t-small -mt-2 text-muted">Median yarn made from the failed test to the fix, {d.o.incidents} alerts. Measured, so solid. It leaves out the hours before the test, which QC Alert does not shorten.</span>
           </div>
           <p className="t-section">
             About {r50(d.save(BASELINE_KG))} kg saved this month <span className="t-small font-normal text-muted">· estimate, {r50(d.save(200))}–{r50(d.save(300))} kg if the old loss was 200–300 kg</span>
           </p>
-          <div>
-            <p className="t-small-strong">Holds that turned out fine</p>
-            <div className="mt-2 flex flex-wrap gap-1.5" role="img" aria-label={`${d.o.fine.length} of ${d.o.holds.length} holds turned out fine`}>
-              {d.o.holds.map((h) => {
-                const fine = d.o.fine.includes(h);
-                return <span key={h.id} title={`${h.frameId}, ${dayMonth(h.from)}`} className="size-3.5 rounded-full" style={fine ? { boxShadow: 'inset 0 0 0 2px var(--major-fill)' } : { background: 'var(--held)' }} />;
-              })}
-            </div>
-            <p className="t-small mt-2 text-muted">
-              {d.o.fine.length} of {d.o.holds.length} holds passed the re-test or were a sample error. That is the cost of stopping early, and worth a look at the hold rule with Priya.
-            </p>
-          </div>
+          <p className="t-small text-muted">
+            {d.o.falseAlarms} of {d.o.total} alerts this month were false alarms (a bad lab sample). That is the cost of reporting fast.
+          </p>
         </div>
       </Section>
 

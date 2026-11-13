@@ -82,7 +82,7 @@ function MyTicketsList({ user }: { user: User }) {
   const sub =
     user.role === 'supervisor'
       ? `${user.shift} shift · ${first(user)}${onShift ? '' : ' · off shift'}`
-      : `${first(user)} · ${user.role === 'qc' ? 'escalations and held yarn' : 'escalations only'}`;
+      : `${first(user)} · ${user.role === 'qc' ? 'alerts nobody took within 10 minutes' : 'escalations only'}`;
   return (
     <Page title="Active issues" sub={sub}>
       {notices.map((h) => (
@@ -777,7 +777,7 @@ export function TestEntryScreen() {
         <ul className="mt-2 flex flex-col gap-1.5">
           {result.pass ? (
             <li className="t-body">
-              {req.reason === 'retest' ? 'Fix confirmed. The QC manager can decide on the held yarn.' : 'Recorded the result'}
+              {req.reason === 'retest' ? 'Fix confirmed. The alert is closed and the supervisor is told.' : 'Recorded the result'}
             </li>
           ) : (
             <>

@@ -118,7 +118,7 @@ export function PlantPhoneHome({ user }: { user: User }) {
               <Checkmark size={32} />
             </span>
             <p className="t-section">All clear</p>
-            <p className="t-small max-w-[30ch] text-muted">This phone rings only when an alert reaches 20 minutes or a release needs your approval.</p>
+            <p className="t-small max-w-[30ch] text-muted">This phone rings only when an alert reaches 20 minutes with nobody fixing it.</p>
           </div>
         )}
         {desk > 0 && (
