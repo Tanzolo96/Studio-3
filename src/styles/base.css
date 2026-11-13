@@ -126,3 +126,19 @@ p { margin: 0; text-wrap: pretty; }
   main { overflow: visible !important; }
   body { background: #fff; }
 }
+
+/* Dropdowns: one look everywhere. Our own chevron, inset to match the text padding, so pills read balanced.
+   Unlayered on purpose so it wins over per-element padding utilities. */
+select {
+  -webkit-appearance: none;
+  appearance: none;
+  padding-left: 14px;
+  padding-right: 38px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 6l4 4 4-4' fill='none' stroke='%238a8f98' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 14px 14px;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+select::-ms-expand { display: none; }
