@@ -118,7 +118,7 @@ p { margin: 0; text-wrap: pretty; }
 }
 
 /* Jury demo: the phone sits under the person switcher, so it gets a little less height. */
-.demo-phone .phone { max-height: calc(100dvh - 104px); }
+.demo-phone .phone { max-height: calc(100dvh - 120px); width: min(390px, 100%); }
 
 /* Monthly report "Download PDF": print only the page content */
 /* Download PDF: only the printed report (.print-only) prints, as an A4 document in black on white. */
@@ -175,3 +175,16 @@ select {
   cursor: pointer;
 }
 select::-ms-expand { display: none; }
+
+/* Phone app: hold still.
+   - Text boxes at 16px or more: iPhones zoom the whole page into anything smaller, and stay zoomed.
+   - No rubber-band bounce or double-tap zoom on the page; only the list inside scrolls.
+   - Screens appear without sliding in; the full-screen alert keeps its one pulse. */
+html, body { overscroll-behavior: none; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+.phone, .phone * { touch-action: manipulation; }
+@media (max-width: 640px), (pointer: coarse) {
+  .phone input:not([type='checkbox']):not([type='radio']):not(.t-reading), .phone textarea, .phone select { font-size: 16px !important; }
+}
+.phone .anim-in, .phone .anim-pop, .phone .anim-grow-x, .phone .anim-grow-y { animation: none; }
+.phone .anim-rise { animation: fade 160ms var(--ease-out) both; }
+.phone main { overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
