@@ -35,8 +35,7 @@ const NAV: { group: string; items: { to: string; label: string; end?: boolean; r
     group: 'Setup',
     items: [
       { to: '/dashboard/rules', label: 'Rules' },
-      { to: '/dashboard/report', label: 'Monthly report', roles: ['qc'] },
-      { to: '/dashboard/review', label: 'Monthly review', roles: ['plant'] },
+      { to: '/dashboard/report', label: 'Monthly report', roles: ['qc', 'plant'] },
       { to: '/dashboard/account', label: 'Account' },
     ],
   },
@@ -152,7 +151,7 @@ export function DashShell() {
       </aside>
       <div className="flex min-w-0 flex-1 flex-col gap-3">
         <TopBar live={live.length} urgent={urgent} />
-        <main id="main" className="min-w-0 flex-1 px-4 pt-4 pb-24">
+        <main id="main" className="min-w-0 flex-1 px-4 pt-4 pb-8">
           {/* Keyed by person so a switch always draws that person's page fresh. */}
           <div key={user.id} className="contents">
             <Outlet />
@@ -197,7 +196,7 @@ const TITLES: [string, string][] = [
   ['/dashboard/tickets', 'History'],
   ['/dashboard/messages', 'Messages'],
   ['/dashboard/report', 'Monthly report'],
-  ['/dashboard/review', 'Monthly review'],
+  ['/dashboard/review', 'Monthly report'],
   ['/dashboard/case', 'Decision'],
   ['/dashboard/rules', 'Rules'],
   ['/dashboard/account', 'Account'],

@@ -6,7 +6,7 @@ import { TicketDetailPage, Tickets } from './dashboard/pages';
 import { MessagesPage } from './dashboard/messages';
 import { Report } from './dashboard/Overview';
 import { Overview } from './dashboard/Live';
-import { CasePage, PlantReview } from './dashboard/plant';
+import { CasePage } from './dashboard/plant';
 import { PhoneCase } from './app/plantPhone';
 import { AccountPage, RulesPage } from './dashboard/settings';
 import { Kit } from './demo/Kit';
@@ -75,7 +75,7 @@ export const dashRoutes: RouteObject = {
     { path: 'machines/:id', element: <Navigate to="/dashboard/tickets" replace /> },
     { path: 'insights', element: <Navigate to="/dashboard/report" replace /> },
     { path: 'report', element: <Report /> },
-    { path: 'review', element: <PlantReview /> },
+    { path: 'review', element: <Report /> },
     { path: 'case/:id', element: <CasePage /> },
     { path: 'rules', element: <RulesPage /> },
     { path: 'account', element: <AccountPage /> },

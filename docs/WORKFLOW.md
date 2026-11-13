@@ -21,7 +21,7 @@ Optional on the way: send a fitter, mark "waiting for a spare part" (pauses the 
 
 ## The dashboard: the record and the go-between
 
-- **Overview** (first page for everyone): live alerts (what failed, who QC Alert is waiting on, how long, which step, the last message), latest messages and this month. The plant head's Overview is information only, no decisions: the top 4 critical/major alerts of the last 7 days with what the person who fixed each one reported (part, cause, fixing time, yarn before the fix), a link to all past alerts, response by shift and what is live now. His Monthly review has no decisions either.
+- **Overview** (first page for everyone): live alerts (what failed, who QC Alert is waiting on, how long, which step, the last message), latest messages and this month. The plant head's Overview is information only, no decisions: the top 4 critical/major alerts of the last 7 days with what the person who fixed each one reported (part, cause, fixing time, yarn before the fix), a link to all past alerts, response by shift and what is live now. He sees the same Monthly report as the QC manager.
 - **History:** one list (no board) of every alert with its fix report (part, cause, fixing time, yarn made on that lot since the last good test) and full message log. Search by frame.
 - **Messages:** every message QC Alert sent (to whom, how) and every answer from the floor, by day; who it is waiting on right now.
 - **Rules:**

@@ -1,5 +1,5 @@
 // Plant head (Mohit) on the dashboard: information only (no decisions here): the top alerts of the last week,
-// who answers how fast, and what is live now; then the monthly review. Priya's and Krish's screens are elsewhere and untouched.
+// who answers how fast, and what is live now; then the same monthly report the QC manager sees. Priya's and Krish's screens are elsewhere and untouched.
 
 import { useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
@@ -8,11 +8,9 @@ import type { MillState, Ticket } from '../engine/types';
 import { useDispatch, useMillState, useNow, useUser } from '../store/store';
 import { escalation } from '../engine/selectors';
 import { frameWord, roundKg, limitFor, userName } from '../engine/reducer';
-import { BASELINE_KG } from '../engine/analytics';
 import { insights } from '../engine/insights';
 import { frameAlerts, frameCase, lastFrameDecision, plantCases, releaseCase, responseDots, type FrameCase, type PlantCase, type ReleaseCase } from '../engine/plant';
 import { DAY, HOUR, dateTime, dayMonth, hhmm, mill, millDayKey, millHour } from '../engine/time';
-import { TEST } from '../engine/vocab';
 import { cx, SeverityBadge } from '../ui/primitives';
 import { ReadingGauge, readingLine } from '../ui/cards';
 import { CountUp } from '../ui/charts';
@@ -114,7 +112,7 @@ export function PlantHome() {
             Last 7 days: <span className={cx('font-semibold', crit.length > 0 && 'text-critical')}>{crit.length} critical</span> and {major.length} major alert{major.length === 1 ? '' : 's'}.
           </p>
         </div>
-        <TextLink to="/dashboard/review">Monthly review</TextLink>
+        <TextLink to="/dashboard/report">Monthly report</TextLink>
       </header>
 
       <TopAlerts s={s} now={now} week={week} />
@@ -421,93 +419,3 @@ function FrameCasePage({ s, c, now }: { s: MillState; c: FrameCase; now: number 
   );
 }
 
-// ---------- monthly review ----------
-export function PlantReview() {
-  const s = useMillState();
-  const now = useNow();
-  const nav = useNavigate();
-  const day = Math.floor(now / DAY);
-  const d = useMemo(() => {
-    const since30 = mill(millDayKey(now)) - 29 * DAY;
-    const since56 = mill(millDayKey(now)) - 35 * DAY;
-    // Yarn made between a failed test and the fix, per critical or major alert (measured from the record).
-    const fixedAlerts = s.tickets.filter((t) => t.severity !== 'minor' && t.createdAt >= since30 && t.createdAt <= now && t.fixedAt && t.fixedAt <= now);
-    const kg = fixedAlerts.map((t) => ((s.products.find((p) => p.id === t.productId)?.kgPerHour ?? 25) * (t.fixedAt! - t.alertAt)) / HOUR);
-    const sorted = [...kg].sort((a, b) => a - b);
-    const med = sorted.length ? sorted[Math.floor(sorted.length / 2)] : 0;
-    const save = (base: number) => kg.reduce((n, k) => n + Math.max(0, base - k), 0);
-    const alerts30 = s.tickets.filter((t) => t.severity !== 'minor' && t.createdAt >= since30 && t.createdAt <= now);
-    const o = { incidents: fixedAlerts.length, falseAlarms: alerts30.filter((t) => t.closeReason === 'sample_error').length, total: alerts30.length };
-    const counts = new Map<string, number>();
-    for (const t of s.tickets) if (t.severity !== 'minor' && t.createdAt >= since56 && t.createdAt <= now) counts.set(t.frameId, (counts.get(t.frameId) ?? 0) + 1);
-    const top = [...counts.entries()].filter(([, n]) => n >= 2).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([f]) => f);
-    const rules = s.rules.filter((r) => r.updatedAt >= since30 && r.updatedBy !== 'system');
-    return { since30, since56, o, med, save, top, dots: responseDots(s, since30, now), rules };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [s, day]);
-  const r50 = (v: number) => (Math.round(v / 50) * 50).toLocaleString('en-IN');
-  return (
-    <div className="mx-auto flex max-w-[1240px] flex-col gap-5">
-      <header className="anim-in">
-        <h1 className="t-page">Monthly review</h1>
-        <p className="t-small mt-0.5 text-muted">
-          {dayMonth(d.since30)} to {dayMonth(now)}
-        </p>
-      </header>
-
-      <Section title="Is catching faults early paying off" sub="Bad yarn made per incident, before QC Alert and now">
-        <div className="flex flex-col gap-4">
-          <div className="grid grid-cols-[72px_minmax(0,1fr)_72px] items-center gap-3">
-            <span className="t-small-strong">Before</span>
-            <KgBlocks kg={BASELINE_KG} outline />
-            <span className="t-data text-right">{BASELINE_KG} kg</span>
-            <span />
-            <span className="t-small -mt-2 text-muted">Per incident, your own estimate. Drawn as outlines because it's an assumption.</span>
-            <span />
-            <span className="t-small-strong">Now</span>
-            <KgBlocks kg={d.med} />
-            <span className="t-data text-right">{Math.round(d.med)} kg</span>
-            <span />
-            <span className="t-small -mt-2 text-muted">Median yarn made from the failed test to the fix, {d.o.incidents} alerts. Measured, so solid. It leaves out the hours before the test, which QC Alert does not shorten.</span>
-          </div>
-          <p className="t-section">
-            About {r50(d.save(BASELINE_KG))} kg saved this month <span className="t-small font-normal text-muted">· estimate, {r50(d.save(200))}–{r50(d.save(300))} kg if the old loss was 200–300 kg</span>
-          </p>
-          <p className="t-small text-muted">
-            {d.o.falseAlarms} of {d.o.total} alerts this month were false alarms (a bad lab sample). That is the cost of reporting fast.
-          </p>
-        </div>
-      </Section>
-
-      <Section title="Response by shift" sub="Every critical and major alert, last 30 days">
-        <ShiftDots dots={d.dots} width={1120} />
-      </Section>
-
-      <Section title="Frames that keep failing" sub={`Since ${dayMonth(d.since56)}. Click a frame to see its alerts.`}>
-        {d.top.length ? <CauseStrip s={s} frameIds={d.top} since={d.since56} now={now} width={1120} onPick={(f) => nav(`/dashboard/tickets?frame=${f}&tab=all`)} /> : <p className="t-body text-muted">No frame failed twice.</p>}
-      </Section>
-
-      <div className="grid gap-5">
-        <Section title="Rule changes" sub="Limits the QC manager changed this month">
-          {d.rules.length ? (
-            <ul className="flex flex-col divide-y divide-[var(--line)]">
-              {d.rules.map((r) => {
-                const p = s.products.find((x) => x.id === r.productId);
-                return (
-                  <li key={r.id} className="grid grid-cols-[96px_minmax(0,1fr)] gap-3 py-2.5">
-                    <span className="t-data text-[13px] text-muted">{dayMonth(r.updatedAt)}</span>
-                    <span className="t-small">
-                      {p?.short} {TEST[r.test].name.toLowerCase()} now {r.min ?? '–'} to {r.max ?? '–'} · {userName(s, r.updatedBy).split(' ')[0]}
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-          ) : (
-            <p className="t-body text-muted">No limits changed this month.</p>
-          )}
-        </Section>
-      </div>
-    </div>
-  );
-}
