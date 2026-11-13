@@ -10,7 +10,7 @@ import { BASELINE_KG, alertHeat, dailyAlerts, frameStateCounts, seenTrend, shift
 import { DAY, ago, dayMonth, hhmm, mill, millDayKey, shiftAt, shiftEndsAt, timer } from '../engine/time';
 import { cx, Empty, SeverityBadge, StatusChip } from '../ui/primitives';
 import { InsightCard, readingLine, ticketChip } from '../ui/cards';
-import { BarList, Dial, SegmentMeter, CountUp, Ring, LedBoard, Sparkline, ShiftBars, TrendArea } from '../ui/charts';
+import { BarList, Dial, SegmentMeter, CountUp, Ring, Sparkline, ShiftBars, TrendArea } from '../ui/charts';
 import { PageHead } from './DashShell';
 import { PlantHome } from './plant';
 
@@ -471,17 +471,20 @@ export function Report() {
         </Panel>
       </div>
 
-      <div className="anim-in grid gap-4 xl:grid-cols-3" style={{ '--i': 2 } as CSSProperties}>
-        <Panel className="xl:col-span-2" title="Alerts per day" sub="Last 30 days · one lit dot = one alert">
-          <LedBoard data={a.daily} dayLabel={dayMonth} label="Alerts per day for the last 30 days, by severity" />
-        </Panel>
+      <div className="anim-in grid gap-4 xl:grid-cols-2" style={{ '--i': 2 } as CSSProperties}>
         <Panel title="Top causes" sub="What fixed frames had in common">
           {a.causes.length ? <BarList items={a.causes} /> : <p className="t-small text-muted">No fixed tickets yet.</p>}
         </Panel>
+        <Panel title="By shift" sub="Median minutes to Seen">
+          <div className="pt-6">
+            <ShiftBars rows={a.shifts} limit={5} label="Median minutes to Seen for shifts A, B and C" />
+          </div>
+          <p className="t-small mt-4 text-muted">A 06–14 · B 14–22 · C 22–06</p>
+        </Panel>
       </div>
 
-      <div className="anim-in grid gap-4 xl:grid-cols-3" style={{ '--i': 3 } as CSSProperties}>
-        <Panel className="xl:col-span-2" title="How fast someone starts fixing" sub="Median minutes from alert to “I’m fixing”, rolling 7 days">
+      <div className="anim-in grid gap-4" style={{ '--i': 3 } as CSSProperties}>
+        <Panel title="How fast someone starts fixing" sub="Median minutes from alert to “I’m fixing”, rolling 7 days">
           <TrendArea
             points={a.trend}
             limit={5}
@@ -490,12 +493,6 @@ export function Report() {
             dayLabel={dayMonth}
             label="Median minutes to Seen over the last 30 days, against the 5 minute limit"
           />
-        </Panel>
-        <Panel title="By shift" sub="Median minutes to Seen">
-          <div className="pt-6">
-            <ShiftBars rows={a.shifts} limit={5} label="Median minutes to Seen for shifts A, B and C" />
-          </div>
-          <p className="t-small mt-4 text-muted">A 06–14 · B 14–22 · C 22–06</p>
         </Panel>
       </div>
     </div>
