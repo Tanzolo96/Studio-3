@@ -443,19 +443,12 @@ export function Report() {
   }, [s, nowMin]);
   const seenNow = [...a.trend].reverse().find((p) => p.mins !== null)?.mins ?? null;
   const top = a.frames[0];
-  // A week of days; the picked day's critical alerts show on the right. Opens on today.
-  const todayStart = mill(millDayKey(now));
-  const todayIdx = (new Date(now + 5.5 * 3600000).getUTCDay() + 6) % 7;
-  const [weekOff, setWeekOff] = useState(0);
-  const [dayIdx, setDayIdx] = useState(todayIdx);
-  const weekStart = todayStart - todayIdx * DAY + weekOff * 7 * DAY;
-  const week = Array.from({ length: 7 }, (_, i) => {
-    const start = weekStart + i * DAY;
-    const list = s.tickets.filter((x) => x.severity === 'critical' && x.createdAt >= start && x.createdAt < start + DAY && x.createdAt <= now).sort((x, y) => x.createdAt - y.createdAt);
-    return { start, list, future: start > now };
-  });
-  const weekMax = Math.max(1, ...week.map((d) => d.list.length));
-  const chosen = week[dayIdx];
+  // Calendar on the left; the picked day's critical and major alerts show on the right. Opens on today.
+  const nav = useNavigate();
+  const [dayKey, setDayKey] = useState(millDayKey(now));
+  const dayStart0 = mill(dayKey);
+  const dayList = s.tickets.filter((x) => x.severity !== 'minor' && x.createdAt >= dayStart0 && x.createdAt < dayStart0 + DAY && x.createdAt <= now).sort((x, y) => x.createdAt - y.createdAt);
+  const isToday = dayKey === millDayKey(now);
   return (
     <div className="mx-auto flex max-w-[1240px] flex-col gap-5">
       <PageHead
@@ -476,61 +469,18 @@ export function Report() {
       </section>
 
       <div className="anim-in grid gap-4 xl:grid-cols-2" style={{ '--i': 1 } as CSSProperties}>
+        <CalendarPanel s={s} now={now} onOpen={(id) => nav(`/dashboard/tickets/${id}`)} pickedKey={dayKey} onPick={setDayKey} />
         <Panel
-          title="Critical alerts by day"
-          sub={weekOff === 0 ? 'This week · click a day to see its alerts' : `Week of ${dayMonth(weekStart)} · click a day to see its alerts`}
-          aside={
-            <div className="flex shrink-0 items-center gap-1">
-              <button type="button" aria-label="Previous week" disabled={weekOff <= -4} onClick={() => setWeekOff((w) => w - 1)} className="grid size-8 place-items-center rounded-full border border-line hover:bg-sunken disabled:opacity-40">
-                <ChevronLeft size={16} />
-              </button>
-              <button type="button" aria-label="Next week" disabled={weekOff >= 0} onClick={() => setWeekOff((w) => w + 1)} className="grid size-8 place-items-center rounded-full border border-line hover:bg-sunken disabled:opacity-40">
-                <ChevronRight size={16} />
-              </button>
-            </div>
-          }
+          title={`${isToday ? 'Today' : DAYS_FULL[(new Date(dayStart0 + 5.5 * 3600000).getUTCDay() + 6) % 7]}, ${dayMonth(dayStart0)}`}
+          sub={`${dayList.length} critical or major alert${dayList.length === 1 ? '' : 's'} · click a day on the calendar`}
         >
-          <ul className="flex flex-col gap-1">
-            {week.map((d, i) => {
-              const on = i === dayIdx;
-              const isToday = d.start === todayStart;
-              const n = d.list.length;
-              return (
-                <li key={d.start}>
-                  <button
-                    type="button"
-                    disabled={d.future}
-                    aria-pressed={on}
-                    onClick={() => setDayIdx(i)}
-                    className={cx('grid w-full grid-cols-[132px_minmax(0,1fr)_56px] items-center gap-4 rounded-[10px] px-3 py-2.5 text-left transition-colors', on ? 'bg-sunken ring-1 ring-[var(--line-strong)]' : 'hover:bg-sunken', d.future && 'opacity-40')}
-                  >
-                    <span>
-                      <span className="t-small-strong block">
-                        {DAYS_FULL[i]}
-                        {isToday && <span className="ml-2 rounded-full bg-brand-soft px-2 py-0.5 text-[11px] font-semibold text-brand-text">Today</span>}
-                      </span>
-                      <span className="t-small block text-muted">{dayMonth(d.start)}</span>
-                    </span>
-                    <span className="h-2 rounded-full bg-[var(--cell-off)]">
-                      <span className="block h-2 rounded-full bg-critical transition-[width] duration-500" style={{ width: `${(n / weekMax) * 100}%` }} />
-                    </span>
-                    <span className={cx('t-stat text-right !text-[26px]', n ? 'text-critical' : 'text-muted')}>{d.future ? '–' : n}</span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </Panel>
-        <Panel
-          title={chosen.start === todayStart ? `Today, ${dayMonth(chosen.start)}` : `${DAYS_FULL[dayIdx]}, ${dayMonth(chosen.start)}`}
-          sub={`${chosen.list.length} critical alert${chosen.list.length === 1 ? '' : 's'}`}
-        >
-          {chosen.list.length ? (
+          {dayList.length ? (
             <ul className="flex flex-col divide-y divide-[var(--line)]">
-              {chosen.list.map((x) => (
+              {dayList.map((x) => (
                 <li key={x.id}>
                   <Link to={`/dashboard/tickets/${x.id}`} className="flex items-start gap-3 py-3 hover:bg-sunken">
                     <span className="t-data w-12 shrink-0 pt-0.5 text-[13px] text-muted">{hhmm(x.createdAt)}</span>
+                    <SeverityBadge level={x.severity} />
                     <span className="min-w-0 flex-1">
                       <span className="t-small-strong block">
                         {x.frameId} · {x.title}
@@ -546,7 +496,7 @@ export function Report() {
               ))}
             </ul>
           ) : (
-            <p className="t-small text-muted">No critical alerts on this day.</p>
+            <p className="t-small text-muted">No critical or major alerts on this day.</p>
           )}
         </Panel>
       </div>
@@ -650,11 +600,14 @@ const DAYS_FULL = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Satu
 
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
-function CalendarPanel({ s, now, onOpen }: { s: MillState; now: number; onOpen: (id: string) => void }) {
+/** Month calendar. With onPick, the parent owns the picked day and shows its alerts elsewhere. */
+function CalendarPanel({ s, now, onOpen, pickedKey, onPick }: { s: MillState; now: number; onOpen: (id: string) => void; pickedKey?: string; onPick?: (k: string) => void }) {
   const ist = new Date(now + 5.5 * 3600000);
   const [view, setView] = useState({ y: ist.getUTCFullYear(), m: ist.getUTCMonth() });
   const todayKey = millDayKey(now);
-  const [picked, setPicked] = useState(todayKey);
+  const [own, setOwn] = useState(todayKey);
+  const picked = pickedKey ?? own;
+  const setPicked = onPick ?? setOwn;
   const pad = (n: number) => String(n).padStart(2, '0');
   const key = (d: number) => `${view.y}-${pad(view.m + 1)}-${pad(d)}`;
   const lead = (new Date(Date.UTC(view.y, view.m, 1)).getUTCDay() + 6) % 7;
@@ -763,7 +716,7 @@ function CalendarPanel({ s, now, onOpen }: { s: MillState; now: number; onOpen: 
         <li className="flex items-center gap-1.5"><span className="size-2.5 rounded-[3px] bg-ok" />Calm</li>
         <li className="flex items-center gap-1.5"><span className="size-2.5 rounded-[3px] bg-brand" />Selected</li>
       </ul>
-      <div className="mt-4 border-t border-line pt-3">
+      {!onPick && (<div className="mt-4 border-t border-line pt-3">
         <p className="t-small-strong mb-2">{picked === todayKey ? 'Today' : dayMonth(mill(picked))}</p>
         {day.length ? (
           <ul className="flex flex-col gap-1">
@@ -781,7 +734,7 @@ function CalendarPanel({ s, now, onOpen }: { s: MillState; now: number; onOpen: 
         ) : (
           <p className="t-small text-muted">No critical or major alerts.</p>
         )}
-      </div>
+      </div>)}
     </Panel>
   );
 }
