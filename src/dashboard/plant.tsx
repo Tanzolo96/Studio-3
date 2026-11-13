@@ -6,13 +6,13 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, ArrowRight } from '@carbon/icons-react';
 import type { MillState, Ticket } from '../engine/types';
 import { useDispatch, useMillState, useNow, useUser } from '../store/store';
-import { frameWord, roundKg, limitFor, userName } from '../engine/reducer';
+import { frameWord, limitFor, limitText, roundKg, userName, withUnit } from '../engine/reducer';
 import { insights } from '../engine/insights';
 import { frameAlerts, frameCase, lastFrameDecision, plantCases, releaseCase, type FrameCase, type PlantCase, type ReleaseCase } from '../engine/plant';
 import { TEST } from '../engine/vocab';
 import { DAY, HOUR, ago, dateTime, dayMonth, hhmm, mill, millDayKey, millHour } from '../engine/time';
 import { cx, SeverityBadge } from '../ui/primitives';
-import { ReadingGauge, readingLine } from '../ui/cards';
+import { ReadingGauge } from '../ui/cards';
 import { CountUp } from '../ui/charts';
 import { CauseStrip, DeadlineCells, DecisionPanel, KgBlocks, stagger } from '../ui/plant';
 import { DayCalendar } from './Overview';
@@ -93,11 +93,8 @@ function TopAlerts({ s, now, week }: { s: MillState; now: number; week: Ticket[]
   const [pick, setPick] = useState<string | null>(null);
   const t = top.find((x) => x.id === pick) ?? top[0];
   return (
-    <div className="grid gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
-      <Section title="What happened" sub={t ? 'The whole story of the alert you picked' : undefined} aside={t ? <TextLink to={`/dashboard/tickets/${t.id}`}>Full alert</TextLink> : undefined}>
-        {t ? <AlertStory s={s} t={t} now={now} /> : <p className="t-body text-muted">No critical or major alerts in the last 7 days.</p>}
-      </Section>
-      <Section title="Top alerts last week" sub="Most serious first · click one to read its story" aside={<TextLink to="/dashboard/tickets?tab=all">All past alerts</TextLink>}>
+    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)]">
+      <Section title="Top alerts last week" sub="Most serious first · click one to read what happened" aside={<TextLink to="/dashboard/tickets?tab=all">All past alerts</TextLink>}>
         {top.length ? (
           <ul className="-mx-2 flex flex-col gap-1">
             {top.map((x) => {
@@ -129,57 +126,25 @@ function TopAlerts({ s, now, week }: { s: MillState; now: number; week: Ticket[]
           <p className="t-body text-muted">Nothing serious this week.</p>
         )}
       </Section>
+      <Section title="What happened" sub={t ? 'The alert you picked, start to finish' : undefined} aside={t ? <TextLink to={`/dashboard/tickets/${t.id}`}>Full alert</TextLink> : undefined}>
+        {t ? <AlertStory s={s} t={t} now={now} /> : <p className="t-body text-muted">No critical or major alerts in the last 7 days.</p>}
+      </Section>
     </div>
   );
 }
 
-/** One alert told as a short story: what the lab found, who picked it up, what they found, how it ended. */
+/** One alert told in plain sentences: what the lab found, who picked it up, what they found, how it ended. */
 function AlertStory({ s, t, now }: { s: MillState; t: Ticket; now: number }) {
-  const first = (n?: string) => (n ? userName(s, n) : 'Someone');
+  const name = (n?: string) => (n ? userName(s, n) : 'Someone');
+  const when = (at: number) => `${weekday(at).slice(0, 3)} ${dayMonth(at)} at ${hhmm(at)}`;
   const r = t.readings[0];
-  const tester = r?.resultId ? s.results.find((x) => x.id === r.resultId)?.by : t.raisedBy;
+  const tester = r?.resultId ? s.results.find((x) => x.id === r.resultId)?.by : undefined;
   const product = s.products.find((p) => p.id === t.productId);
+  const limit = r ? limitFor(s, t.productId, r) : undefined;
   const wait = t.workingAt ? Math.round((t.workingAt - t.alertAt) / 60000) : undefined;
   const fix = t.fixedAt && t.workingAt ? Math.round((t.fixedAt - t.workingAt) / 60000) : undefined;
-  const steps: { at?: number; title: string; body?: ReactNode; tone: 'bad' | 'warn' | 'ok' | 'muted' }[] = [
-    {
-      at: t.createdAt,
-      title: t.raisedBy && !r?.resultId ? `${first(tester)} raised it by hand` : `The lab found a failed ${t.test ? TEST[t.test].name.toLowerCase() : ''} test`,
-      body: (
-        <>
-          {r ? <span className="t-data text-[13px]">{readingLine(s, t)}</span> : t.title} on Lot {t.lotId}
-          {product ? `, ${product.name}` : ''}. {tester && r?.resultId ? `Tested by ${first(tester)}.` : ''}
-        </>
-      ),
-      tone: 'bad',
-    },
-    {
-      at: t.workingAt,
-      title: t.workingAt ? `${first(t.seenBy)} started fixing it` : 'Nobody has started fixing it yet',
-      body: wait !== undefined ? <span className={wait > 5 ? 'text-critical' : 'text-ok'}>{wait <= 0 ? 'Straight away' : `${wait} min after the alert`}{wait > 5 ? ', later than the 5 min target' : ', within the 5 min target'}.</span> : undefined,
-      tone: wait === undefined ? 'muted' : wait > 5 ? 'warn' : 'ok',
-    },
-  ];
-  if (t.fixedAt)
-    steps.push({
-      at: t.fixedAt,
-      title: `Fixed${fix !== undefined ? ` in ${fix} min` : ''}`,
-      body: (
-        <>
-          {t.note && <span className="t-body mb-1 block">“{t.note}”</span>}
-          <span className="text-muted">
-            {[t.part && `Part: ${t.part}`, t.cause && `Cause: ${t.cause}`, t.affectedKg !== undefined && `about ${t.affectedKg} kg made before the fix`].filter(Boolean).join(' · ')}
-          </span>
-        </>
-      ),
-      tone: 'ok',
-    });
-  steps.push(
-    t.status === 'closed'
-      ? { at: t.closedAt, title: t.fixConfirmedAt ? 'Re-test passed, alert closed' : 'Alert closed', tone: 'ok' }
-      : { title: t.status === 'fixed' ? 'Waiting for the lab re-test' : 'Still open', body: `Open for ${ago(now - t.createdAt)}.`, tone: 'warn' },
-  );
-  const DOT = { bad: 'bg-critical', warn: 'bg-major-fill', ok: 'bg-ok', muted: 'bg-[var(--line-strong)]' };
+  const fixer = name(t.fixedBy ?? t.seenBy);
+  const where = [t.part && `in the ${t.part.toLowerCase()}`, t.cause && `the cause was ${t.cause.toLowerCase()}`].filter(Boolean).join(', and ');
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -188,19 +153,53 @@ function AlertStory({ s, t, now }: { s: MillState; t: Ticket; now: number }) {
           {frameWord(t.frameId)} · {t.title}
         </h3>
       </div>
-      <ol className="relative flex flex-col gap-4 pl-6">
-        <span className="absolute bottom-2 left-[5px] top-2 w-px bg-[var(--line-strong)]" aria-hidden />
-        {steps.map((st, i) => (
-          <li key={i} className="anim-in relative" style={stagger(i)}>
-            <span className={cx('absolute -left-6 top-1 size-[11px] rounded-full ring-4 ring-[var(--surface-raised)]', DOT[st.tone])} aria-hidden />
-            <p className="t-small-strong">
-              {st.title}
-              {st.at ? <span className="t-small font-normal text-muted"> · {weekday(st.at).slice(0, 3)} {dayMonth(st.at)}, {hhmm(st.at)}</span> : null}
-            </p>
-            {st.body && <p className="t-small mt-0.5">{st.body}</p>}
-          </li>
-        ))}
-      </ol>
+      <div className="t-body flex max-w-[62ch] flex-col gap-3">
+        <p>
+          On {when(t.createdAt)},{' '}
+          {r && t.test ? (
+            <>
+              the lab found a failed {TEST[t.test].name.toLowerCase()} test on {frameWord(t.frameId)}: it read <b>{withUnit(r.test, r.value)}</b>
+              {limit ? <>, outside the limit of {limitText(limit)}</> : null}.
+            </>
+          ) : (
+            <>
+              {name(t.raisedBy)} raised a problem on {frameWord(t.frameId)}: {t.title.toLowerCase()}.
+            </>
+          )}{' '}
+          The frame was running Lot {t.lotId}
+          {product ? ` (${product.name})` : ''}.{tester ? ` ${name(tester)} did the test.` : ''}
+        </p>
+        <p>
+          {wait !== undefined ? (
+            <>
+              {name(t.seenBy)} started fixing it {wait <= 0 ? 'straight away' : `${wait} minute${wait === 1 ? '' : 's'} later`},{' '}
+              <span className={wait > 5 ? 'font-semibold text-critical' : 'font-semibold text-ok'}>{wait > 5 ? 'later than the 5-minute target' : 'within the 5-minute target'}</span>.
+            </>
+          ) : (
+            <span className="font-semibold text-critical">Nobody has started fixing it yet.</span>
+          )}
+        </p>
+        {t.fixedAt && (
+          <p>
+            It was fixed in <b>{fix ?? '–'} minutes</b>. {t.note ? <>{fixer} said: “{t.note}”. </> : null}
+            {where ? `The problem was ${where}. ` : ''}
+            {t.affectedKg !== undefined ? `About ${t.affectedKg} kg of yarn was made on this lot before the fix.` : ''}
+          </p>
+        )}
+        <p>
+          {t.status === 'closed' ? (
+            t.fixConfirmedAt ? (
+              <>The lab re-tested the frame on {when(t.fixConfirmedAt)}. It passed, and the alert was <b>closed</b>.</>
+            ) : (
+              <>The alert was <b>closed</b>{t.closedAt ? ` on ${when(t.closedAt)}` : ''}.</>
+            )
+          ) : t.status === 'fixed' ? (
+            <>It is now waiting for the lab to re-test the frame.</>
+          ) : (
+            <span className="font-semibold text-critical">The alert is still open, {ago(now - t.createdAt)} after it started.</span>
+          )}
+        </p>
+      </div>
     </div>
   );
 }
