@@ -697,40 +697,76 @@ export function AccountPage() {
       </Panel>
 
       <Panel title="People and roles" sub={`${s.users.length} people · click a name to see their details`}>
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {roles.map((r) => {
-            const people = s.users.filter((u) => u.role === r);
-            return (
-              <div key={r}>
-                <p className="t-label mb-2 text-[10px] text-muted">
-                  {ROLE_WORD[r]} · {people.length}
-                </p>
-                <ul className="flex flex-col gap-1.5">
-                  {people.map((u) => (
-                    <li key={u.id}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setViewing(u.id);
-                          window.scrollTo({ top: 0, behavior: 'smooth' });
-                          document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' });
-                        }}
-                        aria-label={`See ${u.name}'s details`}
-                        className={cx('-mx-2 flex w-[calc(100%+16px)] items-center gap-2.5 rounded-[8px] px-2 py-1 text-left hover:bg-sunken', user.id === u.id && 'bg-brand-soft')}
-                      >
-                        <span className="grid size-7 shrink-0 place-items-center rounded-full bg-sunken text-[10px] font-semibold">{u.name.split(' ').map((p) => p[0]).join('')}</span>
-                        <span className="min-w-0 flex-1">
-                          <span className="t-small block">{u.name}</span>
-                          <span className="t-small block truncate text-muted">{profileOf(u.id).email}</span>
-                        </span>
-                        <span className="t-small shrink-0 text-muted">{u.shift === 'G' ? 'Day' : `${u.shift} shift`}</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            );
-          })}
+        {/* One row per role, one column per shift: everyone lines up, and you can read who is on when. */}
+        <div className="-mx-5 overflow-x-auto">
+          <table className="w-full min-w-[760px] table-fixed border-collapse text-left">
+            <colgroup>
+              <col className="w-[20%]" />
+              <col className="w-[20%]" />
+              <col className="w-[20%]" />
+              <col className="w-[20%]" />
+              <col className="w-[20%]" />
+            </colgroup>
+            <thead>
+              <tr className="t-label text-[10px] text-muted">
+                <th className="px-5 pb-3 font-semibold">Role</th>
+                {(['A', 'B', 'C'] as const).map((sh) => (
+                  <th key={sh} className="pb-3 pr-4 font-semibold">
+                    {sh} shift <span className="font-normal normal-case tracking-normal">{HOURS[sh].replace(/:00/g, '')}</span>
+                  </th>
+                ))}
+                <th className="pb-3 pr-5 font-semibold">Office hours</th>
+              </tr>
+            </thead>
+            <tbody>
+              {roles.map((r) => {
+                const people = s.users.filter((u) => u.role === r);
+                return (
+                  <tr key={r} className="border-t border-line align-top">
+                    <td className="px-5 py-3">
+                      <p className="t-small-strong">{ROLE_WORD[r]}</p>
+                      <p className="t-small text-muted">
+                        {people.length} {people.length === 1 ? 'person' : 'people'}
+                      </p>
+                    </td>
+                    {(['A', 'B', 'C', 'G'] as const).map((sh) => {
+                      const here = people.filter((u) => u.shift === sh);
+                      return (
+                        <td key={sh} className={cx('py-3 pr-4', sh === 'G' && 'pr-5')}>
+                          {here.length ? (
+                            <ul className="flex flex-col gap-2">
+                              {here.map((u) => (
+                                <li key={u.id}>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setViewing(u.id);
+                                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                                      document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' });
+                                    }}
+                                    aria-label={`See ${u.name}'s details`}
+                                    className={cx('-mx-2 flex w-[calc(100%+16px)] items-center gap-2.5 rounded-[8px] px-2 py-1 text-left hover:bg-sunken', user.id === u.id && 'bg-brand-soft')}
+                                  >
+                                    <span className="grid size-7 shrink-0 place-items-center rounded-full bg-sunken text-[10px] font-semibold">{u.name.split(' ').map((p) => p[0]).join('')}</span>
+                                    <span className="min-w-0">
+                                      <span className="t-small block truncate">{u.name}</span>
+                                      {u.frames && <span className="t-small block text-muted">Frames {u.frames[0]}–{u.frames[1]}</span>}
+                                    </span>
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <span className="t-small text-muted">–</span>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       </Panel>
     </div>
