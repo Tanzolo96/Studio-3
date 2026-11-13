@@ -4,9 +4,9 @@ import { ArrowLeft, Camera, Checkmark, ChevronRight } from '@carbon/icons-react'
 import type { MillState, Severity, TestKind, Ticket, User } from '../engine/types';
 import { useDispatch, useMill, useMillState, useNow, useUser } from '../store/store';
 import { decisionNotices, escalation, fitterJobs, labBacklog, median, myTickets, pendingRequests, seenTimes, timeline } from '../engine/selectors';
-import { failWord, frameWord, holdKg, lotOf, productOfFrame, roundKg, ruleFor, supervisorFor, userName, withinRule, withUnit } from '../engine/reducer';
+import { covers, failWord, frameWord, routineSlotsBefore, yarnMadeSince, holdKg, lotOf, productOfFrame, roundKg, ruleFor, supervisorFor, userName, withinRule, withUnit } from '../engine/reducer';
 import { CAUSE_HINT, CAUSES, MACHINE_PARTS, RAISE_PROBLEMS, TEST } from '../engine/vocab';
-import { ago, dayMonth, hhmm, monthName, shiftAt, timer } from '../engine/time';
+import { ago, dayMonth, hhmm, monthName, sameMillDay, shiftAt, timer } from '../engine/time';
 import { Button, Choice, cx, Empty, Field, SeverityBadge, SeverityShape, TextField } from '../ui/primitives';
 import { ReadingGauge, ResponseTimer, TicketCard, ticketMeta } from '../ui/cards';
 import { Timeline } from '../ui/timeline';
@@ -333,7 +333,8 @@ function TicketDetail({ s, t, now, user }: { s: MillState; t: Ticket; now: numbe
   const rule = reading && t.kind === 'test_fail' ? ruleFor(s, t.productId, reading.test) : undefined;
   const hold = t.holdId ? s.holds.find((h) => h.id === t.holdId) : undefined;
   // The plant head reads and calls; the supervisor (or the QC manager covering) acts.
-  const canAct = user.role === 'supervisor' || user.role === 'qc';
+  // The supervisor (or QC manager covering), and the machine operator on his own frames, fix and report.
+  const canAct = user.role === 'supervisor' || user.role === 'qc' || (user.role === 'operator' && covers(user, t.frameId));
   const isSupervisor = canAct;
   const fitter = t.fitterId ? userName(s, t.fitterId) : undefined;
   const product = s.products.find((p) => p.id === t.productId)!;
@@ -396,9 +397,11 @@ function TicketDetail({ s, t, now, user }: { s: MillState; t: Ticket; now: numbe
       case 'fixed':
         return (
           <>
-            <p className="t-small text-ink">
-              Fixing for <span className="t-data">{timer(now - (t.workingAt ?? t.seenAt ?? now))}</span>. When the frame is running right, tap Fixed and say what happened.
-            </p>
+            <div className="flex items-baseline justify-between rounded-[12px] bg-sunken px-4 py-3" role="timer" aria-label="Fixing time">
+              <span className="t-small text-muted">Fixing for</span>
+              <span className="t-stat">{timer(now - (t.workingAt ?? t.seenAt ?? now))}</span>
+            </div>
+            <p className="t-small text-ink">When the frame is running right, tap Fixed and answer a few questions.</p>
             {t.waitingPart ? (
               <>
                 <p className="t-small rounded-[10px] bg-major-soft px-3 py-2.5 text-ink">
@@ -619,14 +622,46 @@ function PhotoInput({ value, onChange }: { value?: string; onChange: (v?: string
 }
 
 function FixedSheet({ t, user, onClose }: { t: Ticket; user: User; onClose: () => void }) {
+  const s = useMillState();
+  const now = useNow();
   const dispatch = useDispatch();
   const [cause, setCause] = useState<string>();
   const [part, setPart] = useState<string>();
   const [note, setNote] = useState('');
   const [photo, setPhoto] = useState<string>();
+  // When was this frame last OK? Its last passing test before the alert, or the routine tests at shift start.
+  const sinceOptions = useMemo(() => {
+    let lastPass = 0;
+    for (const r of s.results) if (r.frameId === t.frameId && r.pass && !r.sampleError && r.at < t.createdAt && r.at > lastPass) lastPass = r.at;
+    const opts = [...(lastPass ? [lastPass] : []), ...routineSlotsBefore(t.createdAt, 3)];
+    return [...new Set(opts)].sort((x, y) => y - x).slice(0, 3);
+  }, [s.results, t.frameId, t.createdAt]);
+  const [since, setSince] = useState<number>(sinceOptions[0]);
+  const estimate = Math.round(yarnMadeSince(s, t.frameId, since, now));
+  const [kgRaw, setKgRaw] = useState<string | null>(null); // null = use the estimate
+  const kg = kgRaw === null ? estimate : Number(kgRaw);
+  const kgBad = kgRaw !== null && (kgRaw.trim() === '' || Number.isNaN(kg) || kg < 0);
+  const started = t.workingAt ?? t.seenAt;
+  const product = s.products.find((x) => x.id === t.productId)!;
+  const label = (x: number) => `${sameMillDay(x, now) ? 'Today' : dayMonth(x)} ${hhmm(x)}`;
+  const ready = !!cause && !!part && !kgBad;
+  const Q = ({ n, children }: { n: number; children: ReactNode }) => (
+    <p className="t-small-strong mb-2 flex items-center gap-2 text-ink">
+      <span className="t-small-strong grid size-6 place-items-center rounded-full bg-ink text-[var(--surface-raised)]">{n}</span>
+      {children}
+    </p>
+  );
   return (
     <Sheet title={`${frameWord(t.frameId)} fixed: what happened?`} onClose={onClose}>
-      <p className="t-small-strong mb-2 text-muted">Which part of the machine needed fixing?</p>
+      <section aria-label="Fixing time" className="mb-5 flex items-center justify-between rounded-[12px] bg-sunken px-4 py-3">
+        <span>
+          <span className="t-small block text-muted">Fixing time</span>
+          <span className="t-small text-muted">{started ? `Started ${hhmm(started)} · now ${hhmm(now)}` : 'Not started'}</span>
+        </span>
+        <span className="t-stat">{started ? timer(now - started) : '–'}</span>
+      </section>
+
+      <Q n={1}>Which part of the machine needed fixing?</Q>
       <div role="radiogroup" aria-label="Machine part" className="mb-5 grid grid-cols-2 gap-2">
         {MACHINE_PARTS.map((p) => (
           <Choice key={p} selected={part === p} onClick={() => setPart(p)}>
@@ -634,8 +669,9 @@ function FixedSheet({ t, user, onClose }: { t: Ticket; user: User; onClose: () =
           </Choice>
         ))}
       </div>
-      <p className="t-small-strong mb-2 text-muted">What caused it?</p>
-      <div role="radiogroup" aria-label="Cause" className="grid grid-cols-1 gap-2">
+
+      <Q n={2}>What was the problem?</Q>
+      <div role="radiogroup" aria-label="Cause" className="mb-5 grid grid-cols-1 gap-2">
         {CAUSES.map((c) => (
           <Choice key={c} selected={cause === c} onClick={() => setCause(c)}>
             <span className="block">{c}</span>
@@ -643,8 +679,29 @@ function FixedSheet({ t, user, onClose }: { t: Ticket; user: User; onClose: () =
           </Choice>
         ))}
       </div>
-      <p className="t-small mt-3 text-muted">The report goes to the dashboard. The lab re-tests the frame, and the ticket closes when the re-test passes.</p>
-      <div className="mt-4 flex flex-col gap-1.5">
+
+      <Q n={3}>When was {frameWord(t.frameId)} last OK?</Q>
+      <div role="radiogroup" aria-label="Last OK" className="mb-1 grid grid-cols-3 gap-2">
+        {sinceOptions.map((x) => (
+          <Choice key={x} selected={since === x} onClick={() => setSince(x)} className="text-center">
+            {label(x)}
+          </Choice>
+        ))}
+      </div>
+      <p className="t-small mb-5 text-muted">Its last passing test. Check the register if unsure.</p>
+
+      <Q n={4}>How much yarn did it make on Lot {t.lotId} since then?</Q>
+      <TextField
+        label={`Yarn affected (${product.short} at about ${product.kgPerHour} kg an hour)`}
+        inputMode="decimal"
+        unit="kg"
+        value={kgRaw ?? String(estimate)}
+        onChange={(e) => setKgRaw(e.target.value)}
+        error={kgBad ? 'Enter the kg, like 120' : undefined}
+        hint={kgRaw === null ? `Estimated from ${hhmm(since)} to now. Change it if you weighed the cops.` : `Estimate was ${estimate} kg.`}
+      />
+
+      <div className="mt-5 flex flex-col gap-1.5">
         <label htmlFor="fix-note" className="t-small-strong text-muted">
           Note (optional)
         </label>
@@ -660,19 +717,20 @@ function FixedSheet({ t, user, onClose }: { t: Ticket; user: User; onClose: () =
       <div className="mt-4">
         <PhotoInput value={photo} onChange={setPhoto} />
       </div>
+      <p className="t-small mt-4 text-muted">The report goes to the dashboard. The lab re-tests the frame, and the alert closes when the re-test passes.</p>
       <Button
         size="lg"
         block
-        className="mt-5"
-        disabled={!cause || !part}
+        className="mt-4"
+        disabled={!ready}
         onClick={() => {
-          dispatch({ type: 'ticket/fixed', ticketId: t.id, cause: cause!, part, note: note.trim() || undefined, photo, by: user.id });
+          dispatch({ type: 'ticket/fixed', ticketId: t.id, cause: cause!, part, note: note.trim() || undefined, photo, affectedSince: since, affectedKg: kg, by: user.id });
           onClose();
         }}
       >
         Send fix report
       </Button>
-      {(!cause || !part) && <p className="t-small mt-2 text-center text-muted">Pick the part and the cause to send the report</p>}
+      {!ready && <p className="t-small mt-2 text-center text-muted">Answer 1 and 2 to send the report</p>}
     </Sheet>
   );
 }

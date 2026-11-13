@@ -2,8 +2,8 @@
 import { useRef, useState } from 'react';
 import type { Rule, Severity, ShiftId } from '../engine/types';
 import { useDispatch, useMillState, useNow, useUser } from '../store/store';
-import { withinRule, userName } from '../engine/reducer';
-import { currentRouting, mergedRouting, readRules, rulesAsText, type FoundRule } from '../engine/rulesText';
+import { findProduct, withinRule, userName } from '../engine/reducer';
+import { currentRouting, mergedRouting, readDocument, rulesAsText, type FoundRule, type FoundSet } from '../engine/rulesText';
 import { pdfToText } from './pdfText';
 import { SEVERITY, TEST } from '../engine/vocab';
 import { dayMonth, shiftAt } from '../engine/time';
@@ -147,6 +147,8 @@ function RulesDocument({ canEdit }: { canEdit: boolean }) {
   const [file, setFile] = useState<{ name: string; pages: number } | null>(null);
   const [found, setFound] = useState<FoundRule[]>([]);
   const [pick, setPick] = useState<boolean[]>([]);
+  const [sets, setSets] = useState<FoundSet[]>([]);
+  const [pickSet, setPickSet] = useState<boolean[]>([]);
   const [done, setDone] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -157,13 +159,15 @@ function RulesDocument({ canEdit }: { canEdit: boolean }) {
     try {
       const isPdf = f.type === 'application/pdf' || /\.pdf$/i.test(f.name);
       const { text, pages } = isPdf ? await pdfToText(f) : { text: await f.text(), pages: 1 };
-      const rules = readRules(text, s);
+      const doc = readDocument(text, s);
       setFile({ name: f.name, pages });
-      setFound(rules);
-      setPick(rules.map((r) => r.kind === 'routing' || r.kind === 'limit'));
-      if (!rules.length) setErr('No rules found in this file. Is it a scanned image? Try a PDF with selectable text.');
+      setFound(doc.rules);
+      setPick(doc.rules.map((r) => r.kind === 'routing' || r.kind === 'limit'));
+      setSets(doc.sets);
+      setPickSet(doc.sets.map(() => true));
+      if (!doc.rules.length && !doc.sets.length) setErr('No rules found in this file. Is it a scanned image? Try a PDF with selectable text, or a CSV with columns yarn, buyer, test, lower, upper, severity.');
     } catch {
-      setErr('This file could not be read. Drop a PDF with selectable text, or a .txt file.');
+      setErr('This file could not be read. Drop a PDF with selectable text, a CSV, or a .txt file.');
     } finally {
       setBusy(false);
     }
@@ -173,6 +177,10 @@ function RulesDocument({ canEdit }: { canEdit: boolean }) {
     const routing = mergedRouting(currentRouting(s), chosen.filter((f) => f.routing));
     if (chosen.some((f) => f.routing) && !routing) return setErr('The times in this document do not make a chain (backup, then QC manager, then plant head). Untick one or change them by hand.');
     let applied = 0;
+    for (const x of sets.filter((_, i) => pickSet[i])) {
+      dispatch({ type: 'ruleset/add', yarn: x.yarn, buyer: x.buyer, source: file!.name, limits: x.limits, by: user.id } as never);
+      applied += x.limits.length;
+    }
     if (routing && chosen.some((f) => f.routing)) {
       dispatch({ type: 'routing/set', ...routing, by: user.id } as never);
       applied += chosen.filter((f) => f.routing).length;
@@ -182,15 +190,25 @@ function RulesDocument({ canEdit }: { canEdit: boolean }) {
       dispatch({ type: 'rule/set', ruleId: rule.id, min: f.limit!.min ?? rule.min, max: f.limit!.max ?? rule.max, severity: f.limit!.severity ?? rule.severity, escalateQcMins: routing?.qcMins ?? rule.escalateQcMins, escalatePhMins: routing?.plantMins ?? rule.escalatePhMins, by: user.id } as never);
       applied += 1;
     }
-    dispatch({ type: 'rules/doc', name: file!.name, pages: file!.pages, found: found.map((f) => `${f.text} → ${f.meaning}`), applied, by: user.id } as never);
-    setDone(`${applied} rule${applied === 1 ? '' : 's'} applied from ${file!.name}. The rest are kept with the document.`);
+    const setLines = sets.map((x, i) => `${pickSet[i] ? 'Rule set added' : 'Rule set skipped'}: ${x.yarn}, ${x.buyer} (${x.limits.length} limits)`);
+    dispatch({ type: 'rules/doc', name: file!.name, pages: file!.pages, found: [...setLines, ...found.map((f) => `${f.text} → ${f.meaning}`)], applied, by: user.id } as never);
+    const nSets = pickSet.filter(Boolean).length;
+    setDone(`${nSets ? `${nSets} rule set${nSets === 1 ? '' : 's'} added. ` : ''}${applied} rule${applied === 1 ? '' : 's'} applied from ${file!.name}. Test limits below are updated.`);
+    reset();
+  };
+  const reset = () => {
     setFile(null);
     setFound([]);
+    setSets([]);
   };
+  const base = import.meta.env.VITE_STANDALONE === '1' ? '' : '/';
+  const nPickSets = pickSet.filter(Boolean).length;
+  const nPick = pick.filter(Boolean).length;
+  const applyWord = [nPickSets ? `Add ${nPickSets} rule set${nPickSets === 1 ? '' : 's'}` : '', nPick ? `${nPickSets ? 'and ' : 'Apply '}${nPick} rule${nPick === 1 ? '' : 's'}` : ''].filter(Boolean).join(' ') || 'Save the document';
   const KIND: Record<FoundRule['kind'], string> = { routing: 'Who gets told', limit: 'Test limit', builtin: 'Already built in', note: 'Note' };
 
   return (
-    <Panel title="Rules document" sub="Drop the mill’s rules PDF. QC Alert reads it here in the browser and lists the rules it understood for you to check.">
+    <Panel title="Add rules from a file" sub="Drop the mill’s rules as a PDF or a CSV (saved from Excel). QC Alert reads it here in the browser and lists what it understood, one rule set per yarn and buyer, for you to check.">
       {canEdit && !file && (
         <div
           role="button"
@@ -211,12 +229,12 @@ function RulesDocument({ canEdit }: { canEdit: boolean }) {
           }}
           className={cx('flex cursor-pointer flex-col items-center gap-2 rounded-[12px] border-2 border-dashed px-6 py-10 text-center', over ? 'border-brand bg-brand-soft' : 'border-line-strong hover:bg-sunken')}
         >
-          <p className="t-body-strong">{busy ? 'Reading…' : 'Drop the rules PDF here'}</p>
-          <p className="t-small text-muted">or click to choose a file · PDF with selectable text, or .txt</p>
+          <p className="t-body-strong">{busy ? 'Reading…' : 'Drop the rules PDF or CSV here'}</p>
+          <p className="t-small text-muted">or click to choose a file · PDF with selectable text, CSV from Excel, or .txt</p>
           <input
             ref={inputRef}
             type="file"
-            accept="application/pdf,.pdf,text/plain,.txt"
+            accept="application/pdf,.pdf,text/plain,.txt,text/csv,.csv"
             className="sr-only"
             onChange={(e) => {
               const f = e.target.files?.[0];
@@ -228,23 +246,69 @@ function RulesDocument({ canEdit }: { canEdit: boolean }) {
       )}
       {canEdit && !file && (
         <p className="t-small mt-2 text-muted">
-          No file to hand? Try the{' '}
-          <a className="text-brand-text underline" href={import.meta.env.VITE_STANDALONE === '1' ? 'rules-sample.pdf' : '/rules-sample.pdf'} download>
-            sample rules PDF
+          No file to hand? Try a sample:{' '}
+          <a className="text-brand-text underline" href={`${base}rule-sets-sample.csv`} download>
+            rule sets CSV
           </a>
-          .
+          ,{' '}
+          <a className="text-brand-text underline" href={`${base}rule-sets-sample.pdf`} download>
+            rule sets PDF
+          </a>{' '}
+          or{' '}
+          <a className="text-brand-text underline" href={`${base}rules-sample.pdf`} download>
+            alert chain PDF
+          </a>
+          . CSV columns: yarn, buyer, test, lower, upper, severity.
         </p>
       )}
       {!canEdit && <p className="t-small text-muted">Only the QC manager adds rules documents.</p>}
       {err && <p className="t-small mt-3 text-critical">{err}</p>}
       {done && <p className="t-small-strong mt-3 text-ok">{done}</p>}
 
-      {file && found.length > 0 && (
+      {file && (found.length > 0 || sets.length > 0) && (
         <div className="mt-1">
           <p className="t-small-strong">
-            {file.name} · {file.pages} page{file.pages > 1 ? 's' : ''} · {found.length} rule{found.length > 1 ? 's' : ''} found
+            {file.name} · {file.pages} page{file.pages > 1 ? 's' : ''} · {sets.length ? `${sets.length} rule set${sets.length > 1 ? 's' : ''}` : ''}
+            {sets.length && found.length ? ' and ' : ''}
+            {found.length ? `${found.length} other rule${found.length > 1 ? 's' : ''}` : ''} found
           </p>
-          <ul className="mt-3 divide-y divide-[var(--line)] rounded-[12px] border border-line">
+          {sets.length > 0 && (
+            <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {sets.map((x, i) => {
+                const existing = findProduct(s, x.yarn, x.buyer);
+                const old = existing ? s.rules.filter((r) => r.productId === existing.id) : [];
+                const on = !!pickSet[i];
+                return (
+                  <label key={`${x.yarn}|${x.buyer}`} className={cx('flex cursor-pointer flex-col gap-2 rounded-[12px] border p-4', on ? 'border-brand bg-brand-soft' : 'border-line opacity-70')}>
+                    <span className="flex items-start gap-3">
+                      <input type="checkbox" className="mt-1 size-4" checked={on} onChange={(e) => setPickSet((p) => p.map((v, j) => (j === i ? e.target.checked : v)))} />
+                      <span className="min-w-0 flex-1">
+                        <span className="t-body-strong block">{x.yarn}</span>
+                        <span className="t-small text-muted">{x.buyer}</span>
+                      </span>
+                      <span className={cx('t-label rounded-[6px] px-2 py-0.5 text-[10px]', existing && old.length ? 'bg-major-soft text-major' : 'bg-ok-soft text-ok')}>{existing && old.length ? 'Replaces' : 'New set'}</span>
+                    </span>
+                    <ul className="t-small flex flex-col gap-1 pl-7">
+                      {x.limits.map((l) => {
+                        const was = old.find((r) => r.test === l.test);
+                        const changed = was && (was.min !== l.min || was.max !== l.max || was.severity !== l.severity);
+                        return (
+                          <li key={l.test} className="flex justify-between gap-2">
+                            <span>{TEST[l.test].name}</span>
+                            <span className="t-data text-[13px]">
+                              {changed && <span className="mr-1.5 text-muted line-through">{range(was.min, was.max)}</span>}
+                              {range(l.min, l.max)} <span className="text-muted">· {SEVERITY[l.severity].word}</span>
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </label>
+                );
+              })}
+            </div>
+          )}
+          {found.length > 0 && <ul className="mt-3 divide-y divide-[var(--line)] rounded-[12px] border border-line">
             {found.map((f, i) => {
               const can = f.kind === 'routing' || f.kind === 'limit';
               return (
@@ -265,17 +329,14 @@ function RulesDocument({ canEdit }: { canEdit: boolean }) {
                 </li>
               );
             })}
-          </ul>
+          </ul>}
           <div className="mt-4 flex gap-2">
             <button type="button" onClick={apply} className="t-small-strong h-10 rounded-full bg-brand px-5 text-on-brand hover:bg-[var(--brand-hover)]">
-              Apply {pick.filter(Boolean).length} rule{pick.filter(Boolean).length === 1 ? '' : 's'}
+              {applyWord}
             </button>
             <button
               type="button"
-              onClick={() => {
-                setFile(null);
-                setFound([]);
-              }}
+              onClick={reset}
               className="t-small-strong h-10 rounded-full border border-line px-4 hover:bg-sunken"
             >
               Cancel
@@ -292,7 +353,7 @@ function RulesDocument({ canEdit }: { canEdit: boolean }) {
               <li key={doc.at + doc.name}>
                 <details className="rounded-[10px] border border-line px-4 py-2.5">
                   <summary className="t-small cursor-pointer">
-                    <span className="t-small-strong">{doc.name}</span> · {dayMonth(doc.at)} · {userName(s, doc.by)} · {doc.applied} applied of {doc.found.length} found
+                    <span className="t-small-strong">{doc.name}</span> · {dayMonth(doc.at)} · {userName(s, doc.by)} · {doc.applied} rule{doc.applied === 1 ? "" : "s"} applied
                   </summary>
                   <ul className="t-small mt-2 flex list-disc flex-col gap-1 pl-5 text-muted">
                     {doc.found.map((f) => (
@@ -309,6 +370,8 @@ function RulesDocument({ canEdit }: { canEdit: boolean }) {
   );
 }
 
+const range = (min?: number, max?: number) => (min !== undefined && max !== undefined ? `${min}–${max}` : min !== undefined ? `≥ ${min}` : max !== undefined ? `≤ ${max}` : '–');
+
 type Draft = { min: string; max: string; severity: Severity; qc: string; ph: string };
 const toNum = (v: string) => (v.trim() === '' ? undefined : Number(v));
 
@@ -322,7 +385,10 @@ function LimitTables() {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<string | null>(null);
+  const [removed, setRemoved] = useState('');
   const since = now - 30 * 86_400_000;
+  const runningOn = (pid: string) => s.frames.filter((f) => s.lots.find((l) => l.id === f.lotId)?.productId === pid);
 
   const start = (r: Rule) => {
     setEditing(r.id);
@@ -354,13 +420,66 @@ function LimitTables() {
     <section className="flex flex-col gap-4" aria-label="Test limits">
       <div className="mt-2">
         <h2 className="t-section">Test limits</h2>
-        <p className="t-small mt-1 text-muted">{canEdit ? 'Limits for each yarn and test. A reading outside a limit raises an alert. Changes apply to the next test result.' : 'Limits for each yarn and test. Only the QC manager can change them.'}</p>
+        <p className="t-small mt-1 text-muted">
+          {canEdit
+            ? 'One rule set per yarn and buyer. A reading outside a limit raises an alert. Edit a limit, remove a whole set, or add sets from a file above. Changes apply to the next test result.'
+            : 'One rule set per yarn and buyer. Only the QC manager can change them.'}
+        </p>
+        <p className="t-small mt-2 text-muted">
+          {s.products.filter((p) => s.rules.some((r) => r.productId === p.id)).length} rule sets · {s.rules.length} limits
+        </p>
       </div>
+      {removed && <p className="t-small-strong text-ok">{removed}</p>}
       {s.products.map((p) => {
         const rules = s.rules.filter((r) => r.productId === p.id);
-        if (!rules.length) return null;
+        const frames = runningOn(p.id);
+        const source = rules.find((r) => r.source)?.source;
+        if (!rules.length) {
+          if (!frames.length) return null;
+          return (
+            <Panel key={p.id} title={p.name} sub={`${frames.length} frame${frames.length > 1 ? 's' : ''} running this yarn`}>
+              <p className="t-small rounded-[10px] bg-critical-soft px-4 py-3 text-critical">No rule set. Tests on this yarn will not raise alerts until a rule set for {p.name} is added from a file.</p>
+            </Panel>
+          );
+        }
+        const confirm = removing === p.id;
         return (
-          <Panel key={p.id} title={p.name} sub={`Nominal count ${p.nominalNe} Ne`}>
+          <Panel
+            key={p.id}
+            title={p.name}
+            sub={`Nominal count ${p.nominalNe} Ne · ${frames.length ? `${frames.length} frame${frames.length > 1 ? 's' : ''} running it` : 'no frame running it now'}${source ? ` · from ${source}, ${dayMonth(rules[0].updatedAt)}` : ''}`}
+            aside={
+              canEdit && !confirm ? (
+                <button type="button" aria-label={`Remove rule set for ${p.name}`} onClick={() => setRemoving(p.id)} className="t-small-strong h-9 shrink-0 rounded-full border border-line px-4 text-critical hover:bg-critical-soft">
+                  Remove set
+                </button>
+              ) : undefined
+            }
+          >
+            {confirm && (
+              <div role="alertdialog" aria-label={`Remove ${p.name}`} className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-[10px] bg-critical-soft px-4 py-3">
+                <p className="t-small text-critical">
+                  Remove all {rules.length} limits for {p.name}?{' '}
+                  {frames.length ? `${frames.length} frame${frames.length > 1 ? 's' : ''} run this yarn now; their tests will not raise alerts until a new set is added.` : 'No frame runs this yarn now.'}
+                </p>
+                <span className="flex gap-2">
+                  <button type="button" onClick={() => setRemoving(null)} className="t-small-strong h-9 rounded-full border border-line bg-raised px-4 hover:bg-sunken">
+                    Keep it
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      dispatch({ type: 'ruleset/remove', productId: p.id, by: user.id } as never);
+                      setRemoving(null);
+                      setRemoved(`Removed the rule set for ${p.name}.`);
+                    }}
+                    className="t-small-strong h-9 rounded-full bg-critical px-4 text-on-critical hover:bg-[var(--critical-hover)]"
+                  >
+                    Remove set
+                  </button>
+                </span>
+              </div>
+            )}
             <div className="-mx-5 overflow-x-auto">
               <table className="w-full min-w-[620px] table-fixed text-left">
                 <colgroup>

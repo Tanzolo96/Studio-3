@@ -2,7 +2,7 @@
 // History is replayed through the real reducer, so seeded tickets follow the same rules as live ones.
 
 import type { Frame, Lot, MillEvent, MillEventInput, MillState, Product, Rule, Severity, TestKind, TestResult, User } from './types';
-import { apply } from './reducer';
+import { apply, routineSlotsBefore, yarnMadeSince } from './reducer';
 import { DAY, HOUR, MIN, mill, shiftAt } from './time';
 import { TEST } from './vocab';
 
@@ -291,7 +291,18 @@ function finish(s: MillState, ticketId: string, at: number, inc: Incident, sup: 
   run(s, at + (inc.seen + 4) * MIN, { type: 'ticket/assignFitter', ticketId, fitterId: fitter, by: sup });
   run(s, fixAt - 6 * MIN, { type: 'ticket/repairDone', ticketId, by: fitter });
   const cause = CAUSE_OF[inc.cause!] ?? inc.cause!;
-  run(s, fixAt, { type: 'ticket/fixed', ticketId, cause, part: PART_OF[inc.cause!] ?? 'Something else on the frame', note: cause !== inc.cause ? inc.cause : undefined, by: sup });
+  const tk = s.tickets.find((x) => x.id === ticketId)!;
+  const since = routineSlotsBefore(tk.alertAt, 1)[0];
+  run(s, fixAt, {
+    type: 'ticket/fixed',
+    ticketId,
+    cause,
+    part: PART_OF[inc.cause!] ?? 'Something else on the frame',
+    note: cause !== inc.cause ? inc.cause : undefined,
+    affectedSince: since,
+    affectedKg: Math.round(yarnMadeSince(s, tk.frameId, since, fixAt)),
+    by: sup,
+  });
   const t = s.tickets.find((x) => x.id === ticketId)!;
   const h = t.holdId ? s.holds.find((x) => x.id === t.holdId) : undefined;
   if (inc.outcome === 'override' && h) {

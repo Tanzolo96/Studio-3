@@ -52,6 +52,16 @@ export interface Rule {
   escalatePhMins: number;
   updatedAt: number;
   updatedBy: string;
+  /** The file this limit came from, when it was added as part of a rule set. */
+  source?: string;
+}
+
+/** One limit in a rule set: a test, its range and how serious a fail is. */
+export interface SetLimit {
+  test: TestKind;
+  min?: number;
+  max?: number;
+  severity: Severity;
 }
 
 export interface TestResult {
@@ -176,6 +186,9 @@ export interface Ticket {
   reopened?: number;
   /** Fix report: which part of the machine needed fixing. */
   part?: string;
+  /** Fix report: when the frame was last OK (last passing test), and the yarn it made on this lot since then. */
+  affectedSince?: number;
+  affectedKg?: number;
   waitingParts?: { at: number; note: string };
   events: TicketEvent[];
 }
@@ -274,9 +287,13 @@ export type MillEvent = Base &
     | { type: 'ticket/working'; ticketId: string }
     | { type: 'ticket/assignFitter'; ticketId: string; fitterId: string }
     | { type: 'ticket/repairDone'; ticketId: string }
-    | { type: 'ticket/fixed'; ticketId: string; cause: string; part?: string; note?: string; photo?: string }
+    | { type: 'ticket/fixed'; ticketId: string; cause: string; part?: string; note?: string; photo?: string; affectedSince?: number; affectedKg?: number }
     | { type: 'routing/set'; backupMins: number; qcMins: number; plantMins: number }
     | { type: 'rules/doc'; name: string; pages: number; found: string[]; applied: number }
+    /** Add a rule set (one yarn for one buyer). Replaces that yarn's limits if it already has some. */
+    | { type: 'ruleset/add'; yarn: string; buyer: string; source: string; limits: SetLimit[] }
+    /** Remove a whole rule set: every limit for that yarn. */
+    | { type: 'ruleset/remove'; productId: string }
     | { type: 'ticket/raise'; frameId: string; problem: string; severity: Severity; note?: string; photo?: string }
     | { type: 'ticket/handover'; ticketId: string; note: string }
     | { type: 'ticket/sisters'; ticketId: string; frameIds: string[] }

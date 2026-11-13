@@ -6,7 +6,9 @@ import { MIN } from '../src/engine/time';
 import { alertHeat } from '../src/engine/analytics';
 import { predictAll, predictFrame } from '../src/engine/predict';
 import { plantCases } from '../src/engine/plant';
-import { currentRouting, mergedRouting, readRules, rulesAsText } from '../src/engine/rulesText';
+import { currentRouting, mergedRouting, readDocument, readRules, rulesAsText } from '../src/engine/rulesText';
+import csv from '../public/rule-sets-sample.csv?raw';
+import pdfText from './fixtures/rule-sets-sample.txt?raw';
 import type { MillEvent, MillEventInput, MillState } from '../src/engine/types';
 
 let n = 0;
@@ -174,6 +176,66 @@ describe('rules', () => {
     expect(r.updatedBy).toBe('priya');
     run(s, DEMO_START + MIN, { type: 'rule/set', ruleId: r.id, min: 30, max: 20, severity: 'minor', escalateQcMins: 5, escalatePhMins: 9, by: 'priya' } as never);
     expect(r.min).toBe(10);
+  });
+});
+
+describe('rule sets: add and remove a whole yarn at a time', () => {
+
+  it('reads the same three sets from the CSV and from the PDF text', () => {
+    const s = seedState();
+    const a = readDocument(csv, s);
+    const b = readDocument(pdfText, s);
+    for (const doc of [a, b]) {
+      expect(doc.sets.map((x) => `${x.yarn}|${x.buyer}`)).toEqual(['40s combed|Buyer A', '30s combed|Buyer 2', '20s carded|Buyer 1']);
+      expect(doc.sets[0].limits.find((l) => l.test === 'count')).toEqual({ test: 'count', min: 39.4, max: 40.6, severity: 'critical' });
+      expect(doc.sets[0].limits.find((l) => l.test === 'csp')).toMatchObject({ min: 2350, max: undefined, severity: 'major' });
+      expect(doc.sets[2].limits.find((l) => l.test === 'cv')).toMatchObject({ max: 14, severity: 'critical' });
+    }
+    // The PDF's general rules still come through as the alert chain.
+    expect(b.rules.filter((r) => r.kind === 'routing')).toHaveLength(3);
+  });
+
+  it('adding a set replaces that yarn, a new buyer adds a yarn, and removing takes the whole set out', () => {
+    const s = seedState();
+    const { sets } = readDocument(csv, s);
+    const before = s.products.length;
+    for (const x of sets) run(s, DEMO_START, { type: 'ruleset/add', yarn: x.yarn, buyer: x.buyer, source: 'rules.csv', limits: x.limits, by: 'priya' });
+    // 40s combed, Buyer A already existed: its limits are replaced, not duplicated.
+    const p40 = s.products.find((p) => p.id === 'p40')!;
+    const r40 = s.rules.filter((r) => r.productId === 'p40');
+    expect(r40).toHaveLength(4);
+    expect(r40.find((r) => r.test === 'count')).toMatchObject({ min: 39.4, max: 40.6, source: 'rules.csv' });
+    expect(p40.name).toBe('40s combed, Buyer A');
+    // Two new buyers, two new yarns.
+    expect(s.products).toHaveLength(before + 2);
+    const b2 = s.products.find((p) => p.buyer === 'Buyer 2')!;
+    expect(b2.short).toBe('30s');
+    expect(s.rules.filter((r) => r.productId === b2.id)).toHaveLength(4);
+    // Remove an unused set: the yarn goes too.
+    run(s, DEMO_START + MIN, { type: 'ruleset/remove', productId: b2.id, by: 'priya' });
+    expect(s.products.some((p) => p.id === b2.id)).toBe(false);
+    expect(s.rules.some((r) => r.productId === b2.id)).toBe(false);
+    // Remove a set that frames are running: limits go, the yarn stays (its history needs it).
+    run(s, DEMO_START + MIN, { type: 'ruleset/remove', productId: 'p40', by: 'priya' });
+    expect(s.rules.some((r) => r.productId === 'p40')).toBe(false);
+    expect(s.products.some((p) => p.id === 'p40')).toBe(true);
+  });
+});
+
+describe('fix report: how long it took and how much yarn it touched', () => {
+  it('stores the yarn made since the last good test and logs the fixing time', () => {
+    const s = seedState();
+    const t0 = DEMO_START + 15 * MIN;
+    run(s, t0, { type: 'result/enter', frameId: 'RF-12', test: 'count', value: 28.9, by: 'rohan' });
+    const t = s.tickets.at(-1)!;
+    run(s, t0 + 3 * MIN, { type: 'ticket/working', ticketId: t.id, by: 'krish' });
+    const since = t0 - 2 * 60 * MIN;
+    run(s, t0 + 21 * MIN, { type: 'ticket/fixed', ticketId: t.id, cause: 'Machine', part: 'Spindle', affectedSince: since, affectedKg: 62, by: 'krish' });
+    expect(t.affectedKg).toBe(62);
+    expect(t.affectedSince).toBe(since);
+    const fixed = t.events.find((x) => x.kind === 'fixed')!;
+    expect(fixed.text).toContain('Fixed in 18 min');
+    expect(fixed.text).toContain('about 62 kg');
   });
 });
 

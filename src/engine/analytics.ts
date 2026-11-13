@@ -68,6 +68,7 @@ export function frameStateCounts(s: MillState, now: number): Record<FrameStateKi
 export function yarnSaved(s: MillState, now: number, since: number) {
   const fixed = s.tickets.filter((t) => t.severity === 'critical' && t.createdAt >= since && t.createdAt <= now && t.fixedAt && t.closeReason !== 'sample_error');
   const made = fixed.map((t) => {
+    if (t.affectedKg !== undefined) return t.affectedKg;
     const lot = s.lots.find((l) => l.id === t.lotId);
     const rate = s.products.find((p) => p.id === (lot?.productId ?? t.productId))?.kgPerHour ?? 30;
     return (rate * (t.fixedAt! - t.alertAt)) / HOUR;

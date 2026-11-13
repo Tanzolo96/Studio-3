@@ -1,0 +1,30 @@
+Yarn rule sets, November 2026
+
+Each rule set is one yarn for one buyer. Adding a set replaces that yarn's limits.
+
+Rule set: 40s combed, Buyer A
+
+Count (Ne): 39.4 to 40.6. Critical.
+CSP: at least 2350. Major.
+Twist (TPI): 24 to 26. Minor.
+CV%: at most 15. Major.
+
+Rule set: 30s combed, Buyer 2
+
+Count (Ne): 29.6 to 30.4. Critical.
+CSP: at least 2250. Major.
+Twist (TPI): 21.5 to 23. Minor.
+CV%: at most 14. Major.
+
+Rule set: 20s carded, Buyer 1
+
+Count (Ne): 19.5 to 20.5. Critical.
+CSP: at least 1950. Major.
+Twist (TPI): 17 to 19.5. Minor.
+CV%: at most 14. Critical.
+
+General rules
+
+If nobody answers within 5 minutes, alert the backup supervisor.
+If nobody answers within 10 minutes, alert the QC manager.
+If nobody answers within 20 minutes, alert the plant head.

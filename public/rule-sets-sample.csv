@@ -1,0 +1,13 @@
+yarn,buyer,test,lower,upper,severity
+40s combed,Buyer A,Count (Ne),39.4,40.6,critical
+40s combed,Buyer A,CSP,2350,,major
+40s combed,Buyer A,Twist (TPI),24,26,minor
+40s combed,Buyer A,CV%,,15,major
+30s combed,Buyer 2,Count (Ne),29.6,30.4,critical
+30s combed,Buyer 2,CSP,2250,,major
+30s combed,Buyer 2,Twist (TPI),21.5,23,minor
+30s combed,Buyer 2,CV%,,14,major
+20s carded,Buyer 1,Count (Ne),19.5,20.5,critical
+20s carded,Buyer 1,CSP,1950,,major
+20s carded,Buyer 1,Twist (TPI),17,19.5,minor
+20s carded,Buyer 1,CV%,,14,critical

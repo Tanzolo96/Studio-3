@@ -10,8 +10,8 @@ The **phone app is where things happen**; the **dashboard is the record and the 
 
 1. **The lab tester reports a failed test** on the phone: frame, test, reading. (Passing tests stay in the register.)
 2. **QC Alert sends the alert** to the supervisor of that frame. Full screen, with sound for critical.
-3. **Someone taps "I'm fixing it".** That person owns the alert, the escalation stops, and the fixing time starts.
-4. **They tap "Fixed"** and the app asks **what happened**: which part of the machine needed fixing (drafting zone, top rollers and aprons, spindles and travellers, creel and roving, something else, not a machine part), the cause (machine, setting, material, other, no cause found), and an optional note and photo.
+3. **Someone taps "I'm fixing it"** (the supervisor, QC, or the machine operator on their own frames). That person owns the alert, the escalation stops, and the fixing time starts; a big timer shows it.
+4. **They tap "Fixed"** and the app asks **what happened**: which part of the machine needed fixing (drafting zone, top rollers and aprons, spindles and travellers, creel and roving, something else, not a machine part), the cause (machine, setting, material, other, no cause found), **when the frame was last OK** (last good test or a shift start), and **how much yarn it made on that lot since then** (prefilled estimate in kg, editable), plus an optional note and photo. The report shows how long the fix took.
 5. **The lab re-tests** the frame. A pass closes the alert; a fail reopens it and alerts the supervisor again.
 6. The report and every message go into the dashboard's record.
 
@@ -21,19 +21,20 @@ Optional on the way: send a fitter, mark "waiting for a spare part" (pauses the 
 
 ## The dashboard: the record and the go-between
 
-- **Live alerts:** what failed, who QC Alert is waiting on, how long it has been open, which step it is at, the last message sent.
-- **History:** every past alert with its fix report (part, cause, fixing time) and full message log. Search by frame.
+- **Overview** (first page for everyone): live alerts (what failed, who QC Alert is waiting on, how long, which step, the last message), latest messages and this month. The plant head's Overview is his decision desk.
+- **History:** one list (no board) of every alert with its fix report (part, cause, fixing time, yarn made on that lot since the last good test) and full message log. Search by frame.
 - **Messages:** every message QC Alert sent (to whom, how) and every answer from the floor, by day; who it is waiting on right now.
 - **Rules:**
   - *Who gets told, and when:* the frame's supervisor at once, the backup supervisor after 5 min, the QC manager after 10, the plant head (alert and a call) after 20. The QC manager can change the times.
+  - *Rule sets:* one per yarn and buyer (e.g. 40s combed for Buyer A). Drop a CSV (from Excel: `yarn, buyer, test, lower, upper, severity`) or a PDF with `Rule set: 40s combed, Buyer A` headings. Each set found is shown as a card (New set / Replaces) to tick and add; adding replaces that yarn's limits. Each set on the page has **Remove set**. Samples: `public/rule-sets-sample.csv`, `public/rule-sets-sample.pdf`.
   - *Rules document:* drag and drop the mill's rules PDF. It is read in the browser; the rules it understood (who gets told after how long, test limits) are listed for the QC manager to tick and apply. Rules QC Alert already follows are marked, anything else is kept as a note with the document.
   - *The rules in plain words:* one sentence per rule, copyable, for people and for an AI to read and analyse.
-  - *Test limits* per yarn and test.
+  - *Test limits* per yarn and test, grouped by rule set.
 - **Monthly report:** faults, time to "I'm fixing", fixing time, causes, parts fixed most, frames that repeat.
 
 ## Jury demo (about 3 minutes)
 
-1. Open `#demo`. Live alerts says "No live alerts". Phone shows Rohan (lab).
+1. Open `#demo`. Overview says "No live alerts". Phone shows Rohan (lab).
 2. Dashboard → Rules → drop `rules-sample.pdf` (link on the page) → Apply. The chain becomes 4 / 8 / 15 min.
 3. Rohan: **Report a failed test** → frame 12 → count → **28.9** → Report.
 4. Switch the phone to Krish: full-screen alert. Dashboard: live alert card, "Waiting on Krish".

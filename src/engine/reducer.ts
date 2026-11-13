@@ -5,7 +5,7 @@ import type {
   Hold, MillEvent, MillState, Product, Rule, Severity, TestKind, TestRequest, TestResult, Ticket, TicketEvent,
 } from './types';
 import { TEST } from './vocab';
-import { HOUR, MIN, hhmm, shiftAt } from './time';
+import { HOUR, MIN, hhmm, mill, millDayKey, shiftAt } from './time';
 
 // ---------- lookups ----------
 export const frameOf = (s: MillState, id: string) => s.frames.find((f) => f.id === id)!;
@@ -14,6 +14,12 @@ export const productOfFrame = (s: MillState, frameId: string): Product => {
   const lot = lotOf(s, frameOf(s, frameId).lotId);
   return s.products.find((p) => p.id === lot.productId)!;
 };
+/** A yarn by its name and buyer ("40s combed" + "Buyer A"), forgiving about case and spacing. */
+export function findProduct(s: MillState, yarn: string, buyer: string): Product | undefined {
+  const norm = (x: string) => x.toLowerCase().replace(/\s+/g, ' ').trim();
+  const b = norm(buyer);
+  return s.products.find((p) => norm(p.buyer) === b && (norm(p.name) === norm(`${yarn}, ${buyer}`) || norm(p.name).startsWith(norm(yarn))));
+}
 export const ruleFor = (s: MillState, productId: string, test: TestKind): Rule | undefined =>
   s.rules.find((r) => r.productId === productId && r.test === test);
 export const userName = (s: MillState, id?: string) =>
@@ -375,10 +381,19 @@ export function apply(s: MillState, e: MillEvent): void {
       t.fixedBy = e.by;
       t.cause = e.cause;
       t.part = e.part;
+      t.affectedSince = e.affectedSince;
+      t.affectedKg = e.affectedKg !== undefined && Number.isFinite(e.affectedKg) && e.affectedKg >= 0 ? Math.round(e.affectedKg) : undefined;
       t.note = e.note;
       t.photo = e.photo;
       t.waitingPart = undefined;
-      log(t, e.at, 'fixed', `Fixed. Cause: ${e.cause.toLowerCase()}${e.part ? `. Part: ${e.part.toLowerCase()}` : ''}${e.note ? `. ${e.note}` : ''}`, e.by);
+      const took = t.workingAt ? Math.round((e.at - t.workingAt) / MIN) : undefined;
+      log(
+        t,
+        e.at,
+        'fixed',
+        `Fixed${took !== undefined ? ` in ${took} min` : ''}. Cause: ${e.cause.toLowerCase()}${e.part ? `. Part: ${e.part.toLowerCase()}` : ''}${t.affectedKg !== undefined ? `. Yarn affected: about ${t.affectedKg} kg on Lot ${t.lotId}${e.affectedSince ? ` since ${hhmm(e.affectedSince)}` : ''}` : ''}${e.note ? `. ${e.note}` : ''}`,
+        e.by,
+      );
       if (e.cause === 'No cause found') {
         t.rca = true;
         log(t, e.at, 'note', 'Root-cause check opened. The frame is watched for a repeat of this fault.');
@@ -477,6 +492,41 @@ export function apply(s: MillState, e: MillEvent): void {
         r.updatedAt = e.at;
         r.updatedBy = e.by;
       }
+      return;
+    }
+
+    case 'ruleset/add': {
+      const limits = e.limits.filter((l) => TEST[l.test] && (l.min !== undefined || l.max !== undefined) && (l.min === undefined || l.max === undefined || l.min < l.max));
+      const yarn = e.yarn.trim();
+      const buyer = e.buyer.trim();
+      if (!yarn || !buyer || !limits.length) return;
+      let product = findProduct(s, yarn, buyer);
+      if (!product) {
+        const ne = Number(yarn.match(/(\d+(?:\.\d+)?)\s*s\b/i)?.[1] ?? yarn.match(/\d+/)?.[0] ?? 30);
+        const id = `p-${`${yarn}-${buyer}`.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`;
+        product = { id, name: `${yarn}, ${buyer}`, short: `${Math.round(ne)}s`, nominalNe: ne, kgPerHour: Math.max(8, Math.round(900 / ne)), cvWarnPct: 2, buyer };
+        s.products.push(product);
+      }
+      const r0 = s.rules[0];
+      const chain = { seenMins: r0?.seenMins ?? 5, escalateQcMins: r0?.escalateQcMins ?? 10, escalatePhMins: r0?.escalatePhMins ?? 20 };
+      const pid = product.id;
+      s.rules = s.rules.filter((r) => r.productId !== pid);
+      const seen = new Set<string>();
+      for (const l of limits) {
+        if (seen.has(l.test)) continue;
+        seen.add(l.test);
+        s.rules.push({ id: `${pid}-${l.test}`, productId: pid, test: l.test, min: l.min, max: l.max, severity: l.severity, ...chain, updatedAt: e.at, updatedBy: e.by, source: e.source });
+      }
+      return;
+    }
+
+    case 'ruleset/remove': {
+      const product = s.products.find((p) => p.id === e.productId);
+      if (!product) return;
+      s.rules = s.rules.filter((r) => r.productId !== product.id);
+      // A yarn nobody has made can go entirely; one with lots or alerts stays, with no limits.
+      const used = s.lots.some((l) => l.productId === product.id) || s.tickets.some((t) => t.productId === product.id);
+      if (!used) s.products = s.products.filter((p) => p.id !== product.id);
       return;
     }
 
@@ -621,4 +671,22 @@ export function apply(s: MillState, e: MillEvent): void {
       return;
     }
   }
+}
+
+/** Yarn this frame made on its lot between a time and now (the frame keeps running until it is fixed). */
+export function yarnMadeSince(s: MillState, frameId: string, since: number, until: number) {
+  return Math.max(0, (productOfFrame(s, frameId).kgPerHour * (until - since)) / HOUR);
+}
+
+/** Routine lab tests run at the start of each shift (06, 14, 22). The last few before a time, newest first. */
+export function routineSlotsBefore(at: number, count = 3) {
+  const out: number[] = [];
+  const day0 = mill(millDayKey(at));
+  for (let d = 0; d < 3 && out.length < count; d++) {
+    for (const h of [22, 14, 6]) {
+      const t = day0 - d * 24 * HOUR + h * HOUR;
+      if (t <= at && out.length < count) out.push(t);
+    }
+  }
+  return out.sort((a, b) => b - a);
 }

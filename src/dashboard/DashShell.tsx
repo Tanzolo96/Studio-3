@@ -26,7 +26,7 @@ const NAV: { group: string; items: { to: string; label: string; end?: boolean; r
   {
     group: 'Alerts',
     items: [
-      { to: '/dashboard', label: 'Live alerts', end: true },
+      { to: '/dashboard', label: 'Overview', end: true },
       { to: '/dashboard/tickets', label: 'History' },
       { to: '/dashboard/messages', label: 'Messages' },
     ],
@@ -84,8 +84,8 @@ export function DashShell() {
             <div key={g.group} className="flex flex-col gap-1">
               <p className="t-label px-5 pb-1 text-[11px] text-neutral">{g.group}</p>
               {g.items.map((n) => (
-            <NavItem key={n.to} to={n.to} end={n.end} label={n.to === '/dashboard' && user.role === 'plant' ? 'Decisions' : n.label}>
-              {n.label === 'Live alerts' && live.length > 0 && (
+            <NavItem key={n.to} to={n.to} end={n.end} label={n.label}>
+              {n.to === '/dashboard' && live.length > 0 && (
                 <span className={cx('t-data grid h-6 min-w-6 place-items-center rounded-[6px] px-1.5 text-[13px]', urgent ? 'bg-critical-soft text-critical' : 'bg-minor-soft text-minor')}>
                   {live.length}
                 </span>
@@ -201,7 +201,7 @@ function TopBar({ live, urgent }: { live: number; urgent: boolean }) {
   const nav = useNavigate();
   const { pathname } = useLocation();
   const [q, setQ] = useState('');
-  const title = TITLES.find(([p]) => pathname.startsWith(p))?.[1] ?? 'Live alerts';
+  const title = TITLES.find(([p]) => pathname.startsWith(p))?.[1] ?? 'Overview';
   const go = () => {
     const n = q.trim().replace(/\D/g, '');
     if (n) nav(`/dashboard/tickets?frame=RF-${n.padStart(2, '0')}&tab=all`);
