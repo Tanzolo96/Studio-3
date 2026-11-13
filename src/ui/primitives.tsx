@@ -5,26 +5,28 @@ import { SEVERITY } from '../engine/vocab';
 export const cx = (...c: (string | false | undefined | null)[]) => c.filter(Boolean).join(' ');
 
 // ---------- severity: shape + word + colour, never colour alone ----------
-export function SeverityShape({ level, size = 10, className }: { level: Severity; size?: number; className?: string }) {
+/** Severity as a small signal meter: 3 bars critical, 2 major, 1 minor. Reads by count, so it works without colour. */
+export function SeverityShape({ level, size = 12, className }: { level: Severity; size?: number; className?: string }) {
   const fill = level === 'critical' ? 'var(--critical)' : level === 'major' ? 'var(--major-fill)' : 'var(--neutral-state)';
+  const lit = level === 'critical' ? 3 : level === 'major' ? 2 : 1;
   return (
-    <svg width={size} height={size} viewBox="0 0 10 10" aria-hidden className={cx('shrink-0', className)}>
-      {level === 'critical' && <path d="M5 0.6 9.6 9H0.4Z" fill={fill} />}
-      {level === 'major' && <path d="M5 0.4 9.6 5 5 9.6 0.4 5Z" fill={fill} />}
-      {level === 'minor' && <circle cx="5" cy="5" r="4.3" fill={fill} />}
+    <svg width={size} height={size} viewBox="0 0 12 12" aria-hidden className={cx('shrink-0', className)}>
+      {[0, 1, 2].map((i) => (
+        <rect key={i} x={i * 4.2} y={8 - i * 3} width="3" height={4 + i * 3} rx="1" fill={i < lit ? fill : 'var(--line-strong)'} />
+      ))}
     </svg>
   );
 }
 
-const SEV_STYLE: Record<Severity, string> = {
-  critical: 'bg-critical-soft text-critical',
-  major: 'bg-major-soft text-major',
-  minor: 'bg-minor-soft text-minor',
+const SEV_TEXT: Record<Severity, string> = {
+  critical: 'text-critical',
+  major: 'text-major',
+  minor: 'text-muted',
 };
 
 export function SeverityBadge({ level, className }: { level: Severity; className?: string }) {
   return (
-    <span className={cx('t-label inline-flex h-6 items-center gap-1.5 rounded-[6px] px-2', SEV_STYLE[level], className)}>
+    <span className={cx('inline-flex h-6 items-center gap-1.5 whitespace-nowrap text-[13px] font-medium leading-none', SEV_TEXT[level], className)}>
       <SeverityShape level={level} />
       {SEVERITY[level].word}
     </span>

@@ -126,9 +126,11 @@ function RulesInWords() {
         </button>
       }
     >
-      <ol className="t-small flex list-decimal flex-col gap-1.5 pl-5 text-ink">
+      <ol className="t-small list-decimal gap-x-12 pl-6 text-ink lg:columns-2">
         {lines.map((l) => (
-          <li key={l}>{l}</li>
+          <li key={l} className="mb-1.5 break-inside-avoid pl-1 marker:text-muted">
+            {l}
+          </li>
         ))}
       </ol>
     </Panel>
@@ -349,16 +351,26 @@ function LimitTables() {
   const input = 't-data h-9 w-20 rounded-[8px] border border-line-strong bg-raised px-2 text-right';
 
   return (
-    <div className="mx-auto flex max-w-[1180px] flex-col gap-5">
-      <h2 className="t-section mt-2">Test limits</h2>
-      <p className="t-small -mt-3 text-muted">{canEdit ? 'Limits for each yarn and test. A reading outside a limit raises an alert. Changes apply to the next test result.' : 'Limits for each yarn and test. Only the QC manager can change them.'}</p>
+    <section className="flex flex-col gap-4" aria-label="Test limits">
+      <div className="mt-2">
+        <h2 className="t-section">Test limits</h2>
+        <p className="t-small mt-1 text-muted">{canEdit ? 'Limits for each yarn and test. A reading outside a limit raises an alert. Changes apply to the next test result.' : 'Limits for each yarn and test. Only the QC manager can change them.'}</p>
+      </div>
       {s.products.map((p) => {
         const rules = s.rules.filter((r) => r.productId === p.id);
         if (!rules.length) return null;
         return (
           <Panel key={p.id} title={p.name} sub={`Nominal count ${p.nominalNe} Ne`}>
             <div className="-mx-5 overflow-x-auto">
-              <table className="w-full min-w-[620px] text-left">
+              <table className="w-full min-w-[620px] table-fixed text-left">
+                <colgroup>
+                  <col className="w-[26%]" />
+                  <col className="w-[12%]" />
+                  <col className="w-[12%]" />
+                  <col className="w-[16%]" />
+                  <col className="w-[18%]" />
+                  <col className="w-[16%]" />
+                </colgroup>
                 <thead>
                   <tr className="t-label text-[10px] text-muted">
                     <th className="px-5 pb-2 font-semibold">Test</th>
@@ -436,7 +448,7 @@ function LimitTables() {
           </Panel>
         );
       })}
-    </div>
+    </section>
   );
 }
 

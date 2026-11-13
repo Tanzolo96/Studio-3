@@ -191,7 +191,7 @@ function AlertRow({ s, t, now, onOpen }: { s: MillState; t: Ticket; now: number;
     >
       <div className="min-w-0">
         <div className="flex items-center gap-2">
-          <SeverityBadge level={t.severity} className="bg-raised" />
+          <SeverityBadge level={t.severity} className="rounded-[6px] bg-raised px-2" />
           {t.reopened ? <span className="t-small-strong text-critical">Re-test failed, reopened</span> : null}
         </div>
         <p className="t-section mt-2">

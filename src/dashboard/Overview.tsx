@@ -365,7 +365,7 @@ function IncidentCard({ s, t, now, onOpen }: { s: MillState; t: Ticket; now: num
     >
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
-          <SeverityBadge level={t.severity} className="bg-raised" />
+          <SeverityBadge level={t.severity} className="rounded-[6px] bg-raised px-2" />
           <StatusChip kind={ticketChip(t, now)} className="bg-raised" />
         </div>
         <p className="t-section mt-2">

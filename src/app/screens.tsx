@@ -154,7 +154,7 @@ function TestRequests({ user }: { user: User }) {
   return (
     <Page title="Lab" sub={`${user.shift} shift lab · ${first(user)}`}>
       <Link to="/app/fail" className="t-body-strong mb-4 flex h-14 items-center justify-center gap-2 rounded-[12px] bg-critical text-on-critical shadow-raised">
-        <SeverityShape level="critical" className="[&_path]:fill-[var(--on-critical)]" /> Report a failed test
+        <SeverityShape level="critical" className="[&_rect]:fill-[var(--on-critical)]" /> Report a failed test
       </Link>
       <p className="t-small -mt-2 mb-4 text-muted">Only for readings outside the limit. Passing tests stay in the register as today.</p>
       {behind >= 3 && (
