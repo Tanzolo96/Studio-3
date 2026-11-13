@@ -30,6 +30,16 @@ export const SHIFTS: Record<ShiftId, { start: number; end: number; hours: string
 
 /** Four plain causes plus "No cause found", which opens a root-cause check. */
 export const CAUSES = ['Machine', 'Setting', 'Material', 'Other', 'No cause found'] as const;
+/** Which part of the ring frame needed fixing, asked in the fix report. */
+export const MACHINE_PARTS = [
+  'Drafting zone',
+  'Top rollers and aprons',
+  'Spindles and travellers',
+  'Creel and roving',
+  'Something else on the frame',
+  'Not a machine part',
+] as const;
+
 export const CAUSE_HINT: Record<(typeof CAUSES)[number], string> = {
   Machine: 'Worn roller or apron, spindle, traveller',
   Setting: 'Draft or twist setting slipped',

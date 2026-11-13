@@ -1,9 +1,8 @@
 // Numbers behind the dashboard charts. Pure functions over the mill state.
 
 import type { MillState, Severity, ShiftId, Ticket } from './types';
-import { DAY, mill, millDayKey, millHour, shiftAt } from './time';
+import { DAY, HOUR, mill, millDayKey, millHour, shiftAt } from './time';
 import { frameView, median, type FrameStateKind } from './selectors';
-import { holdKg } from './reducer';
 
 /** Before QC Alert: about 250 kg of bad yarn per frame per incident, the middle of the plant head's 200 to 300 kg. Every screen and poster uses this one baseline. */
 export const BASELINE_KG = 250;
@@ -65,11 +64,16 @@ export function frameStateCounts(s: MillState, now: number): Record<FrameStateKi
 }
 
 /** Yarn held per critical incident vs the old ~250 kg. */
+/** Yarn made between the alert and the fix (the time QC Alert shortens), against the old ~250 kg per incident. */
 export function yarnSaved(s: MillState, now: number, since: number) {
-  const holds = s.holds.filter((h) => h.from >= since - DAY && s.tickets.find((t) => t.id === h.ticketId)!.createdAt >= since && h.from <= now);
-  const held = holds.map((h) => holdKg(h, now));
-  const saved = held.reduce((sum, kg) => sum + Math.max(0, BASELINE_KG - kg), 0);
-  return { incidents: holds.length, saved, avgHeld: held.length ? held.reduce((a, b) => a + b, 0) / held.length : 0 };
+  const fixed = s.tickets.filter((t) => t.severity === 'critical' && t.createdAt >= since && t.createdAt <= now && t.fixedAt && t.closeReason !== 'sample_error');
+  const made = fixed.map((t) => {
+    const lot = s.lots.find((l) => l.id === t.lotId);
+    const rate = s.products.find((p) => p.id === (lot?.productId ?? t.productId))?.kgPerHour ?? 30;
+    return (rate * (t.fixedAt! - t.alertAt)) / HOUR;
+  });
+  const saved = made.reduce((sum, kg) => sum + Math.max(0, BASELINE_KG - kg), 0);
+  return { incidents: fixed.length, saved, avgHeld: made.length ? made.reduce((a, b) => a + b, 0) / made.length : 0 };
 }
 
 export function ticketsSince(s: MillState, since: number, now: number) {

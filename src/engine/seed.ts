@@ -149,6 +149,7 @@ export function baseState(): MillState {
     drift: {},
     rovingChanges: [],
     frameDecisions: [],
+    rulesDocs: [],
     seq: { ticket: 1010, hold: 300, request: 500, result: results.length },
   };
 }
@@ -210,6 +211,15 @@ function run(s: MillState, at: number, e: MillEventInput) {
 }
 
 /** Seed history used detailed causes; the app now asks for four plain ones and keeps the detail as a note. */
+const PART_OF: Record<string, string> = {
+  'Draft setting slipped': 'Drafting zone',
+  'Wrong roving hank': 'Creel and roving',
+  'Roving lot changeover': 'Creel and roving',
+  'Worn top roller or apron': 'Top rollers and aprons',
+  'Traveller or spindle fault': 'Spindles and travellers',
+  'Humidity out of range': 'Not a machine part',
+};
+
 const CAUSE_OF: Record<string, string> = {
   'Draft setting slipped': 'Setting',
   'Wrong roving hank': 'Material',
@@ -242,7 +252,7 @@ function replay(s: MillState, inc: Incident) {
   } else if (inc.kind === 'sample') {
     run(s, at, { type: 'result/enter', frameId: inc.frame, test: 'count', value: inc.value!, by: tester });
     const t = last();
-    run(s, at + inc.seen * MIN, { type: 'ticket/seen', ticketId: t.id, by: sup });
+    run(s, at + inc.seen * MIN, { type: 'ticket/working', ticketId: t.id, by: sup });
     const rid = t.readings[0].resultId!;
     run(s, at + 18 * MIN, { type: 'result/sampleError', resultId: rid, by: tester });
     return;
@@ -253,7 +263,8 @@ function replay(s: MillState, inc: Incident) {
   const t = last();
   if (inc.kind !== 'manual') {
     const seenAt = at + inc.seen * MIN;
-    run(s, seenAt, { type: 'ticket/seen', ticketId: t.id, by: sup });
+    // Alert -> Fixing (the supervisor's tap that stops the escalation)
+    run(s, seenAt, { type: 'ticket/working', ticketId: t.id, by: sup });
     if (t.holdId) {
       const sisters = s.frames.filter((f) => f.lotId === t.lotId && f.id !== t.frameId && !f.stopped).map((f) => f.id);
       run(s, seenAt + MIN, { type: 'ticket/sisters', ticketId: t.id, frameIds: sisters, by: sup });
@@ -277,11 +288,10 @@ function confirmFix(s: MillState, ticketId: string, at: number, tester: string) 
 function finish(s: MillState, ticketId: string, at: number, inc: Incident, sup: string, fitter: string, tester: string) {
   answerSisters(s, ticketId, at + 14 * MIN, tester);
   const fixAt = at + inc.fix! * MIN;
-  run(s, at + (inc.seen + 2) * MIN, { type: 'ticket/line', ticketId, action: inc.fix! > 60 ? 'stopped' : 'corrected', by: sup });
   run(s, at + (inc.seen + 4) * MIN, { type: 'ticket/assignFitter', ticketId, fitterId: fitter, by: sup });
   run(s, fixAt - 6 * MIN, { type: 'ticket/repairDone', ticketId, by: fitter });
   const cause = CAUSE_OF[inc.cause!] ?? inc.cause!;
-  run(s, fixAt, { type: 'ticket/fixed', ticketId, cause, note: cause !== inc.cause ? inc.cause : undefined, by: sup });
+  run(s, fixAt, { type: 'ticket/fixed', ticketId, cause, part: PART_OF[inc.cause!] ?? 'Something else on the frame', note: cause !== inc.cause ? inc.cause : undefined, by: sup });
   const t = s.tickets.find((x) => x.id === ticketId)!;
   const h = t.holdId ? s.holds.find((x) => x.id === t.holdId) : undefined;
   if (inc.outcome === 'override' && h) {

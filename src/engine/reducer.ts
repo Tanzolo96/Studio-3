@@ -61,13 +61,6 @@ export const holdKg = (h: Hold, now: number) =>
   Math.max(0, (h.kgPerHour * ((h.to ?? now) - h.from)) / HOUR);
 export const roundKg = (kg: number) => (kg < 20 ? Math.round(kg) : kg < 50 ? Math.round(kg / 5) * 5 : Math.round(kg / 10) * 10);
 
-function lastGoodTest(s: MillState, frameId: string, test: TestKind, before: number): TestResult | undefined {
-  let best: TestResult | undefined;
-  for (const r of s.results) {
-    if (r.frameId === frameId && r.test === test && r.pass && !r.sampleError && r.at < before && (!best || r.at > best.at)) best = r;
-  }
-  return best;
-}
 
 const openTickets = (s: MillState, frameId: string) =>
   s.tickets.filter((t) => t.frameId === frameId && t.status !== 'closed' && t.kind !== 'manual');
@@ -85,10 +78,6 @@ const supervisorWord = (s: MillState, frameId: string, at: number) => {
 function nextTicketId(s: MillState) {
   s.seq.ticket += 1;
   return `T-${s.seq.ticket}`;
-}
-function nextHoldId(s: MillState) {
-  s.seq.hold += 1;
-  return `H-${s.seq.hold}`;
 }
 function addRequest(s: MillState, r: Omit<TestRequest, 'id' | 'status'>): TestRequest {
   s.seq.request += 1;
@@ -135,27 +124,6 @@ function newTicket(
 function announce(s: MillState, t: Ticket, at: number) {
   if (t.severity === 'minor') log(t, at, 'alerted', 'Shown on the dashboard. Minor faults do not ring phones.');
   else log(t, at, 'alerted', `Alert sent to ${supervisorWord(s, t.frameId, at)}${t.severity === 'critical' ? ' with sound' : ''}`);
-}
-
-/** Critical fail: hold yarn made since the frame last passed. The supervisor is asked about sister frames at Seen. */
-function contain(s: MillState, t: Ticket, at: number, test: TestKind, lastPassAt?: number) {
-  const product = productOfFrame(s, t.frameId);
-  const good = lastPassAt === undefined ? lastGoodTest(s, t.frameId, test, at) : undefined;
-  const from = Math.min(at, lastPassAt ?? good?.at ?? at - 8 * HOUR);
-  const hold: Hold = {
-    id: nextHoldId(s),
-    ticketId: t.id,
-    frameId: t.frameId,
-    lotId: t.lotId,
-    from,
-    kgPerHour: product.kgPerHour,
-    status: 'on_hold',
-    decisions: [],
-  };
-  s.holds.push(hold);
-  t.holdId = hold.id;
-  const kg = roundKg(holdKg(hold, at));
-  log(t, at, 'contained', `Hold created for ${frameWord(t.frameId)} yarn since ${hhmm(from)}, about ${kg} kg so far. Waiting for the red tag.`);
 }
 
 /** Close once the fix is confirmed by a re-test and the held yarn is decided (or there is none). */
@@ -308,7 +276,7 @@ export function apply(s: MillState, e: MillEvent): void {
       if (req?.reason === 'sister' && parent) {
         log(parent, e.at, 'note', `${frameWord(e.frameId)} sister check failed: ${withUnit(e.test, e.value)}. Opened ${t.id}.`, e.by);
       }
-      if (severity === 'critical') contain(s, t, e.at, e.test, e.lastPassAt);
+      // No held yarn in the app: the mill handles the yarn as it does today. The app tracks the fault and the fix.
       announce(s, t, e.at);
       return;
     }
@@ -357,7 +325,7 @@ export function apply(s: MillState, e: MillEvent): void {
       }
       t.status = 'working';
       t.workingAt = e.at;
-      log(t, e.at, 'working', 'Working on it', e.by);
+      log(t, e.at, 'working', 'Fixing started', e.by);
       return;
     }
 
@@ -406,10 +374,11 @@ export function apply(s: MillState, e: MillEvent): void {
       t.fixedAt = e.at;
       t.fixedBy = e.by;
       t.cause = e.cause;
+      t.part = e.part;
       t.note = e.note;
       t.photo = e.photo;
       t.waitingPart = undefined;
-      log(t, e.at, 'fixed', `Fixed. Cause: ${e.cause.toLowerCase()}${e.note ? `. ${e.note}` : ''}`, e.by);
+      log(t, e.at, 'fixed', `Fixed. Cause: ${e.cause.toLowerCase()}${e.part ? `. Part: ${e.part.toLowerCase()}` : ''}${e.note ? `. ${e.note}` : ''}`, e.by);
       if (e.cause === 'No cause found') {
         t.rca = true;
         log(t, e.at, 'note', 'Root-cause check opened. The frame is watched for a repeat of this fault.');
@@ -494,6 +463,25 @@ export function apply(s: MillState, e: MillEvent): void {
       if (s.requests.some((r) => r.ticketId === t.id && r.status === 'pending' && r.test === e.test)) return;
       addRequest(s, { at: e.at, frameId: t.frameId, test: e.test, reason: 'manual', urgent: true, dueAt: e.at + 15 * MIN, ticketId: t.id });
       log(t, e.at, 'contained', `Urgent ${TEST[e.test].name.toLowerCase()} test asked from the lab`, e.by);
+      return;
+    }
+
+    case 'routing/set': {
+      const ok = (n: number) => Number.isFinite(n) && n >= 1 && n <= 240;
+      if (!ok(e.backupMins) || !ok(e.qcMins) || !ok(e.plantMins)) return;
+      if (!(e.backupMins < e.qcMins && e.qcMins < e.plantMins)) return;
+      for (const r of s.rules) {
+        r.seenMins = Math.round(e.backupMins);
+        r.escalateQcMins = Math.round(e.qcMins);
+        r.escalatePhMins = Math.round(e.plantMins);
+        r.updatedAt = e.at;
+        r.updatedBy = e.by;
+      }
+      return;
+    }
+
+    case 'rules/doc': {
+      s.rulesDocs.push({ name: e.name, at: e.at, by: e.by, pages: e.pages, found: e.found.slice(0, 200), applied: e.applied });
       return;
     }
 

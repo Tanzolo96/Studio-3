@@ -193,3 +193,98 @@ export function decisionNotices(s: MillState, user: User, now: number) {
     return user.shift === shiftAt(now) ? covers(user, h.frameId) : s.tickets.find((t) => t.id === h.ticketId)?.seenBy === user.id;
   });
 }
+
+// ---------- messages: the dashboard as the go-between ----------
+export interface Message {
+  at: number;
+  /** out = sent by QC Alert to a person, in = a person answered on the phone */
+  dir: 'out' | 'in';
+  who: string; // name and role
+  how: string; // "App alert with sound", "Tap on the phone"
+  text: string;
+}
+
+const nameOf = (s: MillState, id?: string) => (id ? s.users.find((u) => u.id === id)?.name ?? id : 'Someone');
+const roleOn = (s: MillState, role: User['role'], at: number) => s.users.find((u) => u.role === role && (u.shift === 'G' || u.shift === shiftAt(at)));
+
+/** Every message QC Alert sent for this ticket, and every answer from the floor, in order. */
+export function messagesFor(s: MillState, t: Ticket, now: number): Message[] {
+  const out: Message[] = [];
+  const frame = `Frame ${Number(t.frameId.slice(3))}`;
+  const how = t.severity === 'critical' ? 'App alert with sound' : t.severity === 'major' ? 'App alert' : 'Dashboard only';
+  const sup = (at: number) => s.users.find((u) => u.role === 'supervisor' && u.shift === shiftAt(at) && covers(u, t.frameId));
+  for (const e of t.events) {
+    switch (e.kind) {
+      case 'alerted': {
+        const p = sup(e.at);
+        out.push({ at: e.at, dir: 'out', who: p ? `${p.name}, supervisor` : 'Shift supervisor', how, text: `${t.title} on ${frame}, Lot ${t.lotId}` });
+        break;
+      }
+      case 'working':
+        out.push({ at: e.at, dir: 'in', who: nameOf(s, e.by), how: 'Tap on the phone', text: 'Fixing it' });
+        break;
+      case 'fitter_assigned':
+        out.push({ at: e.at, dir: 'out', who: e.text.replace('Repair job sent to ', '').replace(' (fitter)', ', fitter'), how: 'App message', text: `Repair job: ${frame}` });
+        break;
+      case 'repair_done':
+        out.push({ at: e.at, dir: 'in', who: nameOf(s, e.by), how: 'Tap on the phone', text: 'Repair done' });
+        break;
+      case 'waiting_part':
+        out.push({ at: e.at, dir: 'in', who: nameOf(s, e.by), how: 'Tap on the phone', text: e.text });
+        break;
+      case 'fixed': {
+        out.push({ at: e.at, dir: 'in', who: nameOf(s, e.by), how: 'Fix report on the phone', text: e.text });
+        if (t.test || t.kind !== 'manual') {
+          const lab = roleOn(s, 'tester', e.at);
+          out.push({ at: e.at, dir: 'out', who: lab ? `${lab.name}, lab` : 'Lab', how: 'App message', text: `Re-test ${frame} to confirm the fix` });
+        }
+        break;
+      }
+      case 'confirmed':
+        out.push({ at: e.at, dir: 'in', who: nameOf(s, e.by), how: 'Lab result on the phone', text: e.text });
+        break;
+      case 'reopened':
+        out.push({ at: e.at, dir: 'in', who: nameOf(s, e.by), how: 'Lab result on the phone', text: e.text });
+        break;
+      case 'closed': {
+        const qc = s.users.find((u) => u.role === 'qc');
+        out.push({ at: e.at, dir: 'out', who: qc ? `${qc.name}, QC manager` : 'QC manager', how: 'Saved to the dashboard', text: e.text });
+        break;
+      }
+    }
+  }
+  // Escalation for the current alert, worked out from time like everything else.
+  if (t.severity !== 'minor') {
+    const end = t.seenAt ?? (t.status === 'closed' ? t.closedAt ?? now : now);
+    const backupAt = t.alertAt + t.seenMins * MIN;
+    if (t.seenMins < t.escalateQcMins && end >= backupAt) {
+      const own = sup(t.alertAt);
+      const backups = s.users.filter((u) => u.role === 'supervisor' && u.shift === shiftAt(backupAt) && u.id !== own?.id);
+      out.push({ at: backupAt, dir: 'out', who: backups.length ? backups.map((u) => `${u.name}, backup supervisor`).join(' and ') : 'Backup supervisor', how: 'App alert', text: `No answer in ${t.seenMins} min` });
+    }
+    const qcAt = t.alertAt + t.escalateQcMins * MIN;
+    if (end >= qcAt) {
+      const qc = s.users.find((u) => u.role === 'qc');
+      out.push({ at: qcAt, dir: 'out', who: qc ? `${qc.name}, QC manager` : 'QC manager', how: 'App alert with sound', text: `No answer in ${t.escalateQcMins} min` });
+    }
+    const phAt = t.alertAt + t.escalatePhMins * MIN;
+    if (end >= phAt) {
+      const ph = s.users.find((u) => u.role === 'plant');
+      out.push({ at: phAt, dir: 'out', who: ph ? `${ph.name}, plant head` : 'Plant head', how: 'App alert and a call', text: `No answer in ${t.escalatePhMins} min` });
+    }
+  }
+  return out.sort((a, b) => a.at - b.at);
+}
+
+/** Who QC Alert is waiting on right now for an open ticket, in plain words. */
+export function waitingOn(s: MillState, t: Ticket, now: number): string {
+  if (t.status === 'closed') return 'Closed';
+  if (t.status === 'fixed') return t.fixConfirmedAt ? 'Closing' : 'Lab re-test';
+  if (t.seenAt) return `${nameOf(s, t.seenBy).split(' ')[0]} is fixing`;
+  const esc = escalation(t, now);
+  if (esc.level >= 2) return 'Plant head';
+  if (esc.level === 1) return 'QC manager';
+  if (esc.backup) return 'Backup supervisor';
+  const p = s.users.find((u) => u.role === 'supervisor' && u.shift === shiftAt(now) && covers(u, t.frameId));
+  return p ? p.name.split(' ')[0] : 'Supervisor';
+}

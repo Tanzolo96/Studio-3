@@ -174,6 +174,8 @@ export interface Ticket {
   fixConfirmedAt?: number;
   /** How many times a failed re-test sent this ticket back to the line. */
   reopened?: number;
+  /** Fix report: which part of the machine needed fixing. */
+  part?: string;
   waitingParts?: { at: number; note: string };
   events: TicketEvent[];
 }
@@ -229,6 +231,17 @@ export interface Clock {
   speed: number; // 0 = paused
 }
 
+export interface RulesDoc {
+  name: string;
+  at: number;
+  by: string;
+  pages: number;
+  /** Rules read from the document, as plain sentences. */
+  found: string[];
+  /** How many of them the QC manager applied. */
+  applied: number;
+}
+
 export interface MillState {
   clock: Clock;
   users: User[];
@@ -243,6 +256,8 @@ export interface MillState {
   drift: Record<string, { cvPct: number; at: number }>; // latest winding-sensor drift per frame
   rovingChanges: { frameId: string; at: number }[];
   frameDecisions: FrameDecision[];
+  /** Rules documents dropped on the Rules page, with the rules read from each. */
+  rulesDocs: RulesDoc[];
   seq: { ticket: number; hold: number; request: number; result: number };
 }
 
@@ -259,7 +274,9 @@ export type MillEvent = Base &
     | { type: 'ticket/working'; ticketId: string }
     | { type: 'ticket/assignFitter'; ticketId: string; fitterId: string }
     | { type: 'ticket/repairDone'; ticketId: string }
-    | { type: 'ticket/fixed'; ticketId: string; cause: string; note?: string; photo?: string }
+    | { type: 'ticket/fixed'; ticketId: string; cause: string; part?: string; note?: string; photo?: string }
+    | { type: 'routing/set'; backupMins: number; qcMins: number; plantMins: number }
+    | { type: 'rules/doc'; name: string; pages: number; found: string[]; applied: number }
     | { type: 'ticket/raise'; frameId: string; problem: string; severity: Severity; note?: string; photo?: string }
     | { type: 'ticket/handover'; ticketId: string; note: string }
     | { type: 'ticket/sisters'; ticketId: string; frameIds: string[] }
