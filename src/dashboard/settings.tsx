@@ -715,29 +715,43 @@ export function AccountPage() {
         </div>
       </Panel>
 
-      <Panel title="People and roles" sub={`${s.users.length} people`}>
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {roles.map((r) => {
-            const people = s.users.filter((u) => u.role === r);
-            return (
-              <div key={r}>
-                <p className="t-label mb-2 text-[10px] text-muted">
-                  {ROLE_WORD[r]} · {people.length}
-                </p>
-                <ul className="flex flex-col gap-1.5">
-                  {people.map((u) => (
-                    <li key={u.id}>
-                      <button type="button" onClick={() => { setViewing(u.id); document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' }); window.scrollTo({ top: 0, behavior: 'smooth' }); }} aria-label={`See ${u.name}'s details`} className="group flex w-full items-center gap-2.5 text-left">
-                        <span className="grid size-7 place-items-center rounded-full bg-sunken text-[10px] font-semibold">{u.name.split(' ').map((p) => p[0]).join('')}</span>
-                        <span className={cx('t-small flex-1 group-hover:underline', user.id === u.id && !isMe && 't-small-strong')}>{u.name}</span>
-                        <span className="t-small text-muted">{u.shift === 'G' ? 'Day' : `${u.shift} shift`}</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            );
-          })}
+      <Panel title="People and roles" sub={`${s.users.length} people · click a row to see their details`}>
+        <div className="-mx-5 overflow-x-auto">
+          <table className="w-full min-w-[640px] text-left">
+            <thead>
+              <tr className="t-label text-[10px] text-muted">
+                <th className="px-5 pb-2 font-semibold">Name</th>
+                <th className="pb-2 font-semibold">Role</th>
+                <th className="pb-2 font-semibold">Shift</th>
+                <th className="pb-2 font-semibold">Phone</th>
+                <th className="px-5 pb-2 font-semibold">Email</th>
+              </tr>
+            </thead>
+            <tbody>
+              {roles.flatMap((r) => s.users.filter((u) => u.role === r)).map((u) => {
+                const pr = profileOf(u.id);
+                const open = () => {
+                  setViewing(u.id);
+                  document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' });
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                };
+                return (
+                  <tr key={u.id} tabIndex={0} onClick={open} onKeyDown={(e) => e.key === 'Enter' && open()} aria-label={`See ${u.name}'s details`} className={cx('t-small h-11 cursor-pointer border-t border-line hover:bg-sunken', user.id === u.id && !isMe && 'bg-brand-soft hover:bg-brand-soft')}>
+                    <td className="px-5">
+                      <span className="flex items-center gap-2.5">
+                        <span className="grid size-7 shrink-0 place-items-center rounded-full bg-sunken text-[10px] font-semibold">{u.name.split(' ').map((x) => x[0]).join('')}</span>
+                        <span className="t-small-strong">{u.name}</span>
+                      </span>
+                    </td>
+                    <td>{ROLE_WORD[u.role]}</td>
+                    <td className="text-muted">{u.shift === 'G' ? 'Day' : `${u.shift} shift`}</td>
+                    <td className="t-data text-[13px] text-muted">{pr.phone ?? '–'}</td>
+                    <td className="px-5 text-muted">{pr.email ?? '–'}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       </Panel>
     </div>

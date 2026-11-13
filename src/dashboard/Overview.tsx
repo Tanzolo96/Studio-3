@@ -6,11 +6,11 @@ import { useMillState, useNow, useTheme, useUser } from '../store/store';
 import { bySeverityThenAge, escalation, frameView, holdNeedsApproval, isEscalated, labBacklog, median, pendingRequests, seenTimes, type FrameStateKind } from '../engine/selectors';
 import { frameWord, holdKg, roundKg, userName } from '../engine/reducer';
 import { insights } from '../engine/insights';
-import { BASELINE_KG, dailyAlerts, frameStateCounts, seenTrend, shiftResponse, ticketsSince, topCauses, yarnSaved } from '../engine/analytics';
+import { BASELINE_KG, dailyAlerts, frameStateCounts, seenTrend, ticketsSince, topCauses, yarnSaved } from '../engine/analytics';
 import { DAY, ago, dayMonth, hhmm, mill, millDayKey, shiftAt, shiftEndsAt, timer } from '../engine/time';
 import { cx, Empty, SeverityBadge, StatusChip } from '../ui/primitives';
 import { InsightCard, readingLine, ticketChip } from '../ui/cards';
-import { BarList, Dial, SegmentMeter, CountUp, Ring, Sparkline, ShiftBars } from '../ui/charts';
+import { BarList, Dial, SegmentMeter, CountUp, Ring, Sparkline } from '../ui/charts';
 import { PageHead } from './DashShell';
 import { PlantHome } from './plant';
 
@@ -431,7 +431,6 @@ export function Report() {
       daily: dailyAlerts(s, now, 30),
       trend: seenTrend(s, now, 30),
       causes: topCauses(month).slice(0, 6),
-      shifts: shiftResponse(month),
       serious,
       crit: serious.filter((t) => t.severity === 'critical').length,
       frames,
@@ -443,11 +442,10 @@ export function Report() {
   }, [s, nowMin]);
   const seenNow = [...a.trend].reverse().find((p) => p.mins !== null)?.mins ?? null;
   const top = a.frames[0];
-  // Calendar on the left; the picked day's critical and major alerts show on the right. Opens on today.
-  const nav = useNavigate();
+  // Day cards; the picked day's critical and major alerts show below them. Opens on today.
   const [dayKey, setDayKey] = useState(millDayKey(now));
   const dayStart0 = mill(dayKey);
-  const dayList = s.tickets.filter((x) => x.severity !== 'minor' && x.createdAt >= dayStart0 && x.createdAt < dayStart0 + DAY && x.createdAt <= now).sort((x, y) => x.createdAt - y.createdAt);
+  const dayList = s.tickets.filter((x) => x.createdAt >= dayStart0 && x.createdAt < dayStart0 + DAY && x.createdAt <= now).sort((x, y) => x.createdAt - y.createdAt);
   const isToday = dayKey === millDayKey(now);
   return (
     <div className="mx-auto flex max-w-[1240px] flex-col gap-5">
@@ -468,12 +466,12 @@ export function Report() {
         <ReportStat label="Frame with most alerts" value={top ? top.name : '–'} note={top ? `${top.value} alert${top.value === 1 ? '' : 's'} this month` : 'No alerts'} tone={top && top.value >= 3 ? 'bad' : undefined} />
       </section>
 
-      <div className="anim-in grid gap-4 xl:grid-cols-2" style={{ '--i': 1 } as CSSProperties}>
-        <CalendarPanel s={s} now={now} onOpen={(id) => nav(`/dashboard/tickets/${id}`)} pickedKey={dayKey} onPick={setDayKey} />
-        <Panel
-          title={`${isToday ? 'Today' : DAYS_FULL[(new Date(dayStart0 + 5.5 * 3600000).getUTCDay() + 6) % 7]}, ${dayMonth(dayStart0)}`}
-          sub={`${dayList.length} critical or major alert${dayList.length === 1 ? '' : 's'} · click a day on the calendar`}
-        >
+      <Panel title="Alerts per day" sub="Last 30 days · every alert · click a day to see its alerts" className="anim-in">
+        <DayCards s={s} now={now} picked={dayKey} onPick={setDayKey} />
+        <div className="mt-5 border-t border-line pt-4">
+          <p className="t-small-strong mb-1">
+            {isToday ? 'Today' : DAYS_FULL[(new Date(dayStart0 + 5.5 * 3600000).getUTCDay() + 6) % 7]}, {dayMonth(dayStart0)} · {dayList.length} alert{dayList.length === 1 ? '' : 's'}
+          </p>
           {dayList.length ? (
             <ul className="flex flex-col divide-y divide-[var(--line)]">
               {dayList.map((x) => (
@@ -496,69 +494,143 @@ export function Report() {
               ))}
             </ul>
           ) : (
-            <p className="t-small text-muted">No critical or major alerts on this day.</p>
+            <p className="t-small text-muted">No alerts on this day.</p>
           )}
-        </Panel>
-      </div>
+        </div>
+      </Panel>
 
-      <div className="anim-in grid gap-4 xl:grid-cols-2" style={{ '--i': 2 } as CSSProperties}>
+      <div className="anim-in grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]" style={{ '--i': 2 } as CSSProperties}>
+        <Panel title="How fast alerts were fixed" sub="Each bar is one critical or major alert, newest at the top: waiting for someone to start, then fixing">
+          <FixTimeline s={s} now={now} />
+        </Panel>
         <Panel title="Top causes" sub="What fixed frames had in common">
           {a.causes.length ? <BarList items={a.causes} /> : <p className="t-small text-muted">No fixed tickets yet.</p>}
-        </Panel>
-        <Panel title="By shift" sub="Median minutes to Seen">
-          <div className="pt-6">
-            <ShiftBars rows={a.shifts} limit={5} label="Median minutes to Seen for shifts A, B and C" />
-          </div>
-          <p className="t-small mt-4 text-muted">A 06–14 · B 14–22 · C 22–06</p>
-        </Panel>
-      </div>
-
-      <div className="anim-in grid gap-4" style={{ '--i': 3 } as CSSProperties}>
-        <Panel title="How fast someone starts fixing" sub="Last 30 days · one cell per day · the day's median minutes from alert to “I’m fixing”">
-          <FixingStrip s={s} now={now} />
         </Panel>
       </div>
     </div>
   );
 }
 
-/** One cell per day for the last 30 days, coloured by that day's median time to "I'm fixing". */
-function FixingStrip({ s, now }: { s: MillState; now: number }) {
+/** One card per day for the last 30 days: the number of critical and major alerts, coloured by how many. */
+function DayCards({ s, now, picked, onPick }: { s: MillState; now: number; picked: string; onPick: (k: string) => void }) {
   const today = mill(millDayKey(now));
   const days = Array.from({ length: 30 }, (_, i) => {
     const start = today - (29 - i) * DAY;
-    const mins = s.tickets
-      .filter((t) => t.severity !== 'minor' && t.createdAt >= start && t.createdAt < start + DAY && t.createdAt <= now && (t.seenAt ?? t.workingAt))
-      .map((t) => ((t.seenAt ?? t.workingAt)! - t.alertAt) / 60000);
-    return { start, n: mins.length, med: median(mins) };
+    const n = s.tickets.filter((t) => t.createdAt >= start && t.createdAt < start + DAY && t.createdAt <= now).length;
+    return { start, key: millDayKey(start), n };
   });
-  const tone = (m?: number) => (m === undefined ? 'bg-sunken text-muted' : m > 5 ? 'bg-critical text-on-critical' : m > 4 ? 'bg-major-fill text-ink' : 'bg-ok text-on-brand');
-  const late = days.filter((d) => d.med !== undefined && d.med > 5).length;
-  const withAlerts = days.filter((d) => d.med !== undefined).length;
+  const tone = (n: number) => (n === 0 ? 'bg-sunken text-muted' : n === 1 ? 'bg-ok text-on-brand' : n === 2 ? 'bg-major-fill text-ink' : 'bg-critical text-on-critical');
+  const by = (f: (n: number) => boolean) => days.filter((d) => f(d.n)).length;
   return (
     <div>
       <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(15, minmax(0, 1fr))' }}>
-        {days.map((d, i) => (
-          <div
-            key={d.start}
-            title={d.med === undefined ? `${dayMonth(d.start)}: no alerts` : `${dayMonth(d.start)}: ${d.n} alert${d.n === 1 ? '' : 's'}, median ${d.med.toFixed(1)} min`}
-            className="flex flex-col items-center gap-1"
-          >
-            <span className={cx('anim-pop grid h-12 w-full place-items-center rounded-[8px] text-[15px] font-semibold tabular-nums', tone(d.med))}>{d.med === undefined ? '–' : d.med < 1 ? '<1' : Math.round(d.med)}</span>
-            <span className={cx('t-data text-[11px]', d.start === today ? 'font-semibold text-ink' : 'text-muted')}>{d.start === today ? 'Today' : i === 0 || dayMonth(d.start).startsWith('01') ? dayMonth(d.start) : dayMonth(d.start).split(' ')[0]}</span>
-          </div>
-        ))}
+        {days.map((d, i) => {
+          const on = d.key === picked;
+          return (
+            <button
+              key={d.start}
+              type="button"
+              onClick={() => onPick(d.key)}
+              aria-pressed={on}
+              aria-label={`${dayMonth(d.start)}: ${d.n} alert${d.n === 1 ? '' : 's'}`}
+              className="flex flex-col items-center gap-1"
+            >
+              <span
+                className={cx('anim-pop grid h-12 w-full place-items-center rounded-[8px] text-[15px] font-semibold tabular-nums transition-transform hover:scale-105', tone(d.n), on && 'outline outline-2 outline-offset-2 outline-[var(--ink)]')}
+                style={{ '--i': i } as CSSProperties}
+              >
+                {d.n === 0 ? '–' : d.n}
+              </span>
+              <span className={cx('t-data text-[11px]', d.start === today || on ? 'font-semibold text-ink' : 'text-muted')}>
+                {d.start === today ? 'Today' : i === 0 || dayMonth(d.start).startsWith('01') ? dayMonth(d.start) : dayMonth(d.start).split(' ')[0]}
+              </span>
+            </button>
+          );
+        })}
       </div>
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
         <p className="t-small-strong">
-          {late ? `${late} of ${withAlerts} days were late (over 5 min)` : `Every day with alerts was on time`}
+          {by((n) => n >= 3)} bad day{by((n) => n >= 3) === 1 ? '' : 's'} with 3 or more alerts · {by((n) => n === 0)} days with none
         </p>
         <div className="t-small flex flex-wrap items-center gap-4 text-muted">
-          <span className="flex items-center gap-1.5"><span className="size-3 rounded-[3px] bg-ok" /> Under 4 min</span>
-          <span className="flex items-center gap-1.5"><span className="size-3 rounded-[3px] bg-major-fill" /> 4–5 min</span>
-          <span className="flex items-center gap-1.5"><span className="size-3 rounded-[3px] bg-critical" /> Over 5 min, late</span>
-          <span className="flex items-center gap-1.5"><span className="size-3 rounded-[3px] bg-sunken" /> No alerts</span>
+          <span className="flex items-center gap-1.5"><span className="size-3 rounded-[3px] bg-ok" /> 1 alert</span>
+          <span className="flex items-center gap-1.5"><span className="size-3 rounded-[3px] bg-major-fill" /> 2 alerts</span>
+          <span className="flex items-center gap-1.5"><span className="size-3 rounded-[3px] bg-critical" /> 3 or more</span>
+          <span className="flex items-center gap-1.5"><span className="size-3 rounded-[3px] bg-sunken" /> None</span>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** One bar per alert: the wait before "I'm fixing" (green if within 5 min, red if late), then the fixing time. */
+function FixTimeline({ s, now }: { s: MillState; now: number }) {
+  const since = mill(millDayKey(now)) - 29 * DAY;
+  const all = s.tickets
+    .filter((t) => t.severity !== 'minor' && t.createdAt >= since && t.createdAt <= now && t.workingAt && t.fixedAt)
+    .sort((a, b) => b.createdAt - a.createdAt);
+  const rows = all.slice(0, 12).map((t) => {
+    const wait = Math.max(0, (t.workingAt! - t.alertAt) / 60000);
+    const fix = (t.fixedAt! - t.workingAt!) / 60000;
+    return { t, wait, fix, done: true };
+  });
+  const max = Math.min(240, Math.max(60, ...rows.map((r) => r.wait + r.fix)));
+  const step = max > 120 ? 60 : 30;
+  const scale = Math.ceil(max / step) * step;
+  const pct = (m: number) => `${(Math.min(m, scale) / scale) * 100}%`;
+  const onTime = all.filter((t) => (t.workingAt! - t.alertAt) / 60000 <= 5).length;
+  const fixes = all.filter((t) => t.fixedAt).map((t) => (t.fixedAt! - t.workingAt!) / 60000);
+  const medFix = median(fixes);
+  const ticks = Array.from({ length: scale / step + 1 }, (_, i) => i * step);
+  if (!rows.length) return <p className="t-small text-muted">No alerts were fixed in the last 30 days.</p>;
+  return (
+    <div>
+      <div className="mb-4 grid grid-cols-2 gap-2">
+        <div className={cx('rounded-[8px] px-3 py-2', onTime === all.length ? 'bg-ok-soft' : 'bg-critical-soft')}>
+          <p className={cx('t-stat !text-[20px] !leading-[24px]', onTime === all.length ? 'text-ok' : 'text-critical')}>
+            {onTime} of {all.length}
+          </p>
+          <p className="t-small text-muted">started fixing within 5 min</p>
+        </div>
+        <div className="rounded-[8px] bg-sunken px-3 py-2">
+          <p className="t-stat !text-[20px] !leading-[24px]">{medFix !== undefined ? `${Math.round(medFix)} min` : '–'}</p>
+          <p className="t-small text-muted">typical fixing time (median)</p>
+        </div>
+      </div>
+      <div className="relative">
+        <ul className="flex flex-col gap-1.5">
+          {rows.map(({ t, wait, fix, done }, i) => (
+            <li key={t.id}>
+              <Link to={`/dashboard/tickets/${t.id}`} className="group grid grid-cols-[92px_minmax(0,1fr)_64px] items-center gap-3 rounded-[6px] py-0.5 hover:bg-sunken">
+                <span className="t-small truncate">
+                  <span className="t-small-strong">{t.frameId}</span> <span className="text-muted">{dayMonth(t.createdAt).split(' ')[0]}</span>
+                </span>
+                <span className="relative flex h-4 items-center">
+                  <span className="anim-grow-x flex h-3 w-full" style={{ '--i': i } as CSSProperties}>
+                    <span className={cx('h-full rounded-l-[3px]', wait > 5 ? 'bg-critical' : 'bg-ok')} style={{ width: pct(Math.max(wait, 0.6)) }} title={`Waited ${wait.toFixed(1)} min`} />
+                    <span className={cx('h-full rounded-r-[3px]', done ? 'bg-[var(--data)]' : 'bg-[var(--data)] opacity-40')} style={{ width: pct(fix) }} title={`Fixing ${Math.round(fix)} min`} />
+                  </span>
+                </span>
+                <span className="t-data text-right text-[12px] text-muted">{Math.round(wait + fix)} min</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+        <div className="pointer-events-none absolute inset-y-0 left-[104px] right-[76px]" aria-hidden>
+          <span className="absolute inset-y-0 border-l border-dashed border-critical" style={{ left: pct(5) }} />
+        </div>
+      </div>
+      <div className="ml-[104px] mr-[76px] mt-1 flex justify-between">
+        {ticks.map((m) => (
+          <span key={m} className="t-data text-[10px] text-muted">{m}</span>
+        ))}
+      </div>
+      <div className="t-small mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-muted">
+        <span className="flex items-center gap-1.5"><span className="h-2.5 w-4 rounded-[2px] bg-ok" /> Started within 5 min</span>
+        <span className="flex items-center gap-1.5"><span className="h-2.5 w-4 rounded-[2px] bg-critical" /> Started late</span>
+        <span className="flex items-center gap-1.5"><span className="h-2.5 w-4 rounded-[2px] bg-[var(--data)]" /> Fixing</span>
+        <span className="flex items-center gap-1.5"><span className="h-3 border-l border-dashed border-critical" /> 5 min limit</span>
+        <span>Minutes from the alert{all.length > rows.length ? ` · last ${rows.length} of ${all.length}` : ''}</span>
       </div>
     </div>
   );
