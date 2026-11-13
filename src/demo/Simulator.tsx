@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Close, Pause, Play, Renew } from '@carbon/icons-react';
 import { useMill, useMillState, useNow } from '../store/store';
 import { productOfFrame } from '../engine/reducer';
-import { dateTime, shiftAt } from '../engine/time';
+import { HOUR, dateTime, hhmm, mill, millDayKey, shiftAt } from '../engine/time';
 import { Button, cx } from '../ui/primitives';
 
 /** Simulated lab instruments and winding sensors. Demo only, clearly labelled. */
@@ -53,7 +53,6 @@ function SimulatorPanel({ onClose }: { onClose: () => void }) {
   const [value, setValue] = useState('28.9');
   const [confirm, setConfirm] = useState(false);
   const speed = s.clock.speed;
-  const product = productOfFrame(s, frame);
   const pending = s.requests.filter((r) => r.status === 'pending');
   const forFrame = pending.find((r) => r.frameId === frame && r.reason !== 'sister') ?? pending.find((r) => r.frameId === frame);
   const lastFail = [...s.results].reverse().find((r) => !r.pass && !r.sampleError);
@@ -63,7 +62,7 @@ function SimulatorPanel({ onClose }: { onClose: () => void }) {
       <header className="flex items-center justify-between border-b border-line px-4 py-3">
         <div>
           <p className="t-body-strong">Simulator</p>
-          <p className="t-small text-muted">Demo only · stands in for the lab and sensors</p>
+          <p className="t-small text-muted">Demo only · stands in for the lab tester</p>
         </div>
         <button type="button" onClick={onClose} aria-label="Close simulator" className="grid size-10 place-items-center rounded-[10px] text-muted hover:bg-sunken">
           <Close size={20} />
@@ -115,9 +114,6 @@ function SimulatorPanel({ onClose }: { onClose: () => void }) {
             ))}
           </select>
           <div className="mt-3 flex flex-col gap-2">
-            <Button variant="secondary" onClick={() => dispatch({ type: 'sim/drift', frameId: frame, cvPct: product.cvWarnPct + 0.4, by: 'system' })}>
-              Winding sensor drift (CV +{(product.cvWarnPct + 0.4).toFixed(1)}%)
-            </Button>
             <div className="flex gap-2">
               <input
                 aria-label="Count reading"
@@ -132,23 +128,25 @@ function SimulatorPanel({ onClose }: { onClose: () => void }) {
                 onClick={() => {
                   const v = Number(value);
                   if (Number.isNaN(v)) return;
-                  dispatch({ type: 'result/enter', frameId: frame, test: forFrame?.test ?? 'count', value: v, requestId: forFrame?.id, by: 'rohan' });
+                  dispatch({ type: 'result/enter', frameId: frame, test: forFrame?.test ?? 'count', value: v, requestId: forFrame?.id, lastPassAt: forFrame ? undefined : lastSlot(now), by: 'rohan' });
                 }}
               >
-                Enter lab result
+                {forFrame ? 'Enter lab result' : 'Lab reports a fail'}
               </Button>
             </div>
-            {forFrame && <p className="t-small -mt-1 text-muted">Answers the open {forFrame.reason === 'retest' ? 're-test' : 'urgent test'} on {frame}</p>}
+            <p className="t-small -mt-1 text-muted">
+              {forFrame ? `Answers the open ${forFrame.reason === 'retest' ? 're-test' : 'urgent test'} on ${frame}` : `As the lab tester would from the phone, last pass at ${hhmm(lastSlot(now))}`}
+            </p>
             <Button
               variant="secondary"
               disabled={!pending.some((r) => r.reason === 'sister')}
               onClick={() =>
                 pending
                   .filter((r) => r.reason === 'sister')
-                  .forEach((r) => dispatch({ type: 'result/enter', frameId: r.frameId, test: r.test, value: productOfFrame(s, r.frameId).nominalNe + 0.1, requestId: r.id, by: 'rohan' }))
+                  .forEach((r) => dispatch({ type: 'result/enter', frameId: r.frameId, test: r.test, value: productOfFrame(s, r.frameId).nominalNe, requestId: r.id, by: 'rohan' }))
               }
             >
-              Sister frames pass
+              Other frames on the lot pass
             </Button>
             <Button variant="secondary" disabled={!lastFail} onClick={() => lastFail && dispatch({ type: 'result/sampleError', resultId: lastFail.id, by: 'rohan' })}>
               Last fail was a sample error
@@ -181,4 +179,11 @@ function SimulatorPanel({ onClose }: { onClose: () => void }) {
       </div>
     </section>
   );
+}
+
+/** The most recent routine test slot (start of a shift: 06, 14, 22). */
+function lastSlot(now: number) {
+  const day = mill(millDayKey(now));
+  const cands = [day - 2 * HOUR, day + 6 * HOUR, day + 14 * HOUR, day + 22 * HOUR].filter((t) => t <= now);
+  return Math.max(...cands);
 }

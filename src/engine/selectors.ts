@@ -1,5 +1,5 @@
 import type { Hold, MillState, Ticket, TicketEvent, User } from './types';
-import { HOUR, MIN, hhmm, sameMillDay, shiftAt } from './time';
+import { HOUR, MIN, hhmm, sameMillDay, shiftAt, shiftEndsAt } from './time';
 import { SEVERITY } from './vocab';
 import { covers, holdKg, roundKg } from './reducer';
 
@@ -7,19 +7,21 @@ export type TimerState = 'ok' | 'warn' | 'over';
 
 export interface Escalation {
   level: 0 | 1 | 2; // 0 supervisor, 1 QC manager, 2 plant head
+  /** Past the Seen limit (5 min): the backup supervisor on the same shift is alerted too. */
+  backup: boolean;
   elapsed: number; // ms from alert to Seen (or now)
   timer: TimerState;
 }
 
 /** Escalation is a pure function of time, so every device computes the same answer. */
 export function escalation(t: Ticket, now: number): Escalation {
-  if (t.severity === 'minor') return { level: 0, elapsed: 0, timer: 'ok' };
+  if (t.severity === 'minor') return { level: 0, backup: false, elapsed: 0, timer: 'ok' };
   const end = t.seenAt ?? (t.status === 'closed' ? t.closedAt ?? now : now);
   const elapsed = Math.max(0, end - t.alertAt);
   const level = elapsed >= t.escalatePhMins * MIN ? 2 : elapsed >= t.escalateQcMins * MIN ? 1 : 0;
   const limit = t.seenMins * MIN;
   const timer: TimerState = elapsed >= limit ? 'over' : elapsed >= limit * 0.75 ? 'warn' : 'ok';
-  return { level, elapsed, timer };
+  return { level, backup: elapsed >= limit, elapsed, timer };
 }
 
 export const isEscalated = (t: Ticket, now: number) => escalation(t, now).level > 0;
@@ -30,6 +32,9 @@ export function timeline(t: Ticket, now: number): TicketEvent[] {
   const out = [...t.events];
   const end = t.seenAt ?? (t.status === 'closed' ? t.closedAt ?? now : now);
   if (t.severity !== 'minor') {
+    const backup = t.alertAt + t.seenMins * MIN;
+    if (t.seenMins < t.escalateQcMins && end >= backup)
+      out.push({ at: backup, kind: 'escalated', text: `Not seen in ${t.seenMins} min. Backup supervisor on the shift alerted.`, by: 'system' });
     const qc = t.alertAt + t.escalateQcMins * MIN;
     const ph = t.alertAt + t.escalatePhMins * MIN;
     if (end >= qc) out.push({ at: qc, kind: 'escalated', text: `Not seen in ${t.escalateQcMins} min. Escalated to the QC manager.`, by: 'system' });
@@ -48,8 +53,9 @@ export function takeoversFor(s: MillState, user: User | undefined, now: number):
   return s.tickets
     .filter((t) => t.status === 'open' && t.severity !== 'minor')
     .filter((t) => {
-      const { level } = escalation(t, now);
-      if (user.role === 'supervisor') return user.shift === shiftAt(now) && covers(user, t.frameId);
+      const { level, backup } = escalation(t, now);
+      // The frame's own supervisor first; after 5 min the other supervisor on the shift as backup.
+      if (user.role === 'supervisor') return user.shift === shiftAt(now) && (covers(user, t.frameId) || backup);
       if (user.role === 'qc') return level >= 1;
       if (user.role === 'plant') return level >= 2;
       return false;
@@ -61,7 +67,8 @@ export function takeoversFor(s: MillState, user: User | undefined, now: number):
 export function myTickets(s: MillState, user: User, now: number): Ticket[] {
   const live = s.tickets.filter(isLive);
   let mine: Ticket[];
-  if (user.role === 'supervisor') mine = live.filter((t) => (user.shift === shiftAt(now) && covers(user, t.frameId)) || t.seenBy === user.id);
+  if (user.role === 'supervisor')
+    mine = live.filter((t) => (user.shift === shiftAt(now) && (covers(user, t.frameId) || (t.status === 'open' && escalation(t, now).backup))) || t.seenBy === user.id);
   else if (user.role === 'operator') mine = live.filter((t) => covers(user, t.frameId));
   else if (user.role === 'fitter') mine = live.filter((t) => t.fitterId === user.id);
   else if (user.role === 'qc') mine = live.filter((t) => t.severity !== 'minor' && (isEscalated(t, now) || t.holdId));
@@ -163,4 +170,26 @@ export function todayStats(s: MillState, now: number) {
     alertsMonth: month.filter((t) => t.severity !== 'minor').length,
     escalatedMonth: month.filter((t) => isEscalated(t, now)).length,
   };
+}
+
+// ---------- held yarn: getting the decision made early ----------
+export type HoldNudge = 'none' | 'qc' | 'plant';
+
+/** Undecided after 2 hours: remind the QC manager. Undecided by the end of the shift it was held in: the plant head. */
+export function holdNudge(s: MillState, h: Hold, now: number): HoldNudge {
+  if (h.status !== 'on_hold') return 'none';
+  const t = s.tickets.find((x) => x.id === h.ticketId);
+  const since = t?.createdAt ?? h.from;
+  if (now >= shiftEndsAt(since)) return 'plant';
+  if (now - since >= 2 * HOUR) return 'qc';
+  return 'none';
+}
+
+/** Decided holds the supervisor still has to act on: move the yarn, remove or keep the tag. */
+export function decisionNotices(s: MillState, user: User, now: number) {
+  if (user.role !== 'supervisor') return [];
+  return s.holds.filter((h) => {
+    if (h.status === 'on_hold' || !h.taggedAt || h.movedAt || !h.closedAt || h.closedAt > now) return false;
+    return user.shift === shiftAt(now) ? covers(user, h.frameId) : s.tickets.find((t) => t.id === h.ticketId)?.seenBy === user.id;
+  });
 }

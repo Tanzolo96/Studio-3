@@ -1,12 +1,12 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Camera, Checkmark, ChevronRight } from '@carbon/icons-react';
-import type { MillState, Severity, Ticket, User } from '../engine/types';
+import type { MillState, Severity, TestKind, Ticket, User } from '../engine/types';
 import { useDispatch, useMill, useMillState, useNow, useUser } from '../store/store';
-import { escalation, fitterJobs, frameView, labBacklog, median, myTickets, pendingRequests, seenTimes, timeline } from '../engine/selectors';
-import { covers, failWord, frameWord, holdKg, lotOf, productOfFrame, roundKg, ruleFor, supervisorFor, userName, withinRule, withUnit } from '../engine/reducer';
-import { CAUSES, RAISE_PROBLEMS, TEST } from '../engine/vocab';
-import { ago, dayMonth, hhmm, monthName, shiftAt, timer } from '../engine/time';
+import { decisionNotices, escalation, fitterJobs, labBacklog, median, myTickets, pendingRequests, seenTimes, timeline } from '../engine/selectors';
+import { failWord, frameWord, holdKg, lotOf, productOfFrame, roundKg, ruleFor, supervisorFor, userName, withinRule, withUnit } from '../engine/reducer';
+import { CAUSE_HINT, CAUSES, RAISE_PROBLEMS, TEST } from '../engine/vocab';
+import { DAY, HOUR, ago, dayMonth, hhmm, mill, millDayKey, monthName, sameMillDay, shiftAt, timer } from '../engine/time';
 import { Button, Choice, cx, Empty, Field, SeverityBadge, SeverityShape, TextField } from '../ui/primitives';
 import { ReadingGauge, ResponseTimer, TicketCard, ticketMeta } from '../ui/cards';
 import { Timeline } from '../ui/timeline';
@@ -38,32 +38,16 @@ export function AlertsScreen() {
   return <MyTickets user={user} />;
 }
 
-/** The machine operator: his own frames at a glance, and any fault on them. He reports, the supervisor owns the fix. */
+/** The machine operator: faults on his frames, if any. He reports, the supervisor owns the fix. */
 function OperatorHome({ user }: { user: User }) {
   const s = useMillState();
   const now = useNow();
   const nav = useNavigate();
-  const mine = s.frames.filter((f) => covers(user, f.id));
-  const live = myTickets(s, user, now).filter((t) => t.status !== 'fixed');
-  const sup = mine[0] ? supervisorFor(s, mine[0].id, now) : undefined;
-  const DOT: Record<string, string> = { running: 'bg-ok', warning: 'bg-major-fill', fault: 'bg-critical', held: 'bg-brand', stopped: 'bg-[var(--line-strong)]' };
+  const live = myTickets(s, user, now).filter((t) => t.status !== 'closed');
+  const sup = supervisorFor(s, `RF-${String(user.frames?.[0] ?? 1).padStart(2, '0')}`, now);
   return (
     <Page title="My frames" sub={`${user.shift} shift · ${first(user)} · frames ${user.frames?.[0]}–${user.frames?.[1]}`}>
-      <ul className="grid grid-cols-3 gap-2" aria-label="My frames">
-        {mine.map((f) => {
-          const v = frameView(s, f.id, now);
-          return (
-            <li key={f.id} className={cx('rounded-[10px] border bg-raised p-2.5', v.kind === 'running' ? 'border-line' : v.kind === 'fault' ? 'border-critical' : v.kind === 'stopped' ? 'border-dashed border-line-strong' : v.kind === 'held' ? 'border-brand' : 'border-major-fill')}>
-              <span className="flex items-center justify-between">
-                <span className="t-body-strong">{f.num}</span>
-                <span className={cx('size-2.5 rounded-full', DOT[v.kind])} aria-hidden />
-              </span>
-              <span className="t-small block truncate text-muted">{v.short?.label ?? v.label}</span>
-            </li>
-          );
-        })}
-      </ul>
-      <p className="t-small-strong mt-6 mb-2 text-muted">{live.length ? `${live.length} fault${live.length === 1 ? '' : 's'} on your frames` : 'No faults on your frames'}</p>
+      <p className="t-small-strong mb-2 text-muted">{live.length ? `${live.length} fault${live.length === 1 ? '' : 's'} on your frames` : 'No faults on your frames'}</p>
       {live.length ? (
         <div className="flex flex-col gap-3">
           {live.map((t) => (
@@ -71,10 +55,10 @@ function OperatorHome({ user }: { user: User }) {
           ))}
         </div>
       ) : (
-        <p className="t-small text-muted">If a test fails on one of your frames it shows here, so you know before anyone asks.</p>
+        <p className="t-small text-muted">If a lab test fails on one of your frames it shows here, so you know before anyone asks.</p>
       )}
       <p className="t-small mt-6 rounded-[10px] bg-sunken px-3 py-2.5 text-ink">
-        {sup ? `${sup.name} (supervisor) owns these alerts and gets them with sound.` : 'Your supervisor owns these alerts.'} Saw something wrong? Use Raise ticket.
+        {sup ? `${sup.name} (supervisor) owns these alerts and gets them with sound.` : 'Your supervisor owns these alerts.'} Saw something wrong before the next test? Use Raise ticket.
       </p>
     </Page>
   );
@@ -85,6 +69,9 @@ function MyTickets({ user }: { user: User }) {
   const now = useNow();
   const nav = useNavigate();
   const live = myTickets(s, user, now).filter((t) => t.status !== 'fixed');
+  const waitingRetest = myTickets(s, user, now).filter((t) => t.status === 'fixed');
+  const notices = decisionNotices(s, user, now);
+  const dispatch = useDispatch();
   const onShift = user.shift === 'G' || user.shift === shiftAt(now);
   const sub =
     user.role === 'supervisor'
@@ -92,6 +79,19 @@ function MyTickets({ user }: { user: User }) {
       : `${first(user)} · ${user.role === 'qc' ? 'escalations and held yarn' : 'escalations only'}`;
   return (
     <Page title="Active issues" sub={sub}>
+      {notices.map((h) => (
+        <section key={h.id} className="mb-3 rounded-[16px] border border-ink bg-raised p-4 shadow-raised" aria-label="Yarn decision">
+          <p className="t-small-strong text-muted">
+            Yarn decision · {frameWord(h.frameId)} · Lot {h.lotId} · {roundKg(holdKg(h, now))} kg
+          </p>
+          <p className="t-section mt-1">
+            {h.status === 'released' ? 'Release: remove the red tag, send it to winding' : h.status === 'reprocess' ? 'Reprocess: keep the tag, move it to reprocess' : 'Downgrade: keep the tag, move it to lower grade'}
+          </p>
+          <Button size="lg" block className="mt-3" onClick={() => dispatch({ type: 'hold/moved', holdId: h.id, by: user.id })}>
+            Done, yarn moved
+          </Button>
+        </section>
+      ))}
       {live.length === 0 ? (
         <div className="flex flex-col items-center gap-3 rounded-[16px] bg-raised px-6 py-12 text-center shadow-raised">
           <span className="grid size-16 place-items-center rounded-full bg-ok-soft text-ok">
@@ -115,15 +115,25 @@ function MyTickets({ user }: { user: User }) {
           ))}
         </div>
       )}
+      {waitingRetest.length > 0 && (
+        <>
+          <p className="t-small-strong mt-6 mb-2 text-muted">Fixed, waiting for the lab re-test or the yarn decision</p>
+          <div className="flex flex-col gap-3">
+            {waitingRetest.map((t) => (
+              <TicketCard key={t.id} s={s} t={t} now={now} onOpen={() => nav(`/app/ticket/${t.id}`)} />
+            ))}
+          </div>
+        </>
+      )}
     </Page>
   );
 }
 
 const REASON: Record<string, string> = {
-  drift: 'Winding sensor drift',
-  sister: 'Sister frame check',
-  retest: 'Re-test of held yarn',
-  manual: 'Asked by QC',
+  drift: 'Asked to test sooner',
+  sister: 'Other frame on the same lot',
+  retest: 'Re-test after the fix',
+  manual: 'Asked to test now',
 };
 
 function TestRequests({ user }: { user: User }) {
@@ -132,12 +142,17 @@ function TestRequests({ user }: { user: User }) {
   const list = pendingRequests(s);
   const behind = labBacklog(s, now).length;
   return (
-    <Page title="Test requests" sub={`${user.shift} shift lab · ${first(user)} · ${list.length} waiting · riskiest first`}>
+    <Page title="Lab" sub={`${user.shift} shift lab · ${first(user)}`}>
+      <Link to="/app/fail" className="t-body-strong mb-4 flex h-14 items-center justify-center gap-2 rounded-[12px] bg-critical text-on-critical shadow-raised">
+        <SeverityShape level="critical" className="[&_path]:fill-[var(--on-critical)]" /> Report a failed test
+      </Link>
+      <p className="t-small -mt-2 mb-4 text-muted">Only for readings outside the limit. Passing tests stay in the register as today.</p>
       {behind >= 3 && (
         <p className="t-small-strong mb-3 rounded-[10px] bg-major-soft px-3 py-2.5 text-major">{behind} urgent tests are late. The QC manager has been told.</p>
       )}
+      <p className="t-small-strong mb-2 text-muted">Urgent tests from the floor</p>
       {list.length === 0 ? (
-        <Empty icon={<Checkmark size={32} />} title="No urgent tests" body="Routine tests continue every 8 hours. Urgent requests appear here first." />
+        <Empty icon={<Checkmark size={32} />} title="Nothing urgent" body="Re-tests after a fix and checks on other frames of the same lot show up here, riskiest first." />
       ) : (
         <ul className="flex flex-col gap-3">
           {list.map((r, i) => {
@@ -225,115 +240,206 @@ export function TicketScreen() {
   return <TicketDetail s={s} t={t} now={now} user={user} />;
 }
 
+type StepState = 'done' | 'active' | 'todo';
+
+function Step({ n, title, state, when, children }: { n: number; title: string; state: StepState; when?: string; children?: ReactNode }) {
+  return (
+    <li className={cx('rounded-[14px] border p-3.5', state === 'active' ? 'border-ink bg-raised shadow-raised' : 'border-line bg-raised', state === 'todo' && 'opacity-55')}>
+      <div className="flex items-center gap-3">
+        <span
+          className={cx(
+            't-small-strong grid size-7 shrink-0 place-items-center rounded-full',
+            state === 'done' ? 'bg-ok text-[var(--surface-raised)]' : state === 'active' ? 'bg-ink text-[var(--surface-raised)]' : 'bg-sunken text-muted',
+          )}
+        >
+          {state === 'done' ? <Checkmark size={16} /> : n}
+        </span>
+        <span className={cx('t-body-strong flex-1', state === 'todo' && 'text-muted')}>{title}</span>
+        {when && <span className="t-data text-[12px] text-muted">{when}</span>}
+      </div>
+      {state === 'active' && children && <div className="mt-3 flex flex-col gap-2 pl-10">{children}</div>}
+    </li>
+  );
+}
+
 function TicketDetail({ s, t, now, user }: { s: MillState; t: Ticket; now: number; user: User }) {
   const dispatch = useDispatch();
   const [sheet, setSheet] = useState<'fitter' | 'fixed' | 'handover' | 'part' | null>(null);
+  const [picked, setPicked] = useState<string[]>([]);
   const esc = escalation(t, now);
-  const reading = t.readings.at(-1);
+  const reading = t.readings.find((r) => r.at === t.alertAt) ?? t.readings[0];
+  const lastReading = t.readings.at(-1);
   const rule = reading && t.kind === 'test_fail' ? ruleFor(s, t.productId, reading.test) : undefined;
   const hold = t.holdId ? s.holds.find((h) => h.id === t.holdId) : undefined;
   const canAct = user.role === 'supervisor' || user.role === 'qc' || user.role === 'plant';
-  const canAsk = user.role === 'supervisor' || user.role === 'qc';
-  const askTest = reading && reading.test !== 'cv' ? reading.test : 'count';
-  const pendingAsk = s.requests.find((r) => r.ticketId === t.id && r.status === 'pending');
+  const isSupervisor = user.role === 'supervisor' || user.role === 'qc';
   const fitter = t.fitterId ? userName(s, t.fitterId) : undefined;
-
-  let action: ReactNode = null;
-  if (canAct && t.status === 'open')
-    action = (
-      <Button size="lg" block variant={t.severity === 'critical' ? 'danger' : 'primary'} onClick={() => dispatch({ type: 'ticket/seen', ticketId: t.id, by: user.id })}>
-        Seen, I’m on it
-      </Button>
-    );
-  else if (canAct && t.status === 'seen')
-    action = (
-      <Button size="lg" block onClick={() => dispatch({ type: 'ticket/working', ticketId: t.id, by: user.id })}>
-        Start work on {frameWord(t.frameId)}
-      </Button>
-    );
-  else if (canAct && t.status === 'working' && !t.fitterId)
-    action = (
-      <div className="flex flex-col gap-2">
-        <Button size="lg" block onClick={() => setSheet('fitter')}>
-          Send to a fitter
-        </Button>
-        <Button size="lg" block variant="secondary" onClick={() => setSheet('fixed')}>
-          Mark fixed
-        </Button>
-      </div>
-    );
-  if (canAct && t.waitingPart && t.status === 'working')
-    action = (
-      <div className="flex flex-col gap-2">
-        <p className="t-small rounded-[10px] bg-major-soft px-3 py-2.5 text-ink">
-          <span className="t-small-strong">Waiting for a spare part:</span> {t.waitingPart}
-        </p>
-        <Button size="lg" block variant="secondary" onClick={() => dispatch({ type: 'ticket/partArrived', ticketId: t.id, by: user.id })}>
-          Part arrived
-        </Button>
-        <Button size="lg" block variant="secondary" onClick={() => setSheet('fixed')}>
-          Mark fixed
-        </Button>
-      </div>
-    );
-  else if (canAct && t.status === 'working')
-    action = (
-      <div className="flex flex-col gap-2">
-        {!t.repairDoneAt && (
-          <p className="t-small flex items-center gap-2 rounded-[10px] bg-major-soft px-3 py-2.5 text-ink">
-            <span className="t-small-strong">{fitter}</span> is repairing the frame
-          </p>
-        )}
-        <Button size="lg" block variant={t.repairDoneAt ? 'primary' : 'secondary'} onClick={() => setSheet('fixed')}>
-          Mark fixed
-        </Button>
-      </div>
-    );
-
-  const resolved = t.status === 'fixed' || t.status === 'closed';
   const product = s.products.find((p) => p.id === t.productId)!;
+  const retest = s.requests.find((r) => r.ticketId === t.id && r.reason === 'retest' && r.status === 'pending');
+  const closed = t.status === 'closed';
+  const by = (id?: string) => (id ? userName(s, id).split(' ')[0] : '');
+
   const issue =
-    t.kind === 'drift'
-      ? 'Winding sensor drift, lab test asked'
-      : t.kind === 'manual'
-        ? t.title
-        : reading
-          ? `${failWord(rule, reading.test, reading.value)}: ${withUnit(reading.test, reading.value)}`
-          : t.title;
+    t.kind === 'manual'
+      ? t.title
+      : reading
+        ? `${failWord(rule, reading.test, reading.value)}: ${withUnit(reading.test, reading.value)}`
+        : t.title;
   const outcome =
     t.closeReason === 'sample_error'
       ? 'False alarm. The lab sample was bad.'
       : t.closeReason === 'checked_ok'
         ? 'Checked, OK. The lab test passed.'
         : t.cause
-          ? `Cause: ${t.cause.toLowerCase()}`
+          ? `Cause: ${t.cause.toLowerCase()}${t.note ? ` (${t.note.toLowerCase()})` : ''}`
           : '';
-  const nowLine =
-    t.status === 'open'
-      ? esc.level > 0
-        ? `Nobody has said Seen for ${Math.floor(esc.elapsed / 60000)} min. ${esc.level === 2 ? 'Plant head told.' : 'QC manager told.'}`
-        : 'Waiting for someone to say Seen'
-      : t.status === 'seen'
-        ? `${userName(s, t.seenBy).split(' ')[0]} is on it`
-        : t.status === 'working'
-          ? t.fitterId && !t.repairDoneAt
-            ? `${fitter?.split(' ')[0]} is repairing the frame`
-            : t.repairDoneAt
-              ? 'Repair done. Check the frame and mark it fixed.'
-              : `${userName(s, t.seenBy).split(' ')[0]} is working on it`
-          : '';
+
+  // Status panel: one plain answer.
+  const panel = closed
+    ? { tone: 'ok', head: 'Resolved', line: `${t.fixedAt ? `Fixed at ${hhmm(t.fixedAt)} by ${by(t.fixedBy)}, confirmed by re-test. ` : `Closed at ${hhmm(t.closedAt!)}. `}${outcome}` }
+    : t.status === 'fixed'
+      ? t.fixConfirmedAt
+        ? { tone: 'wait', head: 'Fix confirmed', line: 'Re-test passed. Waiting for the QC manager to decide on the held yarn.' }
+        : { tone: 'wait', head: 'Fixed, waiting for re-test', line: `The lab re-tests ${frameWord(t.frameId)}${retest ? ` by ${hhmm(retest.dueAt)}` : ''}. If it fails, this comes back to you.` }
+      : t.status === 'open'
+        ? {
+            tone: t.severity,
+            head: t.reopened ? 'Re-test failed' : 'Not resolved yet',
+            line: esc.level > 0 ? `Nobody has said Seen for ${Math.floor(esc.elapsed / 60000)} min. ${esc.level === 2 ? 'Plant head told.' : 'QC manager told.'}` : esc.backup ? 'Not seen in 5 min. Backup supervisor alerted.' : 'Waiting for someone to say Seen',
+          }
+        : { tone: t.severity, head: 'Not resolved yet', line: t.waitingPart ? `Waiting for a spare part: ${t.waitingPart}` : fitter && !t.repairDoneAt ? `${fitter.split(' ')[0]} is repairing the frame` : `${by(t.seenBy)} is on it` };
+
+  // Steps, in order. The first one not done is the one to do now.
+  const needsSisters = !!t.holdId;
   const steps = [
-    { word: 'Alert', at: t.alertAt },
-    { word: 'Seen', at: t.seenAt },
-    { word: 'Working', at: t.workingAt },
-    { word: 'Fixed', at: t.fixedAt ?? (t.status === 'closed' ? t.closedAt : undefined) },
+    { key: 'seen', title: 'Seen, I\u2019m on it', done: !!t.seenAt, when: t.seenAt },
+    ...(needsSisters ? [{ key: 'sisters', title: `Other frames on Lot ${t.lotId}`, done: !!t.sistersAskedAt, when: t.sistersAskedAt }] : []),
+    ...(hold ? [{ key: 'held', title: 'Tag the held yarn', done: !!hold.taggedAt, when: hold.taggedAt }] : []),
+    { key: 'line', title: 'Stop or correct the line', done: !!t.lineAction, when: t.lineActionAt },
+    { key: 'fixed', title: 'Mark fixed and pick the cause', done: !!t.fixedAt || closed, when: t.fixedAt },
+    ...(t.kind === 'manual' && !t.test ? [] : [{ key: 'retest', title: 'Lab re-test confirms the fix', done: !!t.fixConfirmedAt || (closed && t.closeReason !== 'fixed'), when: t.fixConfirmedAt }]),
+    ...(hold ? [{ key: 'decided', title: 'QC manager decides on the yarn', done: hold.status !== 'on_hold', when: hold.closedAt }] : []),
   ];
-  const tone = resolved ? 'ok' : t.severity;
-  const sisters = t.sisterFrames.map((f) => {
-    const r = s.requests.find((q) => q.ticketId === t.id && q.frameId === f && q.reason === 'sister');
-    const res = r?.resultId ? s.results.find((x) => x.id === r.resultId) : undefined;
-    return { f, state: res ? (res.pass ? 'ok' : 'bad') : r?.status === 'cancelled' ? 'skip' : 'wait' };
-  });
+  const activeIdx = closed ? -1 : steps.findIndex((x) => !x.done);
+  const stateOf = (i: number): StepState => (steps[i].done ? 'done' : i === activeIdx ? 'active' : 'todo');
+  const sameLot = s.frames.filter((f) => f.id !== t.frameId);
+
+  const body = (key: string): ReactNode => {
+    if (!canAct) return null;
+    switch (key) {
+      case 'seen':
+        return (
+          <Button size="lg" block variant={t.severity === 'critical' ? 'danger' : 'primary'} onClick={() => dispatch({ type: 'ticket/seen', ticketId: t.id, by: user.id })}>
+            Seen, I’m on it
+          </Button>
+        );
+      case 'sisters':
+        if (!isSupervisor) return <p className="t-small text-muted">The supervisor picks the frames.</p>;
+        return (
+          <>
+            <p className="t-small text-ink">Which other frames are running Lot {t.lotId}? Tap them from the floor or the register. They go to the top of the lab’s list.</p>
+            <div role="group" aria-label="Frames on the same lot" className="grid grid-cols-6 gap-1.5">
+              {sameLot.map((f) => {
+                const on = picked.includes(f.id);
+                return (
+                  <button
+                    key={f.id}
+                    type="button"
+                    aria-pressed={on}
+                    aria-label={f.id}
+                    onClick={() => setPicked((p) => (on ? p.filter((x) => x !== f.id) : [...p, f.id]))}
+                    className={cx('t-data h-11 rounded-[8px] border text-[14px]', on ? 'border-ink bg-ink text-[var(--surface-raised)]' : 'border-line-strong bg-raised hover:bg-sunken')}
+                  >
+                    {f.num}
+                  </button>
+                );
+              })}
+            </div>
+            <Button size="lg" block disabled={!picked.length} onClick={() => dispatch({ type: 'ticket/sisters', ticketId: t.id, frameIds: picked, by: user.id })}>
+              {picked.length ? `Send ${picked.length} frame${picked.length > 1 ? 's' : ''} to the lab` : 'Pick the frames'}
+            </Button>
+            <Button variant="ghost" block onClick={() => dispatch({ type: 'ticket/sisters', ticketId: t.id, frameIds: [], by: user.id })}>
+              No other frames on this lot
+            </Button>
+          </>
+        );
+      case 'held':
+        return (
+          <>
+            <p className="t-small text-ink">
+              Put a red hold tag on the {frameWord(t.frameId)} cops made since {hhmm(hold!.from)} (about {roundKg(holdKg(hold!, now))} kg) and keep them off the trolley to winding.
+            </p>
+            <Button size="lg" block onClick={() => dispatch({ type: 'hold/tag', holdId: hold!.id, by: user.id })}>
+              Held, tag is on
+            </Button>
+          </>
+        );
+      case 'line':
+        return (
+          <>
+            <p className="t-small text-ink">{hold ? 'Stopping the frame stops the hold growing.' : 'Stop the frame if it keeps making bad yarn.'}</p>
+            <div className="grid grid-cols-2 gap-2">
+              <Button size="lg" variant="danger" onClick={() => dispatch({ type: 'ticket/line', ticketId: t.id, action: 'stopped', by: user.id })}>
+                Stopped it
+              </Button>
+              <Button size="lg" variant="secondary" onClick={() => dispatch({ type: 'ticket/line', ticketId: t.id, action: 'corrected', by: user.id })}>
+                Corrected it
+              </Button>
+            </div>
+            {!t.fitterId && (
+              <Button variant="ghost" block onClick={() => setSheet('fitter')}>
+                Send a fitter
+              </Button>
+            )}
+          </>
+        );
+      case 'fixed':
+        return (
+          <>
+            {t.waitingPart ? (
+              <>
+                <p className="t-small rounded-[10px] bg-major-soft px-3 py-2.5 text-ink">
+                  <span className="t-small-strong">Waiting for a spare part:</span> {t.waitingPart}. The timer is paused.
+                </p>
+                <Button size="lg" block variant="secondary" onClick={() => dispatch({ type: 'ticket/partArrived', ticketId: t.id, by: user.id })}>
+                  Part arrived
+                </Button>
+              </>
+            ) : fitter && !t.repairDoneAt ? (
+              <p className="t-small rounded-[10px] bg-major-soft px-3 py-2.5 text-ink">
+                <span className="t-small-strong">{fitter}</span> is repairing the frame
+              </p>
+            ) : null}
+            <Button size="lg" block variant={t.repairDoneAt || !fitter ? 'primary' : 'secondary'} onClick={() => setSheet('fixed')}>
+              Mark fixed
+            </Button>
+            {!t.fitterId && (
+              <Button variant="ghost" block onClick={() => setSheet('fitter')}>
+                Send a fitter
+              </Button>
+            )}
+            {!t.waitingPart && (
+              <Button variant="ghost" block onClick={() => setSheet('part')}>
+                Waiting for a spare part
+              </Button>
+            )}
+          </>
+        );
+      case 'retest':
+        return user.role === 'qc' && retest ? (
+          <Link to={`/app/test/${retest.id}`} className="t-body-strong flex h-12 items-center justify-center rounded-[10px] border border-line bg-raised text-brand-text">
+            Enter the re-test result
+          </Link>
+        ) : (
+          <p className="t-small text-ink">At the top of the lab’s list{retest ? `, due ${hhmm(retest.dueAt)}` : ''}. A pass confirms the fix; a fail sends this back to you.</p>
+        );
+      case 'decided':
+        return <p className="t-small text-ink">The QC manager decides: release, re-test more, reprocess or downgrade. You will be told what to do with the yarn.</p>;
+    }
+    return null;
+  };
+
+  const notice = hold && hold.status !== 'on_hold' && hold.taggedAt && !hold.movedAt && isSupervisor;
 
   return (
     <Page title={frameWord(t.frameId)} back="/app">
@@ -346,81 +452,78 @@ function TicketDetail({ s, t, now, user }: { s: MillState; t: Ticket; now: numbe
         aria-label="Is it resolved?"
         className={cx(
           'mt-4 flex items-center gap-4 rounded-[16px] p-4',
-          tone === 'ok' ? 'bg-ok-soft' : tone === 'critical' ? 'bg-critical-soft' : tone === 'major' ? 'bg-major-soft' : 'bg-sunken',
+          panel.tone === 'ok' ? 'bg-ok-soft' : panel.tone === 'wait' ? 'bg-sunken' : panel.tone === 'critical' ? 'bg-critical-soft' : panel.tone === 'major' ? 'bg-major-soft' : 'bg-sunken',
         )}
       >
-        <span className={cx('grid size-12 shrink-0 place-items-center rounded-full', resolved ? 'bg-ok text-[var(--surface-raised)]' : 'bg-raised')}>
-          {resolved ? <Checkmark size={28} /> : <SeverityShape level={t.severity} size={22} />}
+        <span className={cx('grid size-12 shrink-0 place-items-center rounded-full', closed ? 'bg-ok text-[var(--surface-raised)]' : 'bg-raised')}>
+          {closed ? <Checkmark size={28} /> : <SeverityShape level={t.severity} size={22} />}
         </span>
         <div className="min-w-0">
-          <p className={cx('t-alert', resolved ? 'text-ok' : t.severity === 'critical' ? 'text-critical' : t.severity === 'major' ? 'text-major' : 'text-ink')}>
-            {resolved ? 'Resolved' : 'Not resolved yet'}
-          </p>
-          <p className="t-small text-ink">
-            {resolved ? `${t.fixedAt ? `Fixed at ${hhmm(t.fixedAt)}${t.fixedBy ? ` by ${userName(s, t.fixedBy).split(' ')[0]}` : ''}. ` : `Closed at ${hhmm(t.closedAt!)}. `}${outcome}` : nowLine}
-          </p>
+          <p className={cx('t-alert', closed ? 'text-ok' : panel.tone === 'wait' ? 'text-ink' : t.severity === 'critical' ? 'text-critical' : t.severity === 'major' ? 'text-major' : 'text-ink')}>{panel.head}</p>
+          <p className="t-small text-ink">{panel.line}</p>
         </div>
       </section>
 
-      <ol className="mt-4 grid grid-cols-4" aria-label="Progress">
-        {steps.map((st, i) => {
-          const done = !!st.at;
-          const next = !done && (i === 0 || !!steps[i - 1].at);
-          return (
-            <li key={st.word} className="relative flex flex-col items-center gap-1 text-center">
-              {i > 0 && <span className={cx('absolute top-[11px] right-1/2 left-[-50%] h-0.5', done ? 'bg-ok' : 'bg-[var(--grid)]')} aria-hidden />}
-              <span
-                className={cx(
-                  'relative z-[1] grid size-6 place-items-center rounded-full border-2',
-                  done ? 'border-ok bg-ok text-[var(--surface-raised)]' : next ? 'border-line-strong bg-raised' : 'border-[var(--grid)] bg-raised',
-                )}
-              >
-                {done && <Checkmark size={14} />}
-              </span>
-              <span className={cx('t-small', done ? 'font-semibold text-ink' : 'text-muted')}>{st.word}</span>
-              <span className="t-data text-[12px] text-muted">{st.at ? hhmm(st.at) : next ? 'next' : ''}</span>
-            </li>
-          );
-        })}
-      </ol>
-
-      {!resolved && t.status === 'open' && t.severity !== 'minor' && (
+      {t.status === 'open' && t.severity !== 'minor' && (
         <section className="mt-4">
           <ResponseTimer elapsed={esc.elapsed} limitMins={t.seenMins} state={esc.timer} level={esc.level} />
         </section>
       )}
 
-      {action && <div className="mt-5">{action}</div>}
+      {notice && (
+        <section className="mt-4 rounded-[16px] border border-ink bg-raised p-4 shadow-raised" aria-label="Yarn decision">
+          <p className="t-small-strong text-muted">Yarn decision from the QC manager</p>
+          <p className="t-section mt-1">
+            {hold!.status === 'released' ? 'Release: remove the red tag, send the yarn to winding' : hold!.status === 'reprocess' ? 'Reprocess: keep the tag, move the yarn to reprocess' : 'Downgrade: keep the tag, move the yarn to lower grade'}
+          </p>
+          <Button size="lg" block className="mt-3" onClick={() => dispatch({ type: 'hold/moved', holdId: hold!.id, by: user.id })}>
+            Done, yarn moved
+          </Button>
+        </section>
+      )}
 
-      <div className="mt-6 grid grid-cols-2 gap-3">
-        {reading && (
+      <ol className="mt-5 flex flex-col gap-2" aria-label="Steps">
+        {steps.map((st, i) => (
+          <Step key={st.key} n={i + 1} title={st.title} state={stateOf(i)} when={st.when ? hhmm(st.when) : undefined}>
+            {body(st.key)}
+          </Step>
+        ))}
+      </ol>
+
+      <div className="mt-5 grid grid-cols-2 gap-3">
+        {lastReading && (
           <section className="col-span-2 rounded-[16px] border border-line bg-raised p-4">
-            <ReadingGauge test={reading.test} value={reading.value} min={rule?.min} max={t.kind === 'test_fail' ? rule?.max : reading.max} drift={t.kind !== 'test_fail' && reading.test === 'cv'} />
-            {t.readings.length > 1 && <p className="t-small mt-3 text-muted">{t.readings.length} readings on this issue</p>}
+            <ReadingGauge test={lastReading.test} value={lastReading.value} min={rule?.min ?? lastReading.min} max={rule?.max ?? lastReading.max} />
+            {t.readings.length > 1 && <p className="t-small mt-3 text-muted">{t.readings.length} readings on this issue, latest shown</p>}
           </section>
         )}
         {hold && (
           <section className="rounded-[16px] bg-held-soft p-4">
-            <p className="t-small text-held">Yarn held</p>
+            <p className="t-small text-held">Yarn held{hold.taggedAt ? ', tagged' : ''}</p>
             <p className="t-stat text-held">
               {roundKg(holdKg(hold, now))}
               <span className="t-small ml-1">kg</span>
             </p>
-            <p className="t-small mt-1 text-ink">{hold.status === 'on_hold' ? (hold.to ? 'QC manager decides' : `Since ${hhmm(hold.from)}, still growing`) : hold.status === 'released' ? 'Released' : hold.status === 'reprocess' ? 'Sent to reprocess' : 'Sold as lower grade'}</p>
+            <p className="t-small mt-1 text-ink">{hold.status === 'on_hold' ? (hold.to ? 'Not growing' : `Since ${hhmm(hold.from)}, still growing`) : hold.status === 'released' ? 'Released' : hold.status === 'reprocess' ? 'Sent to reprocess' : 'Sold as lower grade'}</p>
           </section>
         )}
-        {sisters.length > 0 && (
+        {t.sisterFrames.length > 0 && (
           <section className="rounded-[16px] border border-line bg-raised p-4">
-            <p className="t-small text-muted">Sister frames</p>
+            <p className="t-small text-muted">Other frames on Lot {t.lotId}</p>
             <ul className="mt-2 flex flex-col gap-1.5">
-              {sisters.map((x) => (
-                <li key={x.f} className="flex items-center justify-between">
-                  <span className="t-data">{x.f}</span>
-                  <span className={cx('t-small-strong', x.state === 'ok' ? 'text-ok' : x.state === 'bad' ? 'text-critical' : 'text-muted')}>
-                    {x.state === 'ok' ? 'Passed' : x.state === 'bad' ? 'Failed' : x.state === 'skip' ? 'Not needed' : 'Testing'}
-                  </span>
-                </li>
-              ))}
+              {t.sisterFrames.map((f) => {
+                const r = s.requests.find((q) => q.ticketId === t.id && q.frameId === f && q.reason === 'sister');
+                const res = r?.resultId ? s.results.find((x) => x.id === r.resultId) : undefined;
+                const st = res ? (res.pass ? 'ok' : 'bad') : r?.status === 'cancelled' ? 'skip' : 'wait';
+                return (
+                  <li key={f} className="flex items-center justify-between">
+                    <span className="t-data">{f}</span>
+                    <span className={cx('t-small-strong', st === 'ok' ? 'text-ok' : st === 'bad' ? 'text-critical' : 'text-muted')}>
+                      {st === 'ok' ? 'Passed' : st === 'bad' ? 'Failed' : st === 'skip' ? 'Not needed' : 'Testing'}
+                    </span>
+                  </li>
+                );
+              })}
             </ul>
           </section>
         )}
@@ -428,7 +531,13 @@ function TicketDetail({ s, t, now, user }: { s: MillState; t: Ticket; now: numbe
 
       {t.photo && <img src={t.photo} alt={`Photo added when ${frameWord(t.frameId)} was fixed`} className="mt-4 w-full rounded-[16px] border border-line" />}
 
-      <details className="group mt-6 rounded-[16px] border border-line bg-raised">
+      {t.rca && (
+        <p className="t-small mt-4 rounded-[10px] bg-sunken px-3 py-2.5 text-ink">
+          <span className="t-small-strong">Root-cause check open.</span> No cause was found, so the QC manager follows up.
+        </p>
+      )}
+
+      <details className="group mt-5 rounded-[16px] border border-line bg-raised">
         <summary className="t-small-strong flex h-12 cursor-pointer list-none items-center justify-between px-4 text-ink">
           Full history · {timeline(t, now).length} updates
           <ChevronRight size={20} className="text-muted transition-transform group-open:rotate-90" />
@@ -438,41 +547,10 @@ function TicketDetail({ s, t, now, user }: { s: MillState; t: Ticket; now: numbe
         </div>
       </details>
 
-      {canAsk && !resolved && (
-        <div className="mt-4 flex flex-col gap-2">
-          {pendingAsk ? (
-            user.role === 'qc' ? (
-              <Link to={`/app/test/${pendingAsk.id}`} className="t-body-strong flex h-12 items-center justify-center rounded-[10px] border border-line bg-raised text-brand-text">
-                Enter the lab result
-              </Link>
-            ) : (
-              <p className="t-small rounded-[10px] bg-sunken px-3 py-2.5 text-center text-muted">Lab test asked, due {hhmm(pendingAsk.dueAt)}</p>
-            )
-          ) : (
-            <Button variant="secondary" block onClick={() => dispatch({ type: 'test/ask', ticketId: t.id, test: askTest, by: user.id } as never)}>
-              Ask the lab to test now
-            </Button>
-          )}
-        </div>
-      )}
-
-      {t.rca && (
-        <p className="t-small mt-4 rounded-[10px] bg-sunken px-3 py-2.5 text-ink">
-          <span className="t-small-strong">Root-cause check open.</span> No cause was found, so this frame is watched for a repeat.
-        </p>
-      )}
-
-      {canAct && !resolved && (
-        <div className="mt-4 flex flex-col gap-1">
-          {!t.waitingPart && t.status !== 'open' && (
-            <Button variant="ghost" block onClick={() => setSheet('part')}>
-              Waiting for a spare part
-            </Button>
-          )}
-          <Button variant="ghost" block onClick={() => setSheet('handover')}>
-            Hand over to next shift
-          </Button>
-        </div>
+      {canAct && !closed && t.status !== 'fixed' && (
+        <Button variant="ghost" block className="mt-3" onClick={() => setSheet('handover')}>
+          Hand over to next shift
+        </Button>
       )}
 
       {sheet === 'fitter' && <FitterSheet t={t} user={user} onClose={() => setSheet(null)} />}
@@ -549,10 +627,12 @@ function FixedSheet({ t, user, onClose }: { t: Ticket; user: User; onClose: () =
       <div role="radiogroup" aria-label="Cause" className="grid grid-cols-1 gap-2">
         {CAUSES.map((c) => (
           <Choice key={c} selected={cause === c} onClick={() => setCause(c)}>
-            {c}
+            <span className="block">{c}</span>
+            <span className="t-small text-muted">{CAUSE_HINT[c]}</span>
           </Choice>
         ))}
       </div>
+      <p className="t-small mt-3 text-muted">After this the lab re-tests the frame. The ticket closes only when the re-test passes.</p>
       <div className="mt-4 flex flex-col gap-1.5">
         <label htmlFor="fix-note" className="t-small-strong text-muted">
           Note (optional)
@@ -685,12 +765,12 @@ export function TestEntryScreen() {
         <ul className="mt-2 flex flex-col gap-1.5">
           {result.pass ? (
             <li className="t-body">
-              {req.reason === 'drift' ? 'Closed the drift ticket as checked, OK' : req.reason === 'retest' ? 'Told the QC manager the re-test passed' : 'Recorded the result'}
+              {req.reason === 'retest' ? 'Fix confirmed. The QC manager can decide on the held yarn.' : 'Recorded the result'}
             </li>
           ) : (
             <>
               {req.reason === 'retest' ? (
-                <li className="t-body">Yarn stays on hold. The QC manager decides next.</li>
+                <li className="t-body">Ticket sent back to the supervisor. The yarn stays on hold.</li>
               ) : (
                 <>
                   <li className="t-body">Alert sent to the {shiftAt(now)} shift supervisor{t?.severity === 'critical' ? ' with sound' : ''}</li>
@@ -946,6 +1026,123 @@ export function PreviousScreen() {
           </ul>
         </section>
       ))}
+    </Page>
+  );
+}
+
+// ================= Lab: report a failed test =================
+/** Routine tests run at the start of each shift (every 8 hours). The last three, newest first. */
+function routineSlots(now: number) {
+  const out: number[] = [];
+  for (let d = 0; d < 2 && out.length < 3; d++) {
+    const day = mill(millDayKey(now - d * DAY));
+    for (const h of [22, 14, 6]) {
+      const at = day + h * HOUR;
+      if (at <= now && out.length < 3) out.push(at);
+    }
+  }
+  return out.sort((a, b) => b - a);
+}
+
+export function FailScreen() {
+  const s = useMillState();
+  const now = useNow();
+  const user = useUser('app');
+  const dispatch = useDispatch();
+  const nav = useNavigate();
+  const [frameId, setFrameId] = useState<string>();
+  const [test, setTest] = useState<TestKind>('count');
+  const [raw, setRaw] = useState('');
+  const slots = useMemo(() => routineSlots(now), [Math.floor(now / HOUR)]);
+  const [lastPass, setLastPass] = useState<number>(slots[0]);
+  const frame = frameId ? s.frames.find((f) => f.id === frameId) : undefined;
+  const product = frame ? productOfFrame(s, frame.id) : undefined;
+  const rule = product ? ruleFor(s, product.id, test) : undefined;
+  const value = raw.trim() === '' ? undefined : Number(raw.replace(',', '.'));
+  const invalid = value !== undefined && (Number.isNaN(value) || value <= 0);
+  const inside = value !== undefined && !invalid && withinRule(rule, value);
+  const allowed = user.role === 'tester' || user.role === 'qc';
+  const ready = !!frame && value !== undefined && !invalid && !inside && allowed;
+  const kg = product ? roundKg((product.kgPerHour * (now - lastPass)) / HOUR) : 0;
+  const sup = frame ? supervisorFor(s, frame.id, now) : undefined;
+  const label = (t: number) => `${sameMillDay(t, now) ? 'Today' : dayMonth(t)} ${hhmm(t)}`;
+
+  return (
+    <Page title="Report a failed test" sub="Frame and lot are on the sample label" back="/app">
+      <form
+        className="flex flex-col gap-5"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!ready) return;
+          dispatch({ type: 'result/enter', frameId: frame!.id, test, value: value!, lastPassAt: lastPass, by: user.id });
+          const t = useMill.getState().state.tickets.filter((x) => x.frameId === frame!.id && x.status !== 'closed').at(-1);
+          nav(t ? `/app/ticket/${t.id}` : '/app');
+        }}
+      >
+        <Field label="Frame">
+          <div role="radiogroup" aria-label="Frame" className="grid grid-cols-6 gap-1.5">
+            {s.frames.map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                role="radio"
+                aria-checked={frameId === f.id}
+                aria-label={f.id}
+                onClick={() => setFrameId(f.id)}
+                className={cx('t-data h-12 rounded-[8px] border text-[15px]', frameId === f.id ? 'border-ink bg-ink text-[var(--surface-raised)]' : 'border-line-strong bg-raised hover:bg-sunken')}
+              >
+                {f.num}
+              </button>
+            ))}
+          </div>
+        </Field>
+        {frame && product && (
+          <p className="t-small -mt-2 rounded-[10px] bg-sunken px-3 py-2.5 text-ink">
+            Lot <span className="t-data">{frame.lotId}</span> · {product.name}. Check it matches the label.
+          </p>
+        )}
+        <Field label="Which test">
+          <div role="radiogroup" aria-label="Test" className="grid grid-cols-2 gap-2">
+            {(['count', 'csp', 'twist', 'cv'] as TestKind[]).map((k) => (
+              <Choice key={k} selected={test === k} onClick={() => setTest(k)}>
+                {TEST[k].name}
+              </Choice>
+            ))}
+          </div>
+        </Field>
+        <TextField
+          big
+          label={`Reading${TEST[test].unit ? ` (${TEST[test].unit})` : ''}`}
+          inputMode="decimal"
+          autoComplete="off"
+          value={raw}
+          onChange={(e) => setRaw(e.target.value)}
+          unit={TEST[test].unit}
+          error={invalid ? 'Enter a number, like 28.9' : undefined}
+        />
+        {rule && (
+          <div className="-mt-2 rounded-[10px] border border-line bg-raised p-4">
+            <ReadingGauge test={test} value={invalid ? undefined : value} min={rule.min} max={rule.max} pending />
+            {inside && <p className="t-small mt-3 text-ok">This is inside the limit. Only report readings outside it.</p>}
+          </div>
+        )}
+        <Field label="When did this frame last pass?">
+          <div role="radiogroup" aria-label="Last passed" className="grid grid-cols-3 gap-2">
+            {slots.map((t) => (
+              <Choice key={t} selected={lastPass === t} onClick={() => setLastPass(t)} className="text-center">
+                {label(t)}
+              </Choice>
+            ))}
+          </div>
+          <p className="t-small mt-1 text-muted">From the register. The yarn made since then is held{kg ? `, about ${kg} kg` : ''}.</p>
+        </Field>
+        <Button size="lg" block type="submit" variant="danger" disabled={!ready}>
+          Report failed test
+        </Button>
+        <p className="t-small -mt-3 text-center text-muted">
+          {!allowed ? 'Only the lab tester and the QC manager report results.' : sup ? `${sup.name} (supervisor) is alerted at once.` : 'The shift supervisor is alerted at once.'}
+        </p>
+      </form>
     </Page>
   );
 }

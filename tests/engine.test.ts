@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { apply, holdKg, roundKg } from '../src/engine/reducer';
 import { DEMO_START, seedState } from '../src/engine/seed';
-import { escalation, frameView, heldKg, myTickets, openHolds, pendingRequests, takeoversFor, timeline } from '../src/engine/selectors';
+import { decisionNotices, escalation, frameView, heldKg, holdNudge, myTickets, openHolds, pendingRequests, takeoversFor } from '../src/engine/selectors';
 import { MIN } from '../src/engine/time';
 import { alertHeat } from '../src/engine/analytics';
 import { predictAll, predictFrame } from '../src/engine/predict';
@@ -14,7 +14,7 @@ const user = (s: MillState, id: string) => s.users.find((u) => u.id === id)!;
 describe('seed', () => {
   it('has a month of history and a calm start', () => {
     const s = seedState();
-    expect(s.tickets.length).toBeGreaterThanOrEqual(30);
+    expect(s.tickets.length).toBeGreaterThanOrEqual(25);
     expect(s.frames).toHaveLength(24);
     expect(s.tickets.filter((t) => t.status !== 'closed' && t.severity !== 'minor' && t.status !== 'fixed')).toHaveLength(0);
     expect(openHolds(s)).toHaveLength(2);
@@ -28,71 +28,75 @@ describe('seed', () => {
   });
 });
 
-describe('jury demo path', () => {
-  it('drift -> urgent test -> critical fail -> contain -> escalate -> fix -> retest -> release -> close', () => {
+describe('simplified workflow', () => {
+  it('fail -> alert -> Seen -> sisters -> Held -> stop -> fixed -> re-test -> decide -> close', () => {
     const s = seedState();
-    const t0 = DEMO_START + 5 * MIN; // 09:45
-    run(s, t0, { type: 'sim/drift', frameId: 'RF-12', cvPct: 2.4, by: 'system' });
-    const drift = s.tickets.at(-1)!;
-    expect(drift.severity).toBe('major');
-    expect(drift.kind).toBe('drift');
-    const req = s.requests.find((r) => r.ticketId === drift.id)!;
-    expect(req.urgent).toBe(true);
-    expect(takeoversFor(s, user(s, 'krish'), t0).map((t) => t.id)).toContain(drift.id);
-
-    // Lab enters 28.9 at 09:55 -> critical, same ticket raised.
-    const t1 = DEMO_START + 15 * MIN;
-    run(s, t1, { type: 'result/enter', frameId: 'RF-12', test: 'count', value: 28.9, requestId: req.id, by: 'rohan' });
-    const t = s.tickets.find((x) => x.id === drift.id)!;
+    const t0 = DEMO_START + 15 * MIN; // 09:55
+    const lastPass = DEMO_START - 100 * MIN; // 08:00
+    // 1-3. Lab tester marks the fail with when the frame last passed.
+    run(s, t0, { type: 'result/enter', frameId: 'RF-12', test: 'count', value: 28.9, lastPassAt: lastPass, by: 'rohan' });
+    const t = s.tickets.at(-1)!;
     expect(t.severity).toBe('critical');
-    expect(t.status).toBe('open');
-    expect(t.sisterFrames).toEqual(['RF-13', 'RF-14']);
+    expect(t.sisterFrames).toEqual([]); // no automatic sister frames
     const hold = s.holds.find((h) => h.id === t.holdId)!;
-    expect(roundKg(holdKg(hold, t1))).toBe(60); // 08:00 -> 09:55 at 30 kg/h
-    expect(s.requests.filter((r) => r.reason === 'sister' && r.status === 'pending')).toHaveLength(2);
-    expect(frameView(s, 'RF-12', t1).kind).toBe('fault');
-    expect(frameView(s, 'RF-13', t1).kind).toBe('warning');
-
-    // Nobody taps: QC manager at 10 min, plant head at 20.
-    expect(escalation(t, t1 + 11 * MIN).level).toBe(1);
-    expect(takeoversFor(s, user(s, 'priya'), t1 + 11 * MIN)).toHaveLength(1);
-    expect(takeoversFor(s, user(s, 'mohit'), t1 + 11 * MIN)).toHaveLength(0);
-    expect(escalation(t, t1 + 21 * MIN).level).toBe(2);
-
+    expect(hold.from).toBe(lastPass);
+    expect(roundKg(holdKg(hold, t0))).toBe(60); // 08:00 -> 09:55 at 30 kg/h
+    // 4. Only the frame's own supervisor at first; the backup after 5 min; QC at 10; plant head at 20.
+    expect(takeoversFor(s, user(s, 'krish'), t0).map((x) => x.id)).toContain(t.id);
+    expect(takeoversFor(s, user(s, 'farhan'), t0)).toHaveLength(0);
+    expect(takeoversFor(s, user(s, 'farhan'), t0 + 6 * MIN).map((x) => x.id)).toContain(t.id);
+    expect(takeoversFor(s, user(s, 'priya'), t0 + 11 * MIN)).toHaveLength(1);
+    expect(escalation(t, t0 + 21 * MIN).level).toBe(2);
     // A second fail on the same frame is grouped.
-    run(s, t1 + 3 * MIN, { type: 'result/enter', frameId: 'RF-12', test: 'count', value: 28.8, by: 'rohan' });
+    run(s, t0 + 2 * MIN, { type: 'result/enter', frameId: 'RF-12', test: 'count', value: 28.8, by: 'rohan' });
     expect(s.tickets.filter((x) => x.frameId === 'RF-12' && x.status !== 'closed')).toHaveLength(1);
-
-    const seenAt = t1 + 21 * MIN;
-    run(s, seenAt, { type: 'ticket/seen', ticketId: t.id, by: 'krish' });
-    expect(escalation(t, seenAt + 60 * MIN).level).toBe(2); // frozen at Seen
-    expect(timeline(t, seenAt).filter((e) => e.kind === 'escalated')).toHaveLength(2);
-
-    run(s, seenAt + MIN, { type: 'ticket/working', ticketId: t.id, by: 'krish' });
-    run(s, seenAt + 2 * MIN, { type: 'ticket/assignFitter', ticketId: t.id, fitterId: 'suresh', by: 'krish' });
-    run(s, seenAt + 20 * MIN, { type: 'ticket/repairDone', ticketId: t.id, by: 'suresh' });
-    run(s, seenAt + 22 * MIN, { type: 'ticket/fixed', ticketId: t.id, cause: 'Draft setting slipped', by: 'krish' });
+    // 5. Seen, tick sister frames, tag the yarn.
+    const seen = t0 + 3 * MIN;
+    run(s, seen, { type: 'ticket/seen', ticketId: t.id, by: 'krish' });
+    run(s, seen, { type: 'ticket/sisters', ticketId: t.id, frameIds: ['RF-13', 'RF-14'], by: 'krish' });
+    expect(t.sisterFrames).toEqual(['RF-13', 'RF-14']);
+    expect(pendingRequests(s).filter((r) => r.reason === 'sister')).toHaveLength(2);
+    run(s, seen + MIN, { type: 'hold/tag', holdId: hold.id, by: 'krish' });
+    expect(hold.taggedAt).toBe(seen + MIN);
+    // 6. Stop the line: the hold stops growing.
+    run(s, seen + 2 * MIN, { type: 'ticket/line', ticketId: t.id, action: 'stopped', by: 'krish' });
+    expect(hold.to).toBe(seen + 2 * MIN);
+    expect(s.frames.find((f) => f.id === 'RF-12')!.stopped).toBe('Stopped for repair');
+    run(s, seen + 3 * MIN, { type: 'ticket/assignFitter', ticketId: t.id, fitterId: 'suresh', by: 'krish' });
+    run(s, seen + 20 * MIN, { type: 'ticket/repairDone', ticketId: t.id, by: 'suresh' });
+    // 7. Fixed does not close: it asks the lab for a re-test.
+    run(s, seen + 22 * MIN, { type: 'ticket/fixed', ticketId: t.id, cause: 'Setting', by: 'krish' });
     expect(t.status).toBe('fixed');
-    expect(hold.to).toBe(seenAt + 22 * MIN);
-
-    // Releasing without a passed re-test needs the plant head.
-    run(s, seenAt + 30 * MIN, { type: 'hold/retest', holdId: hold.id, by: 'priya' });
-    const rq = s.requests.find((r) => r.holdId === hold.id && r.status === 'pending')!;
-    run(s, seenAt + 50 * MIN, { type: 'result/enter', frameId: 'RF-12', test: 'count', value: 30.0, requestId: rq.id, by: 'rohan' });
+    expect(s.frames.find((f) => f.id === 'RF-12')!.stopped).toBeUndefined();
+    const rq = s.requests.find((r) => r.ticketId === t.id && r.reason === 'retest' && r.status === 'pending')!;
+    expect(rq).toBeTruthy();
+    // 8. Re-test passes: fix confirmed, still open until the yarn is decided.
+    run(s, seen + 40 * MIN, { type: 'result/enter', frameId: 'RF-12', test: 'count', value: 30.0, requestId: rq.id, by: 'rohan' });
+    expect(t.fixConfirmedAt).toBeDefined();
     expect(hold.retest).toBe('passed');
-    run(s, seenAt + 55 * MIN, { type: 'hold/decide', holdId: hold.id, outcome: 'release', reason: 'Re-test passed', by: 'priya' });
+    expect(t.status).toBe('fixed');
+    // 9. QC decides; the supervisor is told; the ticket closes.
+    run(s, seen + 45 * MIN, { type: 'hold/decide', holdId: hold.id, outcome: 'release', reason: 'Re-test passed', by: 'priya' });
     expect(hold.status).toBe('released');
     expect(t.status).toBe('closed');
+    expect(decisionNotices(s, user(s, 'krish'), seen + 46 * MIN).map((h) => h.id)).toContain(hold.id);
+    run(s, seen + 50 * MIN, { type: 'hold/moved', holdId: hold.id, by: 'krish' });
+    expect(decisionNotices(s, user(s, 'krish'), seen + 51 * MIN)).toHaveLength(0);
   });
 
-  it('drift that passes the lab test closes as checked OK', () => {
+  it('a failed re-test reopens the ticket, alerts again and keeps the hold growing', () => {
     const s = seedState();
-    run(s, DEMO_START, { type: 'sim/drift', frameId: 'RF-07', cvPct: 2.3, by: 'system' });
+    run(s, DEMO_START, { type: 'result/enter', frameId: 'RF-12', test: 'count', value: 28.9, by: 'rohan' });
     const t = s.tickets.at(-1)!;
-    const req = s.requests.find((r) => r.ticketId === t.id)!;
-    run(s, DEMO_START + 10 * MIN, { type: 'result/enter', frameId: 'RF-07', test: 'count', value: 40.1, requestId: req.id, by: 'rohan' });
-    expect(t.status).toBe('closed');
-    expect(t.closeReason).toBe('checked_ok');
+    run(s, DEMO_START + MIN, { type: 'ticket/seen', ticketId: t.id, by: 'krish' });
+    run(s, DEMO_START + 30 * MIN, { type: 'ticket/fixed', ticketId: t.id, cause: 'Machine', by: 'krish' });
+    const rq = s.requests.find((r) => r.ticketId === t.id && r.reason === 'retest' && r.status === 'pending')!;
+    run(s, DEMO_START + 50 * MIN, { type: 'result/enter', frameId: 'RF-12', test: 'count', value: 28.7, requestId: rq.id, by: 'rohan' });
+    expect(t.status).toBe('open');
+    expect(t.reopened).toBe(1);
+    expect(t.alertAt).toBe(DEMO_START + 50 * MIN);
+    expect(s.holds.find((h) => h.id === t.holdId)!.to).toBeUndefined();
+    expect(takeoversFor(s, user(s, 'krish'), DEMO_START + 51 * MIN).map((x) => x.id)).toContain(t.id);
   });
 
   it('sample error releases the hold and closes as a false alarm', () => {
@@ -105,17 +109,37 @@ describe('jury demo path', () => {
     expect(s.requests.filter((r) => r.ticketId === t.id && r.status === 'pending')).toHaveLength(0);
   });
 
-  it('release against a failed re-test needs plant head approval', () => {
+  it('release against a failed or missing re-test needs plant head approval', () => {
     const s = seedState();
     run(s, DEMO_START, { type: 'result/enter', frameId: 'RF-12', test: 'count', value: 28.9, by: 'rohan' });
     const t = s.tickets.at(-1)!;
-    run(s, DEMO_START + MIN, { type: 'ticket/fixed', ticketId: t.id, cause: 'Draft setting slipped', by: 'krish' });
+    run(s, DEMO_START + MIN, { type: 'ticket/fixed', ticketId: t.id, cause: 'Setting', by: 'krish' });
     const h = s.holds.find((x) => x.id === t.holdId)!;
     run(s, DEMO_START + 5 * MIN, { type: 'hold/decide', holdId: h.id, outcome: 'release', reason: 'Delivery due', by: 'priya' });
     expect(h.status).toBe('on_hold');
     run(s, DEMO_START + 9 * MIN, { type: 'hold/approve', holdId: h.id, by: 'mohit' });
     expect(h.status).toBe('released');
+    expect(t.status).toBe('fixed'); // still waiting for the re-test to confirm the fix
+    const rq = s.requests.find((r) => r.ticketId === t.id && r.reason === 'retest' && r.status === 'pending')!;
+    run(s, DEMO_START + 20 * MIN, { type: 'result/enter', frameId: 'RF-12', test: 'count', value: 30.1, requestId: rq.id, by: 'rohan' });
     expect(t.status).toBe('closed');
+  });
+
+  it('nudges the QC manager after 2 hours and the plant head at the end of the shift', () => {
+    const s = seedState();
+    run(s, DEMO_START, { type: 'result/enter', frameId: 'RF-12', test: 'count', value: 28.9, by: 'rohan' });
+    const h = s.holds.at(-1)!;
+    expect(holdNudge(s, h, DEMO_START + 60 * MIN)).toBe('none');
+    expect(holdNudge(s, h, DEMO_START + 125 * MIN)).toBe('qc');
+    expect(holdNudge(s, h, DEMO_START + 5 * 60 * MIN)).toBe('plant'); // A shift ends 14:00
+  });
+
+  it('the seed history follows the rules: every closed fix was confirmed by a re-test', () => {
+    const s = seedState();
+    const fixed = s.tickets.filter((t) => t.status === 'closed' && t.closeReason === 'fixed' && t.test);
+    expect(fixed.length).toBeGreaterThan(10);
+    expect(fixed.every((t) => t.fixConfirmedAt)).toBe(true);
+    expect(s.tickets.some((t) => t.kind === 'drift')).toBe(false);
   });
 });
 
@@ -220,7 +244,10 @@ describe('exceptions', () => {
   it('the lab queue puts the riskiest test first', () => {
     const s = seedState();
     run(s, DEMO_START, { type: 'result/enter', frameId: 'RF-12', test: 'count', value: 28.9, by: 'rohan' });
-    run(s, DEMO_START + MIN, { type: 'sim/drift', frameId: 'RF-20', cvPct: 2.4, by: 'system' });
+    const crit = s.tickets.at(-1)!;
+    run(s, DEMO_START + MIN, { type: 'result/enter', frameId: 'RF-20', test: 'twist', value: 28.5, by: 'rohan' });
+    run(s, DEMO_START + 2 * MIN, { type: 'test/ask', ticketId: s.tickets.at(-1)!.id, test: 'twist', by: 'krish' });
+    run(s, DEMO_START + 3 * MIN, { type: 'ticket/sisters', ticketId: crit.id, frameIds: ['RF-13'], by: 'krish' });
     const q = pendingRequests(s);
     expect(q[0].reason).toBe('sister');
     expect(s.tickets.find((x) => x.id === q[0].ticketId)!.severity).toBe('critical');

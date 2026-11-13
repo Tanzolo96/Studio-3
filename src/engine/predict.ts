@@ -84,7 +84,7 @@ export function predictFrame(s: MillState, frameId: string, now: number): FrameP
     const def = PARTS[part];
     const evidence: string[] = [];
     let score = 4;
-    const mine = withCause.filter((t) => def.causes.includes(t.cause!)).length;
+    const mine = withCause.filter((t) => def.causes.includes(t.cause!) || (!!t.note && def.causes.includes(t.note))).length;
     if (mine) {
       score += mine * 16;
       evidence.push(mine === withCause.length ? `${mine === 1 ? 'The last fixed fault' : `All ${mine} fixed faults`} on ${frameId} ${mine === 1 ? 'was' : 'were'} ${def.causes[0].toLowerCase()}` : `${mine} of the last ${withCause.length} fixed faults on ${frameId} ${mine === 1 ? 'was' : 'were'} ${def.causes[0].toLowerCase()}`);

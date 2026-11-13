@@ -28,16 +28,15 @@ export const SHIFTS: Record<ShiftId, { start: number; end: number; hours: string
   C: { start: 22, end: 6, hours: '22:00–06:00' },
 };
 
-export const CAUSES = [
-  'Draft setting slipped',
-  'Wrong roving hank',
-  'Worn top roller or apron',
-  'Traveller or spindle fault',
-  'Humidity out of range',
-  'Roving lot changeover',
-  'Other',
-  'No cause found',
-] as const;
+/** Four plain causes plus "No cause found", which opens a root-cause check. */
+export const CAUSES = ['Machine', 'Setting', 'Material', 'Other', 'No cause found'] as const;
+export const CAUSE_HINT: Record<(typeof CAUSES)[number], string> = {
+  Machine: 'Worn roller or apron, spindle, traveller',
+  Setting: 'Draft or twist setting slipped',
+  Material: 'Wrong or bad roving, lot change',
+  Other: 'Humidity, handling, anything else',
+  'No cause found': 'Opens a root-cause check',
+};
 
 export const RAISE_PROBLEMS = [
   'Ends breaking often',

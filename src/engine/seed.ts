@@ -208,7 +208,27 @@ function run(s: MillState, at: number, e: MillEventInput) {
   apply(s, { ...(e as object), id: `seed-${eid}`, at } as MillEvent);
 }
 
+/** Seed history used detailed causes; the app now asks for four plain ones and keeps the detail as a note. */
+const CAUSE_OF: Record<string, string> = {
+  'Draft setting slipped': 'Setting',
+  'Wrong roving hank': 'Material',
+  'Roving lot changeover': 'Material',
+  'Worn top roller or apron': 'Machine',
+  'Traveller or spindle fault': 'Machine',
+  'Humidity out of range': 'Other',
+};
+
+/** A reading inside the limit for this frame's product and test. */
+function passValue(s: MillState, frameId: string, test: TestKind) {
+  const lot = s.lots.find((l) => l.id === s.frames.find((f) => f.id === frameId)!.lotId)!;
+  const r = s.rules.find((x) => x.productId === lot.productId && x.test === test)!;
+  const v = r.min !== undefined && r.max !== undefined ? (r.min + r.max) / 2 : r.min !== undefined ? r.min * 1.1 : r.max! * 0.9;
+  return +v.toFixed(test === 'csp' ? 0 : 1);
+}
+
 function replay(s: MillState, inc: Incident) {
+  // No machine integration: the early-warning drift incidents are not part of the history any more.
+  if (inc.kind === 'drift_ok') return;
   const at = mill(inc.d, inc.t);
   const sup = supervisorAt(at, inc.frame);
   const tester = testerAt(at);
@@ -218,17 +238,6 @@ function replay(s: MillState, inc: Incident) {
 
   if (inc.kind === 'manual') {
     run(s, at, { type: 'ticket/raise', frameId: inc.frame, problem: 'Ends breaking often', severity: 'major', note: 'Breaks on spindles 210 to 240', by: sup });
-  } else if (inc.kind === 'drift_ok' || inc.kind === 'drift_fail') {
-    run(s, at, { type: 'sim/drift', frameId: inc.frame, cvPct: inc.kind === 'drift_ok' ? inc.value! : 2.6, by: 'system' });
-    const t = last();
-    run(s, at + inc.seen * MIN, { type: 'ticket/seen', ticketId: t.id, by: sup });
-    const req = s.requests.find((r) => r.ticketId === t.id && r.status === 'pending')!;
-    const nom = s.products.find((p) => p.id === t.productId)!.nominalNe;
-    run(s, at + 22 * MIN, { type: 'result/enter', frameId: inc.frame, test: 'count', value: inc.kind === 'drift_ok' ? nom + 0.1 : inc.value!, requestId: req.id, by: tester });
-    if (inc.kind === 'drift_ok') return;
-    run(s, at + (22 + inc.seen) * MIN, { type: 'ticket/seen', ticketId: t.id, by: sup });
-    finish(s, t.id, at + 22 * MIN, inc, sup, fitter, tester);
-    return;
   } else if (inc.kind === 'sample') {
     run(s, at, { type: 'result/enter', frameId: inc.frame, test: 'count', value: inc.value!, by: tester });
     const t = last();
@@ -237,49 +246,66 @@ function replay(s: MillState, inc: Incident) {
     run(s, at + 18 * MIN, { type: 'result/sampleError', resultId: rid, by: tester });
     return;
   } else {
-    run(s, at, { type: 'result/enter', frameId: inc.frame, test: inc.kind, value: inc.value!, by: tester });
+    const test: TestKind = inc.kind === 'drift_fail' ? 'count' : inc.kind;
+    run(s, at, { type: 'result/enter', frameId: inc.frame, test, value: inc.value!, by: tester });
   }
   const t = last();
-  if (inc.kind !== 'manual') run(s, at + inc.seen * MIN, { type: 'ticket/seen', ticketId: t.id, by: sup });
+  if (inc.kind !== 'manual') {
+    const seenAt = at + inc.seen * MIN;
+    run(s, seenAt, { type: 'ticket/seen', ticketId: t.id, by: sup });
+    if (t.holdId) {
+      const sisters = s.frames.filter((f) => f.lotId === t.lotId && f.id !== t.frameId && !f.stopped).map((f) => f.id);
+      run(s, seenAt + MIN, { type: 'ticket/sisters', ticketId: t.id, frameIds: sisters, by: sup });
+      run(s, seenAt + 3 * MIN, { type: 'hold/tag', holdId: t.holdId, by: sup });
+    }
+  }
   if (inc.fix) finish(s, t.id, at, inc, sup, fitter, tester);
 }
 
 function answerSisters(s: MillState, ticketId: string, at: number, tester: string) {
   for (const r of s.requests.filter((q) => q.ticketId === ticketId && q.reason === 'sister' && q.status === 'pending')) {
-    const nom = s.products.find((p) => p.id === s.lots.find((l) => l.id === s.frames.find((f) => f.id === r.frameId)!.lotId)!.productId)!.nominalNe;
-    run(s, at, { type: 'result/enter', frameId: r.frameId, test: r.test, value: nom + 0.1, requestId: r.id, by: tester });
+    run(s, at, { type: 'result/enter', frameId: r.frameId, test: r.test, value: passValue(s, r.frameId, r.test), requestId: r.id, by: tester });
   }
+}
+
+function confirmFix(s: MillState, ticketId: string, at: number, tester: string) {
+  const r = s.requests.find((q) => q.ticketId === ticketId && q.reason === 'retest' && q.status === 'pending');
+  if (r) run(s, at, { type: 'result/enter', frameId: r.frameId, test: r.test, value: passValue(s, r.frameId, r.test), requestId: r.id, by: tester });
 }
 
 function finish(s: MillState, ticketId: string, at: number, inc: Incident, sup: string, fitter: string, tester: string) {
   answerSisters(s, ticketId, at + 14 * MIN, tester);
   const fixAt = at + inc.fix! * MIN;
-  run(s, at + (inc.seen + 2) * MIN, { type: 'ticket/working', ticketId, by: sup });
+  run(s, at + (inc.seen + 2) * MIN, { type: 'ticket/line', ticketId, action: inc.fix! > 60 ? 'stopped' : 'corrected', by: sup });
   run(s, at + (inc.seen + 4) * MIN, { type: 'ticket/assignFitter', ticketId, fitterId: fitter, by: sup });
   run(s, fixAt - 6 * MIN, { type: 'ticket/repairDone', ticketId, by: fitter });
-  run(s, fixAt, { type: 'ticket/fixed', ticketId, cause: inc.cause!, by: sup });
+  const cause = CAUSE_OF[inc.cause!] ?? inc.cause!;
+  run(s, fixAt, { type: 'ticket/fixed', ticketId, cause, note: cause !== inc.cause ? inc.cause : undefined, by: sup });
   const t = s.tickets.find((x) => x.id === ticketId)!;
   const h = t.holdId ? s.holds.find((x) => x.id === t.holdId) : undefined;
+  if (inc.outcome === 'override' && h) {
+    // Released for a delivery before the re-test came back: needs the plant head.
+    run(s, fixAt + 10 * MIN, { type: 'hold/decide', holdId: h.id, outcome: 'release', reason: 'Buyer C delivery due 28 Oct. Reading was 0.1 Ne outside, inside the buyer tolerance.', by: 'priya' });
+    confirmFix(s, ticketId, fixAt + 20 * MIN, tester);
+    run(s, fixAt + 60 * MIN, { type: 'hold/approve', holdId: h.id, by: 'mohit' });
+    run(s, fixAt + 75 * MIN, { type: 'hold/moved', holdId: h.id, by: sup });
+    return;
+  }
+  confirmFix(s, ticketId, fixAt + 20 * MIN, tester);
   if (!h || !inc.outcome || inc.outcome === 'open') return;
-  const d = fixAt + 40 * MIN;
+  const d = fixAt + 45 * MIN;
   if (inc.outcome === 'retest_release') {
-    run(s, d, { type: 'hold/retest', holdId: h.id, by: 'priya' });
-    const req = s.requests.find((r) => r.holdId === h.id && r.status === 'pending')!;
-    const nom = s.products.find((p) => p.id === t.productId)!.nominalNe;
-    run(s, d + 25 * MIN, { type: 'result/enter', frameId: t.frameId, test: 'count', value: nom - 0.1, requestId: req.id, by: tester });
-    run(s, d + 35 * MIN, { type: 'hold/decide', holdId: h.id, outcome: 'release', reason: 'Re-test passed on the held cones', by: 'priya' });
-  } else if (inc.outcome === 'override') {
-    run(s, d, { type: 'hold/decide', holdId: h.id, outcome: 'release', reason: 'Buyer C delivery due 28 Oct. Reading was 0.1 Ne outside, inside the buyer tolerance.', by: 'priya' });
-    run(s, d + 50 * MIN, { type: 'hold/approve', holdId: h.id, by: 'mohit' });
+    run(s, d, { type: 'hold/decide', holdId: h.id, outcome: 'release', reason: 'Re-test passed on the held cones', by: 'priya' });
   } else {
     run(s, d, {
       type: 'hold/decide',
       holdId: h.id,
-      outcome: inc.outcome,
+      outcome: inc.outcome as 'reprocess' | 'downgrade',
       reason: inc.outcome === 'reprocess' ? 'Too far outside the limit to sell to this buyer' : 'Sell as lower grade to the open market',
       by: 'priya',
     });
   }
+  run(s, d + 15 * MIN, { type: 'hold/moved', holdId: h.id, by: sup });
 }
 
 let cached: MillState | undefined;

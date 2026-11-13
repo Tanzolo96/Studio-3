@@ -137,11 +137,11 @@ function announce(s: MillState, t: Ticket, at: number) {
   else log(t, at, 'alerted', `Alert sent to ${supervisorWord(s, t.frameId, at)}${t.severity === 'critical' ? ' with sound' : ''}`);
 }
 
-/** Critical fail: hold yarn since the last good test, flag sister frames, ask the lab to test them. */
-function contain(s: MillState, t: Ticket, at: number, test: TestKind) {
+/** Critical fail: hold yarn made since the frame last passed. The supervisor is asked about sister frames at Seen. */
+function contain(s: MillState, t: Ticket, at: number, test: TestKind, lastPassAt?: number) {
   const product = productOfFrame(s, t.frameId);
-  const good = lastGoodTest(s, t.frameId, test, at);
-  const from = good?.at ?? at - 8 * HOUR;
+  const good = lastPassAt === undefined ? lastGoodTest(s, t.frameId, test, at) : undefined;
+  const from = Math.min(at, lastPassAt ?? good?.at ?? at - 8 * HOUR);
   const hold: Hold = {
     id: nextHoldId(s),
     ticketId: t.id,
@@ -155,18 +155,15 @@ function contain(s: MillState, t: Ticket, at: number, test: TestKind) {
   s.holds.push(hold);
   t.holdId = hold.id;
   const kg = roundKg(holdKg(hold, at));
-  log(t, at, 'contained', `${frameWord(t.frameId)} yarn since ${hhmm(from)} on hold (about ${kg} kg so far)`);
+  log(t, at, 'contained', `Hold created for ${frameWord(t.frameId)} yarn since ${hhmm(from)}, about ${kg} kg so far. Waiting for the red tag.`);
+}
 
-  const sisters = s.frames.filter((f) => f.lotId === t.lotId && f.id !== t.frameId && !f.stopped);
-  t.sisterFrames = sisters.map((f) => f.id);
-  for (const f of sisters) {
-    addRequest(s, { at, frameId: f.id, test, reason: 'sister', urgent: true, dueAt: at + 15 * MIN, ticketId: t.id });
-  }
-  if (sisters.length) {
-    const names = sisters.map((f) => Number(f.id.slice(3)));
-    const list = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : `${names[0]}`;
-    log(t, at, 'contained', `Frame${names.length > 1 ? 's' : ''} ${list} flagged. Urgent ${TEST[test].name.toLowerCase()} test sent to the lab.`);
-  }
+/** Close once the fix is confirmed by a re-test and the held yarn is decided (or there is none). */
+function maybeClose(s: MillState, t: Ticket, at: number, by: string) {
+  if (t.status !== 'fixed' || !t.fixConfirmedAt) return;
+  const h = t.holdId ? s.holds.find((x) => x.id === t.holdId) : undefined;
+  if (h && h.status === 'on_hold') return;
+  closeTicket(t, at, 'fixed', h ? 'Closed: fix confirmed by re-test and held yarn decided' : 'Closed: fix confirmed by re-test', by);
 }
 
 function closeTicket(t: Ticket, at: number, reason: Ticket['closeReason'], text: string, by = 'system') {
@@ -178,7 +175,7 @@ function closeTicket(t: Ticket, at: number, reason: Ticket['closeReason'], text:
 
 function maybeCloseAfterHold(s: MillState, h: Hold, at: number, by: string) {
   const t = s.tickets.find((x) => x.id === h.ticketId);
-  if (t && t.status === 'fixed') closeTicket(t, at, 'fixed', 'Closed: frame fixed and held yarn decided', by);
+  if (t) maybeClose(s, t, at, by);
 }
 
 // ---------- the reducer ----------
@@ -236,12 +233,33 @@ export function apply(s: MillState, e: MillEvent): void {
       const reading = { resultId: result.id, test: e.test, value: e.value, min: rule?.min, max: rule?.max, at: e.at };
       const parent = req?.ticketId ? s.tickets.find((t) => t.id === req.ticketId) : undefined;
 
-      // Re-test of held yarn: record it, never raise a new alert.
-      if (req?.reason === 'retest' && req.holdId) {
-        const h = s.holds.find((x) => x.id === req.holdId);
-        if (h) h.retest = pass ? 'passed' : 'failed';
-        if (parent)
-          log(parent, e.at, 'note', `Re-test of held yarn ${pass ? 'passed' : 'failed again'}: ${withUnit(e.test, e.value)}${pass ? '' : '. Yarn stays on hold for the QC manager.'}`, e.by);
+      // Re-test after Fixed (or asked by the QC manager): a pass confirms the fix, a fail sends it back to the line.
+      if (req?.reason === 'retest' && parent) {
+        const h = parent.holdId ? s.holds.find((x) => x.id === parent.holdId) : undefined;
+        if (h && h.status === 'on_hold') h.retest = pass ? 'passed' : 'failed';
+        if (pass) {
+          parent.readings.push(reading);
+          if (parent.status === 'fixed') parent.fixConfirmedAt = parent.fixConfirmedAt ?? e.at;
+          log(parent, e.at, 'confirmed', `Re-test passed: ${withUnit(e.test, e.value)}. Fix confirmed.${h && h.status === 'on_hold' ? ' QC manager can decide on the held yarn.' : ''}`, e.by);
+          maybeClose(s, parent, e.at, e.by);
+          return;
+        }
+        parent.readings.push(reading);
+        log(parent, e.at, 'reopened', `Re-test failed: ${withUnit(e.test, e.value)}. ${parent.status === 'fixed' ? 'Ticket reopened and the supervisor alerted again. ' : ''}Yarn stays on hold.`, e.by);
+        if (parent.status === 'fixed') {
+          parent.status = 'open';
+          parent.alertAt = e.at;
+          parent.seenAt = undefined;
+          parent.seenBy = undefined;
+          parent.fixedAt = undefined;
+          parent.fixConfirmedAt = undefined;
+          parent.lineAction = undefined;
+          parent.lineActionAt = undefined;
+          parent.repairDoneAt = undefined;
+          parent.reopened = (parent.reopened ?? 0) + 1;
+          if (h && h.status === 'on_hold') h.to = undefined; // still making suspect yarn
+          announce(s, parent, e.at);
+        }
         return;
       }
 
@@ -290,7 +308,7 @@ export function apply(s: MillState, e: MillEvent): void {
       if (req?.reason === 'sister' && parent) {
         log(parent, e.at, 'note', `${frameWord(e.frameId)} sister check failed: ${withUnit(e.test, e.value)}. Opened ${t.id}.`, e.by);
       }
-      if (severity === 'critical') contain(s, t, e.at, e.test);
+      if (severity === 'critical') contain(s, t, e.at, e.test, e.lastPassAt);
       announce(s, t, e.at);
       return;
     }
@@ -387,12 +405,22 @@ export function apply(s: MillState, e: MillEvent): void {
         t.rca = true;
         log(t, e.at, 'note', 'Root-cause check opened. The frame is watched for a repeat of this fault.');
       }
+      const frame = frameOf(s, t.frameId);
+      if (frame.stopped === 'Stopped for repair') frame.stopped = undefined;
       const h = t.holdId ? s.holds.find((x) => x.id === t.holdId) : undefined;
       if (h && !h.to) {
         h.to = e.at;
-        log(t, e.at, 'note', `Hold stops growing: about ${roundKg(holdKg(h, e.at))} kg waiting for the QC manager`);
+        log(t, e.at, 'note', `Hold stops growing: about ${roundKg(holdKg(h, e.at))} kg`);
       }
-      if (!h || h.status !== 'on_hold') closeTicket(t, e.at, 'fixed', 'Closed: no yarn on hold');
+      if (t.kind === 'manual' && !t.test) {
+        // Raised by hand with no failed test behind it: nothing to re-test.
+        t.fixConfirmedAt = e.at;
+        maybeClose(s, t, e.at, e.by);
+        return;
+      }
+      if (h && h.status === 'on_hold') h.retest = 'pending';
+      addRequest(s, { at: e.at, frameId: t.frameId, test: t.test ?? 'count', reason: 'retest', urgent: true, dueAt: e.at + 20 * MIN, ticketId: t.id, holdId: h?.id });
+      log(t, e.at, 'note', `Re-test of ${frameWord(t.frameId)} sent to the top of the lab's list. The ticket closes only when it passes.`);
       return;
     }
 
@@ -460,11 +488,68 @@ export function apply(s: MillState, e: MillEvent): void {
       return;
     }
 
+    case 'ticket/sisters': {
+      const t = s.tickets.find((x) => x.id === e.ticketId);
+      if (!t || t.status === 'closed' || t.sistersAskedAt) return;
+      const ids = [...new Set(e.frameIds)].filter((id) => id !== t.frameId && s.frames.some((f) => f.id === id));
+      t.sistersAskedAt = e.at;
+      t.sisterFrames = ids;
+      for (const id of ids) addRequest(s, { at: e.at, frameId: id, test: t.test ?? 'count', reason: 'sister', urgent: true, dueAt: e.at + 15 * MIN, ticketId: t.id });
+      if (!ids.length) log(t, e.at, 'sisters', `No other frames running Lot ${t.lotId}`, e.by);
+      else {
+        const names = ids.map((id) => Number(id.slice(3)));
+        const list = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : `${names[0]}`;
+        log(t, e.at, 'sisters', `Frame${names.length > 1 ? 's' : ''} ${list} also run Lot ${t.lotId}. Sent to the top of the lab's list.`, e.by);
+      }
+      return;
+    }
+
+    case 'ticket/line': {
+      const t = s.tickets.find((x) => x.id === e.ticketId);
+      if (!t || t.status === 'closed' || t.status === 'fixed') return;
+      if (!t.seenAt) {
+        t.seenAt = e.at;
+        t.seenBy = e.by;
+      }
+      if (t.status !== 'working') {
+        t.status = 'working';
+        t.workingAt = e.at;
+      }
+      t.lineAction = e.action;
+      t.lineActionAt = e.at;
+      const h = t.holdId ? s.holds.find((x) => x.id === t.holdId) : undefined;
+      if (e.action === 'stopped') {
+        frameOf(s, t.frameId).stopped = 'Stopped for repair';
+        if (h && h.status === 'on_hold' && !h.to) h.to = e.at;
+        log(t, e.at, 'stopped', `${frameWord(t.frameId)} stopped${h ? `. Hold stops growing at about ${roundKg(holdKg(h, e.at))} kg` : ''}`, e.by);
+      } else log(t, e.at, 'stopped', `Corrected while running${h ? '. Hold keeps growing until fixed' : ''}`, e.by);
+      return;
+    }
+
     case 'ticket/handover': {
       const t = s.tickets.find((x) => x.id === e.ticketId);
       if (!t || t.status === 'closed') return;
       t.handover = e.note;
       log(t, e.at, 'handover', `Handed over to the next shift: ${e.note}`, e.by);
+      return;
+    }
+
+    case 'hold/tag': {
+      const h = s.holds.find((x) => x.id === e.holdId);
+      if (!h || h.status !== 'on_hold' || h.taggedAt) return;
+      h.taggedAt = e.at;
+      h.taggedBy = e.by;
+      const t = s.tickets.find((x) => x.id === h.ticketId);
+      if (t) log(t, e.at, 'tagged', `Red hold tag on the cops made since ${hhmm(h.from)}. Kept off the trolley to winding.`, e.by);
+      return;
+    }
+
+    case 'hold/moved': {
+      const h = s.holds.find((x) => x.id === e.holdId);
+      if (!h || h.status === 'on_hold' || h.movedAt) return;
+      h.movedAt = e.at;
+      const t = s.tickets.find((x) => x.id === h.ticketId);
+      if (t) log(t, e.at, 'decision', h.status === 'released' ? 'Tag removed, yarn sent on to winding' : 'Yarn moved for the decision and tag updated', e.by);
       return;
     }
 
@@ -502,7 +587,7 @@ export function apply(s: MillState, e: MillEvent): void {
       }
       h.status = e.outcome === 'release' ? 'released' : e.outcome;
       h.closedAt = e.at;
-      if (t) log(t, e.at, 'note', `Held yarn decided: ${e.outcome === 'downgrade' ? 'sell as lower grade' : e.outcome}. ${e.reason}`, e.by);
+      if (t) log(t, e.at, 'decision', `Held yarn decided: ${e.outcome === 'downgrade' ? 'sell as lower grade' : e.outcome}. ${e.reason} Supervisor told.`, e.by);
       maybeCloseAfterHold(s, h, e.at, e.by);
       return;
     }

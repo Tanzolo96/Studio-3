@@ -1,6 +1,6 @@
 import { Link, Navigate, type RouteObject } from 'react-router-dom';
 import { AppShell } from './app/AppShell';
-import { AlertsScreen, PreviousScreen, RaiseScreen, TestEntryScreen, TicketScreen } from './app/screens';
+import { AlertsScreen, FailScreen, PreviousScreen, RaiseScreen, TestEntryScreen, TicketScreen } from './app/screens';
 import { DashShell } from './dashboard/DashShell';
 import { HeldYarn, MachinesGrid, TicketDetailPage, Tickets } from './dashboard/pages';
 import { Overview, Report } from './dashboard/Overview';
@@ -50,6 +50,7 @@ export const appRoutes: RouteObject = {
     { index: true, element: <AlertsScreen /> },
     { path: 'ticket/:id', element: <TicketScreen /> },
     { path: 'test/:id', element: <TestEntryScreen /> },
+    { path: 'fail', element: <FailScreen /> },
     { path: 'raise', element: <RaiseScreen /> },
     { path: 'previous', element: <PreviousScreen /> },
   ],

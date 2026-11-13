@@ -111,6 +111,12 @@ export type TicketEventKind =
   | 'sample_error'
   | 'handover'
   | 'waiting_part'
+  | 'sisters'
+  | 'tagged'
+  | 'stopped'
+  | 'confirmed'
+  | 'reopened'
+  | 'decision'
   | 'note';
 
 export interface TicketEvent {
@@ -157,6 +163,15 @@ export interface Ticket {
   waitingPart?: string;
   /** Fixed without a known cause: a root-cause check is open and repeats are watched. */
   rca?: boolean;
+  /** Supervisor answered "which other frames run this lot?" (may be none). */
+  sistersAskedAt?: number;
+  /** Supervisor stopped the frame, or corrected it while running. */
+  lineAction?: 'stopped' | 'corrected';
+  lineActionAt?: number;
+  /** The lab re-test after Fixed passed. Nothing closes on a promise. */
+  fixConfirmedAt?: number;
+  /** How many times a failed re-test sent this ticket back to the line. */
+  reopened?: number;
   events: TicketEvent[];
 }
 
@@ -185,6 +200,11 @@ export interface Hold {
   retest?: 'pending' | 'passed' | 'failed';
   decisions: Decision[];
   closedAt?: number;
+  /** The supervisor put the red hold tag on the cops. Until then the hold exists only on screen. */
+  taggedAt?: number;
+  taggedBy?: string;
+  /** After the decision: the supervisor moved the yarn on (or kept it) and removed the tag. */
+  movedAt?: number;
 }
 
 export interface Clock {
@@ -216,7 +236,7 @@ export type MillEvent = Base &
   (
     | { type: 'clock/set'; simAt: number; realAt: number; speed: number }
     | { type: 'sim/drift'; frameId: string; cvPct: number }
-    | { type: 'result/enter'; frameId: string; test: TestKind; value: number; requestId?: string }
+    | { type: 'result/enter'; frameId: string; test: TestKind; value: number; requestId?: string; lastPassAt?: number }
     | { type: 'result/sampleError'; resultId: string }
     | { type: 'ticket/seen'; ticketId: string }
     | { type: 'ticket/working'; ticketId: string }
@@ -225,6 +245,10 @@ export type MillEvent = Base &
     | { type: 'ticket/fixed'; ticketId: string; cause: string; note?: string; photo?: string }
     | { type: 'ticket/raise'; frameId: string; problem: string; severity: Severity; note?: string; photo?: string }
     | { type: 'ticket/handover'; ticketId: string; note: string }
+    | { type: 'ticket/sisters'; ticketId: string; frameIds: string[] }
+    | { type: 'ticket/line'; ticketId: string; action: 'stopped' | 'corrected' }
+    | { type: 'hold/tag'; holdId: string }
+    | { type: 'hold/moved'; holdId: string }
     | { type: 'ticket/waitPart'; ticketId: string; part: string }
     | { type: 'ticket/partArrived'; ticketId: string }
     | { type: 'test/ask'; ticketId: string; test: TestKind }

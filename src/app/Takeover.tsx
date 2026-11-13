@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { MillState, Ticket, User } from '../engine/types';
 import { escalation, takeoversFor } from '../engine/selectors';
-import { frameWord, ruleFor } from '../engine/reducer';
+import { covers, frameWord, ruleFor } from '../engine/reducer';
 import { hhmm } from '../engine/time';
 import { Button, cx, SeverityShape } from '../ui/primitives';
 import { ReadingGauge, ResponseTimer } from '../ui/cards';
@@ -40,7 +40,8 @@ function Takeover({ s, t, user, now, more }: { s: MillState; t: Ticket; user: Us
   const rule = reading && t.kind === 'test_fail' ? ruleFor(s, t.productId, reading.test) : undefined;
   const critical = t.severity === 'critical';
   const done = t.events.filter((e) => e.kind === 'contained' && e.at >= t.alertAt - 1).map((e) => e.text);
-  const escalatedToMe = user.role !== 'supervisor';
+  const escalatedToMe = user.role !== 'supervisor' || !covers(user, t.frameId);
+  const asBackup = user.role === 'supervisor' && escalatedToMe;
   const title = t.kind === 'drift' ? `Winding drift on ${frameWord(t.frameId)}` : t.title;
   const btn = useRef<HTMLButtonElement>(null);
   useEffect(() => btn.current?.focus(), [t.id]);
@@ -57,7 +58,7 @@ function Takeover({ s, t, user, now, more }: { s: MillState; t: Ticket; user: Us
           <span className={cx('grid size-4 place-items-center rounded-[6px]', critical ? 'bg-[var(--on-critical)]' : '')}>
             <SeverityShape level={t.severity} size={10} />
           </span>
-          {escalatedToMe ? `Escalated to you · ${hhmm(t.alertAt + (esc.level >= 2 ? t.escalatePhMins : t.escalateQcMins) * 60_000)}` : `${critical ? 'Critical' : 'Major'} alert · ${hhmm(t.alertAt)}`}
+          {escalatedToMe ? `${asBackup ? 'Backup: not seen in 5 min' : 'Escalated to you'} · ${hhmm(t.alertAt + (asBackup ? t.seenMins : esc.level >= 2 ? t.escalatePhMins : t.escalateQcMins) * 60_000)}` : `${critical ? 'Critical' : 'Major'} alert · ${hhmm(t.alertAt)}`}
         </p>
         <h1 id="takeover-title" className="t-alert mt-2">
           {title}
