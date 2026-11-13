@@ -238,6 +238,19 @@ describe('fix report: how long it took and how much yarn it touched', () => {
   });
 });
 
+describe('raise a ticket on several frames', () => {
+  it('makes one alert per frame, each to the supervisor of that frame', () => {
+    const s = seedState();
+    const before = s.tickets.length;
+    for (const f of ['RF-07', 'RF-08', 'RF-15'])
+      run(s, DEMO_START + MIN, { type: 'ticket/raise', frameId: f, problem: 'Ends breaking often', severity: 'major', note: 'Also seen on other frames.', by: 'ramesh' });
+    const made = s.tickets.slice(before);
+    expect(made.map((t) => t.frameId)).toEqual(['RF-07', 'RF-08', 'RF-15']);
+    expect(takeoversFor(s, user(s, 'krish'), DEMO_START + 2 * MIN).map((t) => t.frameId)).toEqual(expect.arrayContaining(['RF-07', 'RF-08']));
+    expect(takeoversFor(s, user(s, 'farhan'), DEMO_START + 2 * MIN).map((t) => t.frameId)).toContain('RF-15');
+  });
+});
+
 describe('who owns an alert', () => {
   it('routes a frame to the supervisor who looks after it, and the operator sees his frames', () => {
     const s = seedState();

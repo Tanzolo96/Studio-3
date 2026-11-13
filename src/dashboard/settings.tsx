@@ -1,5 +1,7 @@
 // Rules (QC manager edits, everyone else reads) and Account (profile, people, shifts, notifications).
 import { useRef, useState, type ReactNode } from 'react';
+import { Link } from 'react-router-dom';
+const DEMO_HREF = import.meta.env.VITE_STANDALONE === '1' ? '#demo' : '/demo';
 import type { Rule, Severity, ShiftId, User } from '../engine/types';
 import { USERS } from '../engine/seed';
 import { useDispatch, useMillState, useNow, useUser } from '../store/store';
@@ -617,6 +619,30 @@ export function AccountPage() {
   return (
     <div className="mx-auto flex max-w-[1180px] flex-col gap-5">
       <PageHead title="Account" sub="Your profile, the people on the floor and how you get notified" />
+      <Panel title="Switch view" sub="Leave the dashboard for another part of QC Alert">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {(
+            [
+              ['/', 'Start screen', 'Choose dashboard, phone app or a demo'],
+              ['/dashboard/jury', 'Live jury demo', 'Two phones and this laptop, with QR codes'],
+              [DEMO_HREF, 'Side-by-side demo', 'Dashboard and phone on one screen'],
+              ['/app', 'Phone app', 'The alert app, as a phone'],
+            ] as const
+          ).map(([to, title, sub]) =>
+            to.startsWith('#') || to === '/demo' ? (
+              <a key={title} href={to} className="flex flex-col gap-0.5 rounded-[10px] border border-line px-4 py-3 hover:bg-sunken">
+                <span className="t-small-strong">{title}</span>
+                <span className="t-small text-muted">{sub}</span>
+              </a>
+            ) : (
+              <Link key={title} to={to} className="flex flex-col gap-0.5 rounded-[10px] border border-line px-4 py-3 hover:bg-sunken">
+                <span className="t-small-strong">{title}</span>
+                <span className="t-small text-muted">{sub}</span>
+              </Link>
+            ),
+          )}
+        </div>
+      </Panel>
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
         <Panel
           title={isMe ? 'Your profile' : 'Profile'}

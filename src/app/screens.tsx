@@ -942,9 +942,12 @@ export function RaiseScreen() {
   const user = useUser('app');
   const dispatch = useDispatch();
   const nav = useNavigate();
-  const [frame, setFrame] = useState<string>();
+  const [frames, setFrames] = useState<string[]>([]);
   const [problem, setProblem] = useState<string>();
   const [severity, setSeverity] = useState<Severity>('major');
+  const toggle = (id: string) => setFrames((xs) => (xs.includes(id) ? xs.filter((x) => x !== id) : [...xs, id].sort()));
+  const num = (id: string) => Number(id.slice(3));
+  const list = (ids: string[]) => (ids.length > 1 ? `${ids.slice(0, -1).map(num).join(', ')} and ${num(ids.at(-1)!)}` : `${num(ids[0])}`);
   const [note, setNote] = useState('');
   const [photo, setPhoto] = useState<string>();
   const suggest = (p: string): Severity => (p.includes('thick') || p.includes('Wrong roving') ? 'critical' : p.includes('noise') || p.includes('Something') ? 'minor' : 'major');
@@ -954,25 +957,30 @@ export function RaiseScreen() {
         className="flex flex-col gap-5"
         onSubmit={(e) => {
           e.preventDefault();
-          if (!frame || !problem) return;
-          dispatch({ type: 'ticket/raise', frameId: frame, problem, severity, note: note.trim() || undefined, photo, by: user.id });
-          const t = useMill.getState().state.tickets.at(-1)!;
-          nav(`/app/ticket/${t.id}`);
+          if (!frames.length || !problem) return;
+          // One alert per frame, so each goes to the supervisor of that frame. Each one names the others.
+          for (const f of frames) {
+            const others = frames.filter((x) => x !== f);
+            const together = others.length ? `Also seen on Frame${others.length > 1 ? 's' : ''} ${list(others)}.` : '';
+            dispatch({ type: 'ticket/raise', frameId: f, problem, severity, note: [note.trim(), together].filter(Boolean).join(' ') || undefined, photo, by: user.id });
+          }
+          if (frames.length === 1) nav(`/app/ticket/${useMill.getState().state.tickets.at(-1)!.id}`);
+          else nav('/app');
         }}
       >
-        <Field label="Which frame?">
-          <div role="radiogroup" aria-label="Frame" className="grid grid-cols-6 gap-1.5">
+        <Field label={frames.length > 1 ? `Which frames? ${frames.length} picked` : 'Which frames? Tap every frame with the problem'}>
+          <div role="group" aria-label="Frames" className="grid grid-cols-6 gap-1.5">
             {s.frames.map((f) => (
               <button
                 key={f.id}
                 type="button"
-                role="radio"
-                aria-checked={frame === f.id}
+                role="checkbox"
+                aria-checked={frames.includes(f.id)}
                 aria-label={f.id}
-                onClick={() => setFrame(f.id)}
+                onClick={() => toggle(f.id)}
                 className={cx(
                   't-data h-12 rounded-[10px] border text-[15px]',
-                  frame === f.id ? 'border-brand bg-brand-soft font-semibold outline outline-1 outline-brand' : 'border-line-strong bg-raised hover:bg-sunken',
+                  frames.includes(f.id) ? 'border-brand bg-brand-soft font-semibold outline outline-1 outline-brand' : 'border-line-strong bg-raised hover:bg-sunken',
                 )}
               >
                 {f.num}
@@ -1022,10 +1030,14 @@ export function RaiseScreen() {
           />
         </div>
         <PhotoInput value={photo} onChange={setPhoto} />
-        <Button size="lg" block type="submit" disabled={!frame || !problem}>
-          Raise ticket
+        <Button size="lg" block type="submit" disabled={!frames.length || !problem}>
+          {frames.length > 1 ? `Raise ${frames.length} tickets` : 'Raise ticket'}
         </Button>
-        {user.role !== 'supervisor' && <p className="t-small -mt-3 text-center text-muted">Goes straight to the {shiftAtNow()} shift supervisor.</p>}
+        {user.role !== 'supervisor' && (
+          <p className="t-small -mt-3 text-center text-muted">
+            {frames.length > 1 ? `One alert per frame, each to the ${shiftAtNow()} shift supervisor of that frame.` : `Goes straight to the ${shiftAtNow()} shift supervisor.`}
+          </p>
+        )}
       </form>
     </Page>
   );

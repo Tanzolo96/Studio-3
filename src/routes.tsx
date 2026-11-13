@@ -26,10 +26,14 @@ function Home() {
           Catch a yarn fault sooner and make sure the right person fixes it before more bad yarn is made. Interaction Design, UID Gandhinagar, Team 11.
         </p>
       </div>
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Link to="/dashboard/jury" className={card}>
+          <span className="t-body-strong">Live jury demo</span>
+          <span className="t-small text-muted">Two phones and this laptop, live (QR codes to scan)</span>
+        </Link>
         <a href={DEMO_HREF} className={card}>
-          <span className="t-body-strong">Jury demo</span>
-          <span className="t-small text-muted">Dashboard and phone side by side (laptop)</span>
+          <span className="t-body-strong">Side-by-side demo</span>
+          <span className="t-small text-muted">Dashboard and phone on one laptop screen</span>
         </a>
         <Link to="/dashboard" className={card}>
           <span className="t-body-strong">Dashboard</span>
