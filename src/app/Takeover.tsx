@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { MillState, Ticket, User } from '../engine/types';
 import { escalation, takeoversFor } from '../engine/selectors';
@@ -8,14 +8,16 @@ import { Button, cx, SeverityShape } from '../ui/primitives';
 import { ReadingGauge, ResponseTimer } from '../ui/cards';
 import { playCritical, playMajor } from '../ui/sound';
 import { useDispatch } from '../store/store';
+import { useT } from './i18n';
 
 /** Full-screen alert over any tab. The only way out is "Seen, I'm on it". */
-/** Takeovers the plant head has opened. He does not say Seen (that stays with the supervisor), so his phone stops ringing once he looks. */
+/** Pop-ups put away with "Later" (or opened by the plant head). They stay away until the alert climbs to the next level. */
 const acknowledged = new Set<string>();
 const takeoverKey = (t: Ticket, now: number) => `${t.id}:${t.alertAt}:${escalation(t, now).level}`;
 
 export function TakeoverLayer({ s, user, now }: { s: MillState; user: User; now: number }) {
-  const list = takeoversFor(s, user, now).filter((x) => user.role !== 'plant' || !acknowledged.has(takeoverKey(x, now)));
+  const [, redraw] = useState(0);
+  const list = takeoversFor(s, user, now).filter((x) => !acknowledged.has(`${user.id}|${takeoverKey(x, now)}`));
   const t = list[0];
   const played = useRef(new Set<string>());
   const key = t ? `${t.id}:${t.alertAt}:${escalation(t, now).level}` : '';
@@ -32,10 +34,11 @@ export function TakeoverLayer({ s, user, now }: { s: MillState; user: User; now:
   }, [key, t]);
 
   if (!t) return null;
-  return <Takeover s={s} t={t} user={user} now={now} more={list.length - 1} />;
+  return <Takeover s={s} t={t} user={user} now={now} more={list.length - 1} onLater={() => { acknowledged.add(`${user.id}|${takeoverKey(t, now)}`); redraw((n) => n + 1); }} />;
 }
 
-function Takeover({ s, t, user, now, more }: { s: MillState; t: Ticket; user: User; now: number; more: number }) {
+function Takeover({ s, t, user, now, more, onLater }: { s: MillState; t: Ticket; user: User; now: number; more: number; onLater: () => void }) {
+  const tr = useT();
   const dispatch = useDispatch();
   const nav = useNavigate();
   const esc = escalation(t, now);
@@ -62,13 +65,13 @@ function Takeover({ s, t, user, now, more }: { s: MillState; t: Ticket; user: Us
           <span className={cx('grid size-4 place-items-center rounded-[6px]', critical ? 'bg-[var(--on-critical)]' : '')}>
             <SeverityShape level={t.severity} size={10} />
           </span>
-          {escalatedToMe ? `${asBackup ? 'Backup: not seen in 5 min' : 'Escalated to you'} · ${hhmm(t.alertAt + (asBackup ? t.seenMins : esc.level >= 2 ? t.escalatePhMins : t.escalateQcMins) * 60_000)}` : `${critical ? 'Critical' : 'Major'} alert · ${hhmm(t.alertAt)}`}
+          {escalatedToMe ? `${tr(asBackup ? 'Backup: not seen in 5 min' : 'Escalated to you')} · ${hhmm(t.alertAt + (asBackup ? t.seenMins : esc.level >= 2 ? t.escalatePhMins : t.escalateQcMins) * 60_000)}` : `${tr(critical ? 'Critical alert' : 'Major alert')} · ${hhmm(t.alertAt)}`}
         </p>
         <h1 id="takeover-title" className="t-alert mt-2">
           {title}
         </h1>
         <p className="t-body mt-1">
-          {frameWord(t.frameId)} · Lot {t.lotId} · {product.short} yarn
+          {tr('{frame} · Lot {lot} · {yarn} yarn', { frame: frameWord(t.frameId), lot: t.lotId, yarn: product.short })}
         </p>
       </header>
 
@@ -88,7 +91,8 @@ function Takeover({ s, t, user, now, more }: { s: MillState; t: Ticket; user: Us
             <ul className="mt-1.5 flex flex-col gap-1">
               {escalatedToMe && (
                 <li className="t-small flex gap-2">
-                  <span aria-hidden>•</span>Not seen by the {t.shift} shift supervisor for {Math.floor(esc.elapsed / 60000)} min
+                  <span aria-hidden>•</span>
+                  {tr('Not seen by the {shift} shift supervisor for {n} min', { shift: t.shift, n: Math.floor(esc.elapsed / 60000) })}
                 </li>
               )}
               {done.map((d) => (
@@ -102,20 +106,25 @@ function Takeover({ s, t, user, now, more }: { s: MillState; t: Ticket; user: Us
         )}
         <ResponseTimer elapsed={esc.elapsed} limitMins={t.seenMins} state={esc.timer} level={esc.level} />
         <div className="mt-auto flex flex-col gap-2 pb-2">
-          {more > 0 && <p className="t-small text-center text-muted">{more} more alert{more > 1 ? 's' : ''} after this one</p>}
+          {more > 0 && <p className="t-small text-center text-muted">{tr('{n} more alerts after this one', { n: more })}</p>}
           <Button
             ref={btn}
             size="lg"
             block
             variant={critical ? 'danger' : 'primary'}
             onClick={() => {
-              if (user.role === 'plant') acknowledged.add(takeoverKey(t, now));
+              if (user.role === 'plant') acknowledged.add(`${user.id}|${takeoverKey(t, now)}`);
               else dispatch({ type: 'ticket/working', ticketId: t.id, by: user.id });
               nav(`/app/ticket/${t.id}`);
             }}
           >
-            {user.role === 'plant' ? 'See who is on it' : 'I’m fixing it'}
+            {tr(user.role === 'plant' ? 'See who is on it' : 'I’m fixing it')}
           </Button>
+          {escalatedToMe && (
+            <Button size="lg" block variant="secondary" onClick={onLater}>
+              {tr('Later')}
+            </Button>
+          )}
         </div>
       </div>
     </div>

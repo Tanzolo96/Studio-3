@@ -8,16 +8,18 @@ The **phone app is where things happen**; the **dashboard is the record and the 
 
 ## The phone: alert → fixing → fixed → report
 
-1. **The lab tester reports a failed test** on the phone: frame, test, reading. (Passing tests stay in the register.)
+1. **The lab tester reports a failed test** on the phone: frame, test, reading. (Passing tests stay in the register.) The lab screen then says who was told and shows each of today's reports live: waiting, being fixed, fixed, closed.
 2. **QC Alert sends the alert** to the supervisor of that frame. Full screen, with sound for critical.
 3. **Someone taps "I'm fixing it"** (the supervisor, QC, or the machine operator on their own frames). That person owns the alert, the escalation stops, and the fixing time starts; a big timer shows it.
-4. **They tap "Fixed"** and the app asks **what happened**: which part of the machine needed fixing (drafting zone, top rollers and aprons, spindles and travellers, creel and roving, something else, not a machine part), the cause (machine, setting, material, other, no cause found), **when the frame was last OK** (last good test or a shift start), and **how much yarn it made on that lot since then** (prefilled estimate in kg, editable), plus an optional note and photo. The report shows how long the fix took.
+4. **They tap "Fixed"** and answer **one question: what did you fix?** (drafting zone, top rollers and aprons, spindles and travellers, creel and roving, something else, not a machine part) → **Send**. Everything else is optional and folded away under "More details": the cause (set from the part unless changed), yarn made since the last good test (estimated for them), a note and a photo. The report records how long the fix took.
 5. **The lab re-tests** the frame. A pass closes the alert; a fail reopens it and alerts the supervisor again.
 6. The report and every message go into the dashboard's record.
 
 Optional on the way: send a fitter, mark "waiting for a spare part" (pauses the timer), hand over to the next shift.
 
 **No held yarn in the app.** The mill handles the yarn as it does today.
+
+**Language:** the phone app has an English / हिंदी switch at the top (Hindi for the floor in Indore). The dashboard stays in English.
 
 ## The dashboard: the record and the go-between
 

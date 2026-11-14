@@ -87,7 +87,9 @@ driver.subscribe((events) => {
 
 // Mill clock tick.
 setInterval(() => {
-  useMill.setState({ now: nowFrom(useMill.getState().state.clock) });
+  const now = nowFrom(useMill.getState().state.clock);
+  // Redraw only when the shown second changes: four redraws a second made phones lag while typing.
+  if (Math.floor(now / 1000) !== Math.floor(useMill.getState().now / 1000)) useMill.setState({ now });
 }, 250);
 
 export const useNow = () => useMill((s) => s.now);

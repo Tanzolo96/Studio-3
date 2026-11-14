@@ -4,16 +4,20 @@ import { Close } from '@carbon/icons-react';
 /** Bottom sheet inside the phone. Escape and the close button dismiss it. */
 export function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
+  // Parents pass a new onClose on every redraw (the clock ticks). Keep the latest in a ref so focus is taken
+  // once, when the sheet opens; re-running this on each redraw pulled focus out of the box being typed in.
+  const close = useRef(onClose);
+  close.current = onClose;
   useEffect(() => {
     const prev = document.activeElement as HTMLElement | null;
     ref.current?.focus();
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close.current();
     window.addEventListener('keydown', onKey);
     return () => {
       window.removeEventListener('keydown', onKey);
       prev?.focus?.();
     };
-  }, [onClose]);
+  }, []);
   return (
     <div className="absolute inset-0 z-[var(--z-sheet)] flex flex-col justify-end">
       <button type="button" aria-label="Close" className="anim-fade absolute inset-0 bg-[var(--scrim)]" onClick={onClose} />

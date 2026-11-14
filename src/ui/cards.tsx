@@ -6,6 +6,7 @@ import { fmt, frameWord, lotOf, ruleFor, withUnit } from '../engine/reducer';
 import { TEST } from '../engine/vocab';
 import { ago, timer } from '../engine/time';
 import { AiTag, Button, cx, Dot, SeverityBadge, StatusChip, type ChipKind } from './primitives';
+import { useT } from '../app/i18n';
 
 export function ticketChip(t: Ticket, now: number): ChipKind {
   if (t.status !== 'closed' && t.status !== 'fixed' && escalation(t, now).level > 0 && !t.seenAt) return 'escalated';
@@ -180,6 +181,7 @@ export function ReadingGauge({
   pending?: boolean;
   drift?: boolean; // winding-sensor CV rise against its warning line
 }) {
+  const tr = useT();
   const base = TEST[test];
   const t = drift ? { ...base, name: 'Winding sensor, CV rise', unit: '%', tooHigh: 'Past warning line' } : base;
   const has = value !== undefined && !Number.isNaN(value);
@@ -190,12 +192,12 @@ export function ReadingGauge({
   const a = lo - span * 0.9;
   const b = hi + span * 0.9;
   const pos = (v: number) => Math.min(100, Math.max(0, ((v - a) / (b - a)) * 100));
-  const word = !has ? (pending ? 'Waiting for a reading' : '') : outside ? (min !== undefined && value! < min ? t.tooLow : t.tooHigh) : 'Within limit';
+  const word = tr(!has ? (pending ? 'Waiting for a reading' : '') : outside ? (min !== undefined && value! < min ? t.tooLow : t.tooHigh) : 'Within limit');
   const limit = min !== undefined && max !== undefined ? `${fmt(test, min)}–${fmt(test, max)}` : min !== undefined ? `min ${fmt(test, min)}` : `max ${fmt(test, max!)}`;
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-baseline justify-between">
-        <span className="t-small-strong text-muted">{t.name}</span>
+        <span className="t-small-strong text-muted">{tr(t.name)}</span>
         <span className={cx('t-small-strong', outside ? (drift ? 'text-major' : 'text-critical') : 'text-muted')}>{word}</span>
       </div>
       <div className="flex items-baseline gap-1.5">
@@ -216,7 +218,7 @@ export function ReadingGauge({
         )}
       </div>
       <span className="t-data text-muted">
-        {drift ? `Warning line +${fmt(test, max!)}%` : `Limit ${limit}${t.unit ? ` ${t.unit}` : ''}`}
+        {drift ? `Warning line +${fmt(test, max!)}%` : `${tr('Limit')} ${limit}${t.unit ? ` ${t.unit}` : ''}`}
       </span>
       <span className="sr-only">{has ? `${withUnit(test, value!)}, ${word}, limit ${limit}` : word}</span>
     </div>

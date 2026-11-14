@@ -1,11 +1,12 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useT } from './i18n';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Camera, Checkmark, ChevronRight } from '@carbon/icons-react';
 import type { MillState, Severity, TestKind, Ticket, User } from '../engine/types';
 import { useDispatch, useMill, useMillState, useNow, useUser } from '../store/store';
 import { decisionNotices, escalation, fitterJobs, labBacklog, median, myTickets, pendingRequests, seenTimes, timeline } from '../engine/selectors';
 import { covers, failWord, frameWord, routineSlotsBefore, yarnMadeSince, holdKg, lotOf, productOfFrame, roundKg, limitFor, ruleFor, supervisorFor, userName, withinRule, withUnit } from '../engine/reducer';
-import { CAUSE_HINT, CAUSES, MACHINE_PARTS, RAISE_PROBLEMS, TEST } from '../engine/vocab';
+import { CAUSES, MACHINE_PARTS, RAISE_PROBLEMS, TEST } from '../engine/vocab';
 import { ago, dayMonth, hhmm, monthName, sameMillDay, shiftAt, timer } from '../engine/time';
 import { Button, Choice, cx, Empty, Field, SeverityBadge, SeverityShape, TextField } from '../ui/primitives';
 import { ReadingGauge, ResponseTimer, TicketCard, ticketMeta } from '../ui/cards';
@@ -14,11 +15,12 @@ import { readPhoto, Sheet } from './Sheet';
 import { FloorCard, PlantEscalationBlock, PlantPhoneHome, pastCauses } from './plantPhone';
 
 function Page({ title, sub, back, children }: { title: string; sub?: string; back?: string; children: ReactNode }) {
+  const tr = useT();
   return (
     <div className="px-4 pt-4 pb-8">
       {back && (
         <Link to={back} className="t-small-strong -ml-2 mb-2 inline-flex h-12 items-center gap-1 rounded-[10px] px-2 text-brand-text hover:bg-brand-soft">
-          <ArrowLeft size={20} /> Back
+          <ArrowLeft size={20} /> {tr('Back')}
         </Link>
       )}
       <h1 className="t-page">{title}</h1>
@@ -79,12 +81,13 @@ function MyTicketsList({ user }: { user: User }) {
   const notices = decisionNotices(s, user, now);
   const dispatch = useDispatch();
   const onShift = user.shift === 'G' || user.shift === shiftAt(now);
+  const tr = useT();
   const sub =
     user.role === 'supervisor'
       ? `${user.shift} shift · ${first(user)}${onShift ? '' : ' · off shift'}`
       : `${first(user)} · ${user.role === 'qc' ? 'alerts nobody took within 10 minutes' : 'escalations only'}`;
   return (
-    <Page title="Active issues" sub={sub}>
+    <Page title={tr('Active issues')} sub={sub}>
       {notices.map((h) => (
         <section key={h.id} className="mb-3 rounded-[16px] border border-ink bg-raised p-4 shadow-raised" aria-label="Yarn decision">
           <p className="t-small-strong text-muted">
@@ -103,18 +106,18 @@ function MyTicketsList({ user }: { user: User }) {
           <span className="grid size-16 place-items-center rounded-full bg-ok-soft text-ok">
             <Checkmark size={32} />
           </span>
-          <p className="t-section">All clear</p>
+          <p className="t-section">{tr('All clear')}</p>
           <p className="t-small max-w-[30ch] text-muted">
-            {user.role === 'supervisor' ? 'No active issues. Every frame is running normally. A new fault will ring this phone.' : 'Nothing has been escalated to you.'}
+            {tr(user.role === 'supervisor' ? 'No active issues. Every frame is running normally. A new fault will ring this phone.' : 'Nothing has been escalated to you.')}
           </p>
           <Link to="/app/previous" className="t-small-strong mt-1 inline-flex h-12 items-center rounded-[10px] px-3 text-brand-text hover:bg-brand-soft">
-            See resolved issues in History
+            {tr('See resolved issues in History')}
           </Link>
         </div>
       ) : (
         <div className="flex flex-col gap-3">
           <p className="t-small-strong text-muted">
-            {live.length} need{live.length === 1 ? 's' : ''} attention
+            {tr('{n} need attention', { n: live.length })}
           </p>
           {live.map((t) =>
             user.role === 'supervisor' ? (
@@ -127,7 +130,7 @@ function MyTicketsList({ user }: { user: User }) {
       )}
       {waitingRetest.length > 0 && (
         <>
-          <p className="t-small-strong mt-6 mb-2 text-muted">Fixed, waiting for the lab re-test or the yarn decision</p>
+          <p className="t-small-strong mt-6 mb-2 text-muted">{tr('Fixed, waiting for the lab re-test')}</p>
           <div className="flex flex-col gap-3">
             {waitingRetest.map((t) => (
               <TicketCard key={t.id} s={s} t={t} now={now} onOpen={() => nav(`/app/ticket/${t.id}`)} />
@@ -149,20 +152,62 @@ const REASON: Record<string, string> = {
 function TestRequests({ user }: { user: User }) {
   const s = useMillState();
   const now = useNow();
+  const tr = useT();
+  const [params] = useSearchParams();
   const list = pendingRequests(s);
   const behind = labBacklog(s, now).length;
+  const sent = s.tickets.find((x) => x.id === params.get('sent'));
+  const sentTo = sent ? supervisorFor(s, sent.frameId, sent.alertAt) : undefined;
+  // What happened to the tests this lab tester reported today, live.
+  const mine = s.tickets
+    .filter((t) => t.kind === 'test_fail' && sameMillDay(t.createdAt, now) && s.results.some((r) => r.by === user.id && r.frameId === t.frameId && r.at === t.alertAt))
+    .sort((a, b) => b.createdAt - a.createdAt);
   return (
-    <Page title="Lab" sub={`${user.shift} shift lab · ${first(user)}`}>
+    <Page title={tr('Lab')} sub={`${user.shift} shift lab · ${first(user)}`}>
+      {sent && sentTo && (
+        <p role="status" className="t-body mb-4 flex items-start gap-3 rounded-[12px] bg-ok-soft px-4 py-3 text-ink">
+          <Checkmark size={20} className="mt-0.5 shrink-0 text-ok" />
+          {tr('Sent to {name}, the supervisor of {frame}. You can follow it here.', { name: sentTo.name, frame: frameWord(sent.frameId) })}
+        </p>
+      )}
       <Link to="/app/fail" className="t-body-strong mb-4 flex h-14 items-center justify-center gap-2 rounded-[12px] bg-critical text-on-critical shadow-raised">
-        <SeverityShape level="critical" className="[&_circle]:fill-[var(--on-critical)]" /> Report a failed test
+        <SeverityShape level="critical" className="[&_circle]:fill-[var(--on-critical)]" /> {tr('Report a failed test')}
       </Link>
-      <p className="t-small -mt-2 mb-4 text-muted">Only for readings outside the limit. Passing tests stay in the register as today.</p>
+      <p className="t-small -mt-2 mb-4 text-muted">{tr('Only for readings outside the limit. Passing tests stay in the register as today.')}</p>
+      {mine.length > 0 && (
+        <section className="mb-5" aria-label={tr('Your reports today')}>
+          <p className="t-small-strong mb-2 text-muted">{tr('Your reports today')}</p>
+          <ul className="flex flex-col gap-2">
+            {mine.map((t) => {
+              const st =
+                t.status === 'closed'
+                  ? { word: tr('Re-test passed, closed'), cls: 'bg-ok-soft text-ok' }
+                  : t.status === 'fixed'
+                    ? { word: tr('Fixed, waiting for re-test'), cls: 'bg-brand-soft text-brand-text' }
+                    : t.workingAt
+                      ? { word: tr('{name} is fixing it', { name: userName(s, t.seenBy).split(' ')[0] }), cls: 'bg-major-soft text-major' }
+                      : { word: tr('Waiting for someone to start fixing'), cls: 'bg-critical-soft text-critical' };
+              return (
+                <li key={t.id} className="flex items-center justify-between gap-3 rounded-[12px] border border-line bg-raised px-4 py-3">
+                  <span className="min-w-0">
+                    <span className="t-body-strong block">{frameWord(t.frameId)}</span>
+                    <span className="t-small text-muted">
+                      {t.test ? tr(TEST[t.test].name) : ''} · {hhmm(t.createdAt)}
+                    </span>
+                  </span>
+                  <span className={cx('t-small-strong shrink-0 rounded-full px-3 py-1 text-right', st.cls)}>{st.word}</span>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
       {behind >= 3 && (
         <p className="t-small-strong mb-3 rounded-[10px] bg-major-soft px-3 py-2.5 text-major">{behind} urgent tests are late. The QC manager has been told.</p>
       )}
-      <p className="t-small-strong mb-2 text-muted">Urgent tests from the floor</p>
+      <p className="t-small-strong mb-2 text-muted">{tr('Urgent tests from the floor')}</p>
       {list.length === 0 ? (
-        <Empty icon={<Checkmark size={32} />} title="Nothing urgent" body="Re-tests after a fix and checks on other frames of the same lot show up here, riskiest first." />
+        <Empty icon={<Checkmark size={32} />} title={tr('Nothing urgent')} body={tr('Re-tests after a fix and checks on other frames of the same lot show up here, riskiest first.')} />
       ) : (
         <ul className="flex flex-col gap-3">
           {list.map((r, i) => {
@@ -180,19 +225,19 @@ function TestRequests({ user }: { user: User }) {
                       <span className="t-data grid size-6 place-items-center rounded-full bg-sunken text-[12px]">{i + 1}</span>
                       {r.urgent && (
                         <span className={cx('t-label inline-flex h-6 items-center gap-1.5 rounded-[6px] px-2', sev === 'critical' ? 'bg-critical-soft text-critical' : 'bg-major-soft text-major')}>
-                          <SeverityShape level={sev === 'critical' ? 'critical' : 'major'} /> Urgent
+                          <SeverityShape level={sev === 'critical' ? 'critical' : 'major'} /> {tr('Urgent')}
                         </span>
                       )}
-                      <span className="t-small text-muted">{REASON[r.reason]}</span>
+                      <span className="t-small text-muted">{tr(REASON[r.reason])}</span>
                     </div>
                     <p className="t-body-strong mt-2">
-                      {TEST[r.test].name} test on {frameWord(r.frameId)}
+                      {tr(TEST[r.test].name)} · {frameWord(r.frameId)}
                     </p>
                     <p className="t-small text-muted">
                       Lot {lotOf(s, s.frames.find((f) => f.id === r.frameId)!.lotId).id} · {product.short} · {TEST[r.test].instrument}
                     </p>
                     <p className={cx('t-data mt-2', late ? 'text-critical' : 'text-ink')}>
-                      {late ? (now - r.dueAt < 60_000 ? 'Due now' : `Late by ${ago(now - r.dueAt)}`) : `Due ${hhmm(r.dueAt)} · in ${timer(r.dueAt - now)}`}
+                      {late ? (now - r.dueAt < 60_000 ? tr('Due now') : tr('Late by {t}', { t: ago(now - r.dueAt) })) : tr('Due {time} · in {left}', { time: hhmm(r.dueAt), left: timer(r.dueAt - now) })}
                     </p>
                   </div>
                   <ChevronRight size={20} className="shrink-0 text-muted" />
@@ -326,6 +371,7 @@ function Step({ n, title, state, when, children }: { n: number; title: string; s
 
 function TicketDetail({ s, t, now, user }: { s: MillState; t: Ticket; now: number; user: User }) {
   const dispatch = useDispatch();
+  const tr = useT();
   const [sheet, setSheet] = useState<'fitter' | 'fixed' | 'handover' | 'part' | null>(null);
   const esc = escalation(t, now);
   const reading = t.readings.find((r) => r.at === t.alertAt) ?? t.readings[0];
@@ -346,7 +392,7 @@ function TicketDetail({ s, t, now, user }: { s: MillState; t: Ticket; now: numbe
     t.kind === 'manual'
       ? t.title
       : reading
-        ? `${failWord(rule, reading.test, reading.value)}: ${withUnit(reading.test, reading.value)}`
+        ? `${tr(failWord(rule, reading.test, reading.value))}: ${withUnit(reading.test, reading.value)}`
         : t.title;
   const outcome =
     t.closeReason === 'sample_error'
@@ -359,25 +405,30 @@ function TicketDetail({ s, t, now, user }: { s: MillState; t: Ticket; now: numbe
 
   // Status panel: one plain answer.
   const panel = closed
-    ? { tone: 'ok', head: 'Resolved', line: `${t.fixedAt ? `Fixed at ${hhmm(t.fixedAt)} by ${by(t.fixedBy)}, confirmed by re-test. ` : `Closed at ${hhmm(t.closedAt!)}. `}${outcome}` }
+    ? { tone: 'ok', head: tr('Resolved'), line: `${t.fixedAt ? `Fixed at ${hhmm(t.fixedAt)} by ${by(t.fixedBy)}, confirmed by re-test. ` : `Closed at ${hhmm(t.closedAt!)}. `}${outcome}` }
     : t.status === 'fixed'
       ? t.fixConfirmedAt
         ? { tone: 'wait', head: 'Fix confirmed', line: 'Re-test passed. Waiting for the QC manager to decide on the held yarn.' }
-        : { tone: 'wait', head: 'Fixed, waiting for re-test', line: `The lab re-tests ${frameWord(t.frameId)}${retest ? ` by ${hhmm(retest.dueAt)}` : ''}. If it fails, this comes back to you.` }
+        : { tone: 'wait', head: tr('Fixed, waiting for re-test'), line: tr('The lab re-tests {frame} by {time}. If it fails, this comes back to you.', { frame: frameWord(t.frameId), time: retest ? hhmm(retest.dueAt) : '' }) }
       : t.status === 'open'
         ? {
             tone: t.severity,
-            head: t.reopened ? 'Re-test failed' : 'Not resolved yet',
-            line: esc.level > 0 ? `Nobody has started fixing for ${Math.floor(esc.elapsed / 60000)} min. ${esc.level === 2 ? 'Plant head told.' : 'QC manager told.'}` : esc.backup ? `No answer in ${t.seenMins} min. Backup supervisor alerted.` : 'Waiting for someone to start fixing',
+            head: tr(t.reopened ? 'Re-test failed' : 'Not resolved yet'),
+            line:
+              esc.level > 0
+                ? `${tr('Nobody has started fixing for {n} min.', { n: Math.floor(esc.elapsed / 60000) })} ${tr(esc.level === 2 ? 'Plant head told.' : 'QC manager told.')}`
+                : esc.backup
+                  ? tr('No answer in {n} min. Backup supervisor alerted.', { n: t.seenMins })
+                  : tr('Waiting for someone to start fixing'),
           }
-        : { tone: t.severity, head: 'Not resolved yet', line: t.waitingPart ? `Waiting for a spare part: ${t.waitingPart}` : fitter && !t.repairDoneAt ? `${fitter.split(' ')[0]} is repairing the frame` : `${by(t.seenBy)} is fixing it · ${timer(now - (t.workingAt ?? t.seenAt ?? now))}` };
+        : { tone: t.severity, head: tr('Not resolved yet'), line: t.waitingPart ? `${tr('Waiting for a spare part')}: ${t.waitingPart}` : fitter && !t.repairDoneAt ? `${fitter.split(' ')[0]} is repairing the frame` : `${tr('{name} is fixing it', { name: by(t.seenBy) })} · ${timer(now - (t.workingAt ?? t.seenAt ?? now))}` };
 
   // Steps, in order. The first one not done is the one to do now.
   // Alert -> Fixing -> Fixed + report -> lab re-test. The first step not done is the one to do now.
   const steps = [
-    { key: 'seen', title: 'Fixing: I\u2019m on it', done: !!t.seenAt, when: t.seenAt },
-    { key: 'fixed', title: 'Fixed: tell us what happened', done: !!t.fixedAt || closed, when: t.fixedAt },
-    ...(t.kind === 'manual' && !t.test ? [] : [{ key: 'retest', title: 'Lab re-test confirms the fix', done: !!t.fixConfirmedAt || (closed && t.closeReason !== 'fixed'), when: t.fixConfirmedAt }]),
+    { key: 'seen', title: tr('Fixing: I’m on it'), done: !!t.seenAt, when: t.seenAt },
+    { key: 'fixed', title: tr('Fixed: tell us what happened'), done: !!t.fixedAt || closed, when: t.fixedAt },
+    ...(t.kind === 'manual' && !t.test ? [] : [{ key: 'retest', title: tr('Lab re-test confirms the fix'), done: !!t.fixConfirmedAt || (closed && t.closeReason !== 'fixed'), when: t.fixConfirmedAt }]),
   ];
   const activeIdx = closed ? -1 : steps.findIndex((x) => !x.done);
   const stateOf = (i: number): StepState => (steps[i].done ? 'done' : i === activeIdx ? 'active' : 'todo');
@@ -389,26 +440,26 @@ function TicketDetail({ s, t, now, user }: { s: MillState; t: Ticket; now: numbe
         return (
           <>
             <Button size="lg" block variant={t.severity === 'critical' ? 'danger' : 'primary'} onClick={() => dispatch({ type: 'ticket/working', ticketId: t.id, by: user.id })}>
-              I’m fixing it
+              {tr('I’m fixing it')}
             </Button>
-            <p className="t-small text-muted">Starts the fixing time and stops the alert going to anyone else.</p>
+            <p className="t-small text-muted">{tr('Starts the fixing time and stops the alert going to anyone else.')}</p>
           </>
         );
       case 'fixed':
         return (
           <>
             <div className="flex items-baseline justify-between rounded-[12px] bg-sunken px-4 py-3" role="timer" aria-label="Fixing time">
-              <span className="t-small text-muted">Fixing for</span>
+              <span className="t-small text-muted">{tr('Fixing for')}</span>
               <span className="t-stat">{timer(now - (t.workingAt ?? t.seenAt ?? now))}</span>
             </div>
-            <p className="t-small text-ink">When the frame is running right, tap Fixed and answer a few questions.</p>
+            <p className="t-small text-ink">{tr('When the frame is running right, tap Fixed.')}</p>
             {t.waitingPart ? (
               <>
                 <p className="t-small rounded-[10px] bg-major-soft px-3 py-2.5 text-ink">
-                  <span className="t-small-strong">Waiting for a spare part:</span> {t.waitingPart}. The timer is paused.
+                  <span className="t-small-strong">{tr('Waiting for a spare part')}:</span> {t.waitingPart}.
                 </p>
                 <Button size="lg" block variant="secondary" onClick={() => dispatch({ type: 'ticket/partArrived', ticketId: t.id, by: user.id })}>
-                  Part arrived
+                  {tr('Part arrived')}
                 </Button>
               </>
             ) : fitter && !t.repairDoneAt ? (
@@ -417,16 +468,16 @@ function TicketDetail({ s, t, now, user }: { s: MillState; t: Ticket; now: numbe
               </p>
             ) : null}
             <Button size="lg" block variant={t.repairDoneAt || !fitter ? 'primary' : 'secondary'} onClick={() => setSheet('fixed')}>
-              Fixed
+              {tr('Fixed')}
             </Button>
             {!t.fitterId && (
               <Button variant="ghost" block onClick={() => setSheet('fitter')}>
-                Send a fitter
+                {tr('Send a fitter')}
               </Button>
             )}
             {!t.waitingPart && (
               <Button variant="ghost" block onClick={() => setSheet('part')}>
-                Waiting for a spare part
+                {tr('Waiting for a spare part')}
               </Button>
             )}
           </>
@@ -437,7 +488,7 @@ function TicketDetail({ s, t, now, user }: { s: MillState; t: Ticket; now: numbe
             Enter the re-test result
           </Link>
         ) : (
-          <p className="t-small text-ink">At the top of the lab’s list{retest ? `, due ${hhmm(retest.dueAt)}` : ''}. A pass confirms the fix; a fail sends this back to you.</p>
+          <p className="t-small text-ink">{tr('At the top of the lab’s list. A pass confirms the fix; a fail sends this back to you.')}</p>
         );
     }
     return null;
@@ -544,7 +595,7 @@ function TicketDetail({ s, t, now, user }: { s: MillState; t: Ticket; now: numbe
 
       <details className="group mt-5 rounded-[16px] border border-line bg-raised">
         <summary className="t-small-strong flex h-12 cursor-pointer list-none items-center justify-between px-4 text-ink">
-          Full history · {timeline(t, now).length} updates
+          {tr('Full history · {n} updates', { n: timeline(t, now).length })}
           <ChevronRight size={20} className="text-muted transition-transform group-open:rotate-90" />
         </summary>
         <div className="border-t border-line px-4 pt-4">
@@ -554,7 +605,7 @@ function TicketDetail({ s, t, now, user }: { s: MillState; t: Ticket; now: numbe
 
       {canAct && !closed && t.status !== 'fixed' && (
         <Button variant="ghost" block className="mt-3" onClick={() => setSheet('handover')}>
-          Hand over to next shift
+          {tr('Hand over to next shift')}
         </Button>
       )}
 
@@ -625,112 +676,90 @@ function FixedSheet({ t, user, onClose }: { t: Ticket; user: User; onClose: () =
   const s = useMillState();
   const now = useNow();
   const dispatch = useDispatch();
-  const [cause, setCause] = useState<string>();
+  const tr = useT();
   const [part, setPart] = useState<string>();
+  const [cause, setCause] = useState<string>();
   const [note, setNote] = useState('');
   const [photo, setPhoto] = useState<string>();
-  // When was this frame last OK? Its last passing test before the alert, or the routine tests at shift start.
-  const sinceOptions = useMemo(() => {
+  const [kgRaw, setKgRaw] = useState<string | null>(null); // null = use the estimate
+  // Yarn made since the frame was last OK (its last passing test, or the shift start), worked out for them.
+  const since = useMemo(() => {
     let lastPass = 0;
     for (const r of s.results) if (r.frameId === t.frameId && r.pass && !r.sampleError && r.at < t.createdAt && r.at > lastPass) lastPass = r.at;
-    const opts = [...(lastPass ? [lastPass] : []), ...routineSlotsBefore(t.createdAt, 3)];
-    return [...new Set(opts)].sort((x, y) => y - x).slice(0, 3);
+    return Math.max(lastPass, routineSlotsBefore(t.createdAt, 1)[0] ?? 0) || t.createdAt;
   }, [s.results, t.frameId, t.createdAt]);
-  const [since, setSince] = useState<number>(sinceOptions[0]);
   const estimate = Math.round(yarnMadeSince(s, t.frameId, since, now));
-  const [kgRaw, setKgRaw] = useState<string | null>(null); // null = use the estimate
-  const kg = kgRaw === null ? estimate : Number(kgRaw);
-  const kgBad = kgRaw !== null && (kgRaw.trim() === '' || Number.isNaN(kg) || kg < 0);
+  const kg = kgRaw === null || kgRaw.trim() === '' ? estimate : Number(kgRaw);
   const started = t.workingAt ?? t.seenAt;
-  const product = s.products.find((x) => x.id === t.productId)!;
-  const label = (x: number) => `${sameMillDay(x, now) ? 'Today' : dayMonth(x)} ${hhmm(x)}`;
-  const ready = !!cause && !!part && !kgBad;
-  const Q = ({ n, children }: { n: number; children: ReactNode }) => (
-    <p className="t-small-strong mb-2 flex items-center gap-2 text-ink">
-      <span className="t-small-strong grid size-6 place-items-center rounded-full bg-ink text-[var(--surface-raised)]">{n}</span>
-      {children}
-    </p>
-  );
+  // The cause follows from the part unless they say otherwise.
+  const autoCause = part === 'Creel and roving' ? 'Material' : part === 'Not a machine part' ? 'Other' : 'Machine';
   return (
-    <Sheet title={`${frameWord(t.frameId)} fixed: what happened?`} onClose={onClose}>
-      <section aria-label="Fixing time" className="mb-5 flex items-center justify-between rounded-[12px] bg-sunken px-4 py-3">
-        <span>
-          <span className="t-small block text-muted">Fixing time</span>
-          <span className="t-small text-muted">{started ? `Started ${hhmm(started)} · now ${hhmm(now)}` : 'Not started'}</span>
-        </span>
-        <span className="t-stat">{started ? timer(now - started) : '–'}</span>
-      </section>
-
-      <Q n={1}>Which part of the machine needed fixing?</Q>
-      <div role="radiogroup" aria-label="Machine part" className="mb-5 grid grid-cols-2 gap-2">
+    <Sheet title={tr('{frame} fixed', { frame: frameWord(t.frameId) })} onClose={onClose}>
+      <p className="t-body-strong mb-3">{tr('What did you fix?')}</p>
+      <div role="radiogroup" aria-label="Machine part" className="grid grid-cols-2 gap-2">
         {MACHINE_PARTS.map((p) => (
           <Choice key={p} selected={part === p} onClick={() => setPart(p)}>
-            {p}
+            {tr(p)}
           </Choice>
         ))}
       </div>
 
-      <Q n={2}>What was the problem?</Q>
-      <div role="radiogroup" aria-label="Cause" className="mb-5 grid grid-cols-1 gap-2">
-        {CAUSES.map((c) => (
-          <Choice key={c} selected={cause === c} onClick={() => setCause(c)}>
-            <span className="block">{c}</span>
-            <span className="t-small text-muted">{CAUSE_HINT[c]}</span>
-          </Choice>
-        ))}
-      </div>
+      <details className="group mt-4 rounded-[12px] border border-line">
+        <summary className="t-small-strong flex h-12 cursor-pointer list-none items-center justify-between px-4 text-muted">
+          {tr('More details (optional)')}
+          <ChevronRight size={18} className="transition-transform group-open:rotate-90" />
+        </summary>
+        <div className="flex flex-col gap-4 border-t border-line p-4">
+          <div>
+            <p className="t-small-strong mb-2 text-muted">{tr('What caused it?')}</p>
+            <div role="radiogroup" aria-label="Cause" className="flex flex-wrap gap-2">
+              {CAUSES.map((c) => (
+                <Choice key={c} selected={(cause ?? autoCause) === c && !!part} onClick={() => setCause(c)} className="min-h-10 py-1.5">
+                  {tr(c)}
+                </Choice>
+              ))}
+            </div>
+          </div>
+          <TextField
+            label={tr('Yarn made since the last good test')}
+            inputMode="decimal"
+            unit="kg"
+            value={kgRaw ?? String(estimate)}
+            onFocus={(e) => e.currentTarget.select()}
+            onChange={(e) => setKgRaw(e.target.value.replace(/[^0-9.]/g, ''))}
+            hint={tr('About {kg} kg since {time} (estimate). Change it if you know better.', { kg: estimate, time: hhmm(since) })}
+          />
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="fix-note" className="t-small-strong text-muted">
+              {tr('Note')}
+            </label>
+            <textarea
+              id="fix-note"
+              rows={2}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              className="rounded-[10px] border border-line-strong bg-raised p-3 t-body outline-none focus:outline-2 focus:outline-brand"
+            />
+          </div>
+          <PhotoInput value={photo} onChange={setPhoto} />
+        </div>
+      </details>
 
-      <Q n={3}>When was {frameWord(t.frameId)} last OK?</Q>
-      <div role="radiogroup" aria-label="Last OK" className="mb-1 grid grid-cols-3 gap-2">
-        {sinceOptions.map((x) => (
-          <Choice key={x} selected={since === x} onClick={() => setSince(x)} className="text-center">
-            {label(x)}
-          </Choice>
-        ))}
-      </div>
-      <p className="t-small mb-5 text-muted">Its last passing test. Check the register if unsure.</p>
-
-      <Q n={4}>How much yarn did it make on Lot {t.lotId} since then?</Q>
-      <TextField
-        label={`Yarn affected (${product.short} at about ${product.kgPerHour} kg an hour)`}
-        inputMode="decimal"
-        unit="kg"
-        value={kgRaw ?? String(estimate)}
-        onChange={(e) => setKgRaw(e.target.value)}
-        error={kgBad ? 'Enter the kg, like 120' : undefined}
-        hint={kgRaw === null ? `Estimated from ${hhmm(since)} to now. Change it if you weighed the cops.` : `Estimate was ${estimate} kg.`}
-      />
-
-      <div className="mt-5 flex flex-col gap-1.5">
-        <label htmlFor="fix-note" className="t-small-strong text-muted">
-          Note (optional)
-        </label>
-        <textarea
-          id="fix-note"
-          rows={2}
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          placeholder="Reset back roller setting, checked 3 cops"
-          className="rounded-[10px] border border-line-strong bg-raised p-3 t-body outline-none placeholder:text-[var(--ink-muted)] focus:outline-2 focus:outline-brand"
-        />
-      </div>
-      <div className="mt-4">
-        <PhotoInput value={photo} onChange={setPhoto} />
-      </div>
-      <p className="t-small mt-4 text-muted">The report goes to the dashboard. The lab re-tests the frame, and the alert closes when the re-test passes.</p>
       <Button
         size="lg"
         block
-        className="mt-4"
-        disabled={!ready}
+        className="mt-5"
+        disabled={!part}
         onClick={() => {
-          dispatch({ type: 'ticket/fixed', ticketId: t.id, cause: cause!, part, note: note.trim() || undefined, photo, affectedSince: since, affectedKg: kg, by: user.id });
+          dispatch({ type: 'ticket/fixed', ticketId: t.id, cause: cause ?? autoCause, part, note: note.trim() || undefined, photo, affectedSince: since, affectedKg: Number.isFinite(kg) ? kg : estimate, by: user.id });
           onClose();
         }}
       >
-        Send fix report
+        {tr('Send fix report')}
       </Button>
-      {!ready && <p className="t-small mt-2 text-center text-muted">Answer 1 and 2 to send the report</p>}
+      <p className="t-small mt-2 text-center text-muted">
+        {part ? tr('Took {time} to fix. The lab re-tests next.', { time: started ? timer(now - started) : '–' }) : tr('Pick what you fixed')}
+      </p>
     </Sheet>
   );
 }
@@ -803,6 +832,7 @@ function HandoverSheet({ t, user, onClose }: { t: Ticket; user: User; onClose: (
 
 // ================= Lab: enter result =================
 export function TestEntryScreen() {
+  const tr = useT();
   const { id } = useParams();
   const s = useMillState();
   const now = useNow();
@@ -824,23 +854,23 @@ export function TestEntryScreen() {
     const t = s.tickets.find((x) => x.readings.some((r) => r.resultId === result.id));
     const hold = t?.holdId ? s.holds.find((h) => h.id === t.holdId) : undefined;
     return (
-      <Page title={result.pass ? 'Within limit' : 'Outside the limit'} back="/app">
+      <Page title={tr(result.pass ? 'Within limit' : 'Outside the limit')} back="/app">
         <div className={cx('rounded-[10px] p-4', result.pass ? 'bg-ok-soft' : 'bg-critical-soft')}>
           <p className={cx('t-body-strong', result.pass ? 'text-ok' : 'text-critical')}>
             {withUnit(result.test, result.value)} on {frameWord(result.frameId)}
           </p>
           <p className="t-small mt-1 text-ink">Saved at {hhmm(result.at)} by {first(user)}</p>
         </div>
-        <h2 className="t-small-strong mt-5 text-muted">What the system did</h2>
+        <h2 className="t-small-strong mt-5 text-muted">{tr('What happened next')}</h2>
         <ul className="mt-2 flex flex-col gap-1.5">
           {result.pass ? (
             <li className="t-body">
-              {req.reason === 'retest' ? 'Fix confirmed. The alert is closed and the supervisor is told.' : 'Recorded the result'}
+              {tr(req.reason === 'retest' ? 'Fix confirmed. The alert is closed and the supervisor is told.' : 'Recorded the result')}
             </li>
           ) : (
             <>
               {req.reason === 'retest' ? (
-                <li className="t-body">Ticket sent back to the supervisor. The yarn stays on hold.</li>
+                <li className="t-body">{tr('Sent back to the supervisor to fix again.')}</li>
               ) : (
                 <>
                   <li className="t-body">Alert sent to the {shiftAt(now)} shift supervisor{t?.severity === 'critical' ? ' with sound' : ''}</li>
@@ -865,14 +895,14 @@ export function TestEntryScreen() {
               Mark as sample error
             </Button>
           )}
-          {result.sampleError && <p className="t-small text-center text-muted">Marked as sample error. Hold released, ticket closed as a false alarm.</p>}
+          {result.sampleError && <p className="t-small text-center text-muted">{tr('Marked as sample error. Closed as a false alarm.')}</p>}
         </div>
       </Page>
     );
   }
 
   return (
-    <Page title={`${TEST[req.test].name} test, ${frameWord(req.frameId)}`} sub={`${REASON[req.reason]} · Lot ${lotOf(s, s.frames.find((f) => f.id === req.frameId)!.lotId).id} · ${product.name}`} back="/app">
+    <Page title={`${tr(TEST[req.test].name)} · ${frameWord(req.frameId)}`} sub={`${tr(REASON[req.reason])} · Lot ${lotOf(s, s.frames.find((f) => f.id === req.frameId)!.lotId).id} · ${product.name}`} back="/app">
       <form
         className="flex flex-col gap-5"
         onSubmit={(e) => {
@@ -890,7 +920,7 @@ export function TestEntryScreen() {
         <p className="t-small rounded-[10px] bg-sunken px-3 py-2.5 text-ink">Instrument: {TEST[req.test].instrument}</p>
         <TextField
           big
-          label={`Reading (${TEST[req.test].unit || 'value'})`}
+          label={`${tr('Reading')} (${TEST[req.test].unit || 'value'})`}
           inputMode="decimal"
           autoComplete="off"
           value={raw}
@@ -925,7 +955,7 @@ export function TestEntryScreen() {
           </div>
         ) : (
           <Button size="lg" block type="submit" disabled={value === undefined || invalid || (user.role !== 'tester' && user.role !== 'qc')}>
-            Save result
+            {tr('Save result')}
           </Button>
         )}
         {user.role !== 'tester' && user.role !== 'qc' && <p className="t-small text-center text-muted">Only the lab tester and the QC manager enter results.</p>}
@@ -947,12 +977,13 @@ export function RaiseScreen() {
   const [severity, setSeverity] = useState<Severity>('major');
   const toggle = (id: string) => setFrames((xs) => (xs.includes(id) ? xs.filter((x) => x !== id) : [...xs, id].sort()));
   const num = (id: string) => Number(id.slice(3));
+  const tr = useT();
   const list = (ids: string[]) => (ids.length > 1 ? `${ids.slice(0, -1).map(num).join(', ')} and ${num(ids.at(-1)!)}` : `${num(ids[0])}`);
   const [note, setNote] = useState('');
   const [photo, setPhoto] = useState<string>();
   const suggest = (p: string): Severity => (p.includes('thick') || p.includes('Wrong roving') ? 'critical' : p.includes('noise') || p.includes('Something') ? 'minor' : 'major');
   return (
-    <Page title="Raise ticket" sub="Report a problem you saw on the floor">
+    <Page title={tr('Raise ticket')} sub={tr('Report a problem you saw on the floor')}>
       <form
         className="flex flex-col gap-5"
         onSubmit={(e) => {
@@ -968,7 +999,7 @@ export function RaiseScreen() {
           else nav('/app');
         }}
       >
-        <Field label={frames.length > 1 ? `Which frames? ${frames.length} picked` : 'Which frames? Tap every frame with the problem'}>
+        <Field label={frames.length > 1 ? tr('Which frames? {n} picked', { n: frames.length }) : tr('Which frames? Tap every frame with the problem')}>
           <div role="group" aria-label="Frames" className="grid grid-cols-6 gap-1.5">
             {s.frames.map((f) => (
               <button
@@ -988,7 +1019,7 @@ export function RaiseScreen() {
             ))}
           </div>
         </Field>
-        <Field label="What’s wrong?">
+        <Field label={tr('What’s wrong?')}>
           <div role="radiogroup" aria-label="Problem" className="flex flex-col gap-2">
             {RAISE_PROBLEMS.map((p) => (
               <Choice
@@ -999,18 +1030,18 @@ export function RaiseScreen() {
                   setSeverity(suggest(p));
                 }}
               >
-                {p}
+                {tr(p)}
               </Choice>
             ))}
           </div>
         </Field>
         {problem && (
-          <Field label="How serious? (suggested)">
+          <Field label={tr('How serious? (suggested)')}>
             <div role="radiogroup" aria-label="Severity" className="grid grid-cols-3 gap-2">
               {(['critical', 'major', 'minor'] as Severity[]).map((v) => (
                 <Choice key={v} selected={severity === v} onClick={() => setSeverity(v)} className="flex items-center justify-center gap-1.5">
                   <SeverityShape level={v} />
-                  {v[0].toUpperCase() + v.slice(1)}
+                  {tr(v[0].toUpperCase() + v.slice(1))}
                 </Choice>
               ))}
             </div>
@@ -1018,7 +1049,7 @@ export function RaiseScreen() {
         )}
         <div className="flex flex-col gap-1.5">
           <label htmlFor="raise-note" className="t-small-strong text-muted">
-            Note (optional)
+            {tr('Note (optional)')}
           </label>
           <textarea
             id="raise-note"
@@ -1031,7 +1062,7 @@ export function RaiseScreen() {
         </div>
         <PhotoInput value={photo} onChange={setPhoto} />
         <Button size="lg" block type="submit" disabled={!frames.length || !problem}>
-          {frames.length > 1 ? `Raise ${frames.length} tickets` : 'Raise ticket'}
+          {frames.length > 1 ? tr('Raise {n} tickets', { n: frames.length }) : tr('Raise ticket')}
         </Button>
         {user.role !== 'supervisor' && (
           <p className="t-small -mt-3 text-center text-muted">
@@ -1155,20 +1186,22 @@ export function FailScreen() {
   const allowed = user.role === 'tester' || user.role === 'qc';
   const ready = !!frame && value !== undefined && !invalid && !inside && allowed;
   const sup = frame ? supervisorFor(s, frame.id, now) : undefined;
+  const tr = useT();
 
   return (
-    <Page title="Report a failed test" sub="Frame and lot are on the sample label" back="/app">
+    <Page title={tr('Report a failed test')} sub={tr('Frame and lot are on the sample label')} back="/app">
       <form
         className="flex flex-col gap-5"
         onSubmit={(e) => {
           e.preventDefault();
           if (!ready) return;
           dispatch({ type: 'result/enter', frameId: frame!.id, test, value: value!, by: user.id });
+          // Back to the lab screen with who was told; the report's progress shows there live.
           const t = useMill.getState().state.tickets.filter((x) => x.frameId === frame!.id && x.status !== 'closed').at(-1);
-          nav(t ? `/app/ticket/${t.id}` : '/app');
+          nav(t ? `/app?sent=${t.id}` : '/app');
         }}
       >
-        <Field label="Frame">
+        <Field label={tr('Frame')}>
           <div role="radiogroup" aria-label="Frame" className="grid grid-cols-6 gap-1.5">
             {s.frames.map((f) => (
               <button
@@ -1187,39 +1220,39 @@ export function FailScreen() {
         </Field>
         {frame && product && (
           <p className="t-small -mt-2 rounded-[10px] bg-sunken px-3 py-2.5 text-ink">
-            Lot <span className="t-data">{frame.lotId}</span> · {product.name}. Check it matches the label.
+            {tr('Lot {lot} · {product}. Check it matches the label.', { lot: frame.lotId, product: product.name })}
           </p>
         )}
-        <Field label="Which test">
+        <Field label={tr('Which test')}>
           <div role="radiogroup" aria-label="Test" className="grid grid-cols-2 gap-2">
             {(['count', 'csp', 'twist', 'cv'] as TestKind[]).map((k) => (
               <Choice key={k} selected={test === k} onClick={() => setTest(k)}>
-                {TEST[k].name}
+                {tr(TEST[k].name)}
               </Choice>
             ))}
           </div>
         </Field>
         <TextField
           big
-          label={`Reading${TEST[test].unit ? ` (${TEST[test].unit})` : ''}`}
+          label={`${tr('Reading')}${TEST[test].unit ? ` (${TEST[test].unit})` : ''}`}
           inputMode="decimal"
           autoComplete="off"
           value={raw}
           onChange={(e) => setRaw(e.target.value)}
           unit={TEST[test].unit}
-          error={invalid ? 'Enter a number, like 28.9' : undefined}
+          error={invalid ? tr('Enter a number, like 28.9') : undefined}
         />
         {rule && (
           <div className="-mt-2 rounded-[10px] border border-line bg-raised p-4">
             <ReadingGauge test={test} value={invalid ? undefined : value} min={rule.min} max={rule.max} pending />
-            {inside && <p className="t-small mt-3 text-ok">This is inside the limit. Only report readings outside it.</p>}
+            {inside && <p className="t-small mt-3 text-ok">{tr('This is inside the limit. Only report readings outside it.')}</p>}
           </div>
         )}
         <Button size="lg" block type="submit" variant="danger" disabled={!ready}>
-          Report failed test
+          {tr('Report failed test')}
         </Button>
         <p className="t-small -mt-3 text-center text-muted">
-          {!allowed ? 'Only the lab tester and the QC manager report results.' : sup ? `${sup.name} (supervisor) is alerted at once.` : 'The shift supervisor is alerted at once.'}
+          {!allowed ? tr('Only the lab tester and the QC manager report results.') : sup ? tr('{name} (supervisor) is alerted at once.', { name: sup.name }) : tr('The shift supervisor is alerted at once.')}
         </p>
       </form>
     </Page>

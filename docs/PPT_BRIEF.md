@@ -47,7 +47,7 @@ The mill: 24 ring frames, 3 shifts (A 06–14, B 14–22, C 22–06), 4 yarns (3
 3. **Escalation if nobody answers** (times editable by the QC manager):
    - **0 min** frame's supervisor → **5 min** backup supervisor → **10 min** QC manager → **20 min** plant head (alert + phone call).
 4. **Someone taps "I'm fixing it"**: they own it, the climb stops, a fixing timer starts.
-5. **"Fixed" opens a short report**: which part of the machine, what the problem was, **when the frame was last OK**, and **how much yarn it made on that lot since then** (prefilled estimate, editable), optional note and photo. The report records **how long the fix took**.
+5. **"Fixed" asks one question: what did you fix?** Then Send. Cause, yarn made since the last good test (estimated automatically), note and photo are optional under "More details". The report records **how long the fix took**.
 6. **Lab re-tests**: pass closes the alert; fail reopens it and alerts again.
 7. **Every step and message lands in the dashboard record.**
 
@@ -66,6 +66,7 @@ The mill: 24 ring frames, 3 shifts (A 06–14, B 14–22, C 22–06), 4 yarns (3
 | **"I'm fixing it" is the one tap that stops escalation and starts the timer.** | One clear moment of ownership; we measure time-to-start and time-to-fix from it. |
 | **Fix report asks: part, problem, last good time, yarn made since.** | Turns each fix into data: which parts fail most, what causes faults, how much yarn a fault touched. |
 | **Rules as sets per yarn and buyer**, added from a CSV (Excel) or PDF, removable as a whole or one limit at a time. | Every buyer has different limits; mills already keep these in Excel/PDF. Adding/removing a whole set at once is how they think about it. |
+| **One question in the fix report; Hindi on the phone.** | Floor staff found the report too long and want their own language; fewer taps, local language, more reports actually filled in. |
 | **Plant head sees information, not decisions**: top alerts of the last week and the story of each, in plain sentences. | He needs to understand what is going wrong, quickly, not approve things. Plain text is his mental model. |
 | **Multi-frame raise**: one tap, several frames, one alert per frame to each frame's supervisor, each noting the others. | A fault often shows on several frames of the same lot; each frame's own supervisor must be told. |
 | **Live demo across real phones with no server of our own.** | Jury sees the real thing on two phones and a laptop. We use Supabase Realtime broadcast only (no tables, no backend code). |
@@ -82,7 +83,8 @@ The mill: 24 ring frames, 3 shifts (A 06–14, B 14–22, C 22–06), 4 yarns (3
 5. **Monthly report** (QC manager and plant head see the same): calendar with days coloured by number of alerts (1 green, 2 yellow, 3+ red), the picked day's alerts beside it, "How fast alerts were fixed" (per-alert start time vs 5-min target, fixing time), top causes. "By shift" median widget removed.
 6. **Plant head Overview**: decisions removed; "Top alerts last week" (headings only) on the left, "What happened" on the right as plain sentences; calendar below.
 7. **Live jury demo**: phones and laptop in one live room; its own page with QR codes, connected devices, shared mill clock with Skip 5/10 min, Reset demo.
-8. **Phone app polish**: no zoom-jumps on iPhone (text boxes ≥16px), no page bounce, keyboard no longer squeezes the layout, fewer animations, clean window on a laptop.
+8. **Phone app made simpler and Hindi added** (14 Nov): English / हिंदी switch; fix report cut to one question; lab tester sees who was told and a live status of each report; "Later" on escalated pop-ups; typing no longer loses focus; the app redraws once a second instead of four times.
+9. **Phone app polish**: no zoom-jumps on iPhone (text boxes ≥16px), no page bounce, keyboard no longer squeezes the layout, fewer animations, clean window on a laptop.
 
 ---
 

@@ -7,10 +7,22 @@ import { hhmm, shiftAt } from '../engine/time';
 import { cx } from '../ui/primitives';
 import { soundReady, unlock } from '../ui/sound';
 import { useLive } from '../store/live';
+import { LangProvider, translate, useLangStore } from './i18n';
 import { TakeoverLayer } from './Takeover';
 import { Onboarding, PersonSheet } from './Person';
 
 export function AppShell() {
+  return (
+    <LangProvider>
+      <AppShellInner />
+    </LangProvider>
+  );
+}
+
+function AppShellInner() {
+  const lang = useLangStore((x) => x.lang);
+  const setLang = useLangStore((x) => x.set);
+  const tr = (en: string) => translate(lang, en);
   const theme = useTheme('app');
   const s = useMillState();
   const now = useNow();
@@ -75,6 +87,15 @@ export function AppShell() {
             <span className="font-mono">{hhmm(now)}</span>
             {live.room && <span aria-label={live.state === 'live' ? 'Live' : 'Not connected'} title={live.state === 'live' ? `Live · ${live.room}` : 'Not connected'} className={cx('size-2 rounded-full', live.state === 'live' ? 'bg-ok' : 'bg-critical')} />}
           </span>
+          <span className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setLang(lang === 'hi' ? 'en' : 'hi')}
+            aria-label={lang === 'hi' ? 'Switch to English' : 'हिंदी में देखें'}
+            className="t-small-strong h-9 rounded-full border border-line-strong px-3"
+          >
+            {lang === 'hi' ? 'English' : 'हिंदी'}
+          </button>
           <button type="button" onClick={() => setPerson(true)} className="t-small-strong -mr-2 flex h-9 items-center gap-2 rounded-full px-2 hover:bg-sunken" aria-label={`Signed in as ${user.name}. Switch person or theme`}>
             <span className="text-muted">
               {user.shift === 'G' ? 'Day' : `${user.shift} shift`}
@@ -82,19 +103,20 @@ export function AppShell() {
             </span>
             <span className="grid size-7 place-items-center rounded-full bg-ink text-[11px] font-semibold text-surface">{user.name.split(' ').map((p) => p[0]).join('')}</span>
           </button>
+          </span>
         </div>
         {ready && !sound && (
           <button type="button" onClick={() => unlock()} className="t-small-strong mx-4 mb-1 rounded-[10px] bg-brand-soft px-3 py-2 text-left text-ink">
-            Tap anywhere to turn on alert sound
+            {tr('Tap anywhere to turn on alert sound')}
           </button>
         )}
         <main className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain">
           <Outlet />
         </main>
         <nav aria-label="App" className={cx('grid h-16 shrink-0 border-t border-line bg-raised pb-[env(safe-area-inset-bottom)]', canRaise ? 'grid-cols-3' : 'grid-cols-2')}>
-          <Tab to="/app" end icon={<Notification size={20} />} label="Alerts" badge={count} />
-          {canRaise && <Tab to="/app/raise" icon={<Add size={20} />} label="Raise ticket" />}
-          <Tab to="/app/previous" icon={<RecentlyViewed size={20} />} label="History" />
+          <Tab to="/app" end icon={<Notification size={20} />} label={tr('Alerts')} badge={count} />
+          {canRaise && <Tab to="/app/raise" icon={<Add size={20} />} label={tr('Raise ticket')} />}
+          <Tab to="/app/previous" icon={<RecentlyViewed size={20} />} label={tr('History')} />
         </nav>
         {ready && <TakeoverLayer s={s} user={user} now={now} />}
         {person && <PersonSheet onClose={() => setPerson(false)} />}
