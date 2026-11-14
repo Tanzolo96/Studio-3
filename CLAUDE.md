@@ -1,5 +1,7 @@
 # Instructions for AI coding sessions
 
+Making the presentation? Read `docs/PPT_BRIEF.md`.
+
 Before doing anything in this repo, read `docs/WORKFLOW.md` (the current direction, 13 Nov 2026) and then `docs/HANDOFF.md` in full. Where they disagree, WORKFLOW.md wins. It is the shared source of truth for the product, decisions, architecture, design rules and milestones.
 
 - Follow the rules in HANDOFF section 7 ("Rules for adding things") and section 8 (design system).
