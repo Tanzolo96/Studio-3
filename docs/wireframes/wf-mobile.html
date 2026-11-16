@@ -1,0 +1,101 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="wf.css"></head><body>
+<h1>QC Alert · phone app</h1>
+<p class="sub">Lo-fi wireframes · the main path: lab reports → supervisor is alerted → fixes → one-question report</p>
+<div class="row">
+
+<!-- 1 Lab home -->
+<div>
+<div class="phone"><div class="status"><span>09:40</span><span class="flex center gap6"><span class="pill">हिंदी</span><span class="dot"></span></span></div>
+<div class="screen">
+  <div class="t" style="font-size:20px">Lab</div><div class="line" style="width:45%"></div>
+  <div class="box g p10 flex gap8 center"><span class="dot o"></span><div class="col gap4 f1"><div class="line dk" style="width:90%"></div><div class="line" style="width:60%"></div></div></div>
+  <div class="btn dk" style="height:44px">● Report a failed test</div>
+  <div class="tl" style="margin-top:4px">Your reports today</div>
+  <div class="box p10 flex between center"><div class="col gap4"><div class="t">Frame 7</div><div class="line" style="width:60px"></div></div><span class="pill">Krish is fixing</span></div>
+  <div class="box p10 flex between center"><div class="col gap4"><div class="t">Frame 12</div><div class="line" style="width:60px"></div></div><span class="pill">Closed</span></div>
+  <div class="tl" style="margin-top:4px">Urgent tests</div>
+  <div class="box p10 col gap6"><div class="flex between"><span class="pill">Re-test</span><span class="lbl">Due 10:00</span></div><div class="t">Count · Frame 7</div><div class="line" style="width:70%"></div></div>
+</div>
+<div class="tabs"><span class="on"><i></i>Alerts</span><span><i></i>History</span></div></div>
+<p class="cap">1 · Lab home (Rohan)<small>One big action. After reporting: who was told, and each report's status updating live.</small></p>
+</div>
+
+<!-- 2 Report failed test -->
+<div>
+<div class="phone"><div class="status"><span>09:40</span><span class="dot"></span></div>
+<div class="screen">
+  <div class="lbl">← Back</div>
+  <div class="t" style="font-size:18px">Report a failed test</div>
+  <div class="tl">Frame</div>
+  <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:4px">
+    <script>for(let i=1;i<=24;i++)document.write(`<div class="box ${i===7?'dk':''}" style="height:26px;font-size:10px;display:grid;place-items:center;border-radius:6px">${i}</div>`)</script>
+  </div>
+  <div class="tl">Test</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px"><div class="btn dk">Count</div><div class="btn">CSP</div><div class="btn">Twist</div><div class="btn">CV</div></div>
+  <div class="tl">Reading</div>
+  <div class="box p10" style="font-size:26px;font-weight:700">25.0 <span class="lbl">Ne</span></div>
+  <div class="flex center gap6"><span class="dot"></span><div class="f1" style="height:6px;background:#ddd;border-radius:3px;position:relative"><div style="position:absolute;left:45%;width:25%;top:-3px;height:12px;border:1.5px solid #555;border-radius:6px;background:#fff"></div></div></div>
+  <div class="btn dk" style="height:42px;margin-top:auto">Report failed test</div>
+  <div class="lbl" style="text-align:center">Krish Patel (supervisor) is alerted at once</div>
+</div></div>
+<p class="cap">2 · Report a failed test<small>Frame, test, reading. The limit is shown so only real fails are sent.</small></p>
+</div>
+
+<!-- 3 Alert takeover -->
+<div>
+<div class="phone" style="padding:0;overflow:hidden">
+  <div class="dk" style="padding:44px 18px 18px;border-radius:32px 32px 0 0"><div style="font-size:10px;letter-spacing:.08em">● CRITICAL ALERT · 09:40</div><div style="font-size:22px;font-weight:700;margin-top:8px">Too thick</div><div style="font-size:12px;opacity:.8;margin-top:4px">Frame 7 · Lot 2409 · 40s</div></div>
+  <div class="screen" style="padding:16px">
+    <div class="box p12 col gap8"><div class="flex between"><span class="t">Count</span><span class="t">Too thick</span></div><div style="font-size:30px;font-weight:700">25.0</div><div style="height:6px;background:#ddd;border-radius:3px"></div><div class="lbl">Limit 39.2–40.8 Ne</div></div>
+    <div class="flex center gap8"><div style="font-size:24px;font-weight:700">0:42</div><div class="lbl">to "I'm fixing" · limit 5:00</div></div>
+    <div style="height:5px;background:#ddd;border-radius:3px"><div style="width:15%;height:5px;background:#444;border-radius:3px"></div></div>
+    <div class="col gap8" style="margin-top:auto">
+      <div class="btn dk" style="height:46px;font-size:14px">I'm fixing it</div>
+      <div class="btn" style="height:40px;color:#666;border-color:#aaa">Later <span class="lbl" style="margin-left:4px">(only if escalated to you)</span></div>
+    </div>
+  </div>
+</div>
+<p class="cap">3 · Alert, full screen (Krish)<small>Rings with sound. One tap to own it; the climb to backup / QC / plant head stops.</small></p>
+</div>
+
+<!-- 4 Fixing -->
+<div>
+<div class="phone"><div class="status"><span>09:43</span><span class="dot"></span></div>
+<div class="screen">
+  <div class="lbl">← Back</div>
+  <div class="t" style="font-size:20px">Frame 7</div><div class="line" style="width:55%"></div>
+  <div class="box g p12 flex gap10 center"><span class="dot" style="width:22px;height:22px"></span><div class="col gap4"><div class="t" style="font-size:15px">Not resolved yet</div><div class="lbl">Krish is fixing it</div></div></div>
+  <div class="box p10 flex gap8 center"><span class="dot"></span><span class="t f1">Fixing: I'm on it</span><span class="lbl">09:40</span></div>
+  <div class="box p10 col gap8" style="border-width:2.5px">
+    <div class="flex gap8 center"><span class="dot o"></span><span class="t f1">Fixed: tell us what happened</span></div>
+    <div class="g p10 flex between center" style="border-radius:8px"><span class="lbl">Fixing for</span><span style="font-size:24px;font-weight:700">3:12</span></div>
+    <div class="btn dk" style="height:40px">Fixed</div>
+    <div class="lbl" style="text-align:center">Send a fitter · Waiting for a part</div>
+  </div>
+  <div class="box p10 flex gap8 center" style="opacity:.5"><span class="dot o"></span><span class="t f1">Lab re-test</span></div>
+</div>
+<div class="tabs"><span class="on"><i></i>Alerts</span><span><i></i>Raise</span><span><i></i>History</span></div></div>
+<p class="cap">4 · Fixing<small>Three steps, the current one open. A big timer runs until "Fixed".</small></p>
+</div>
+
+<!-- 5 Fix report -->
+<div>
+<div class="phone" style="padding:0;overflow:hidden">
+  <div style="flex:0 0 150px;background:#cfcfcf;border-radius:32px 32px 0 0"></div>
+  <div class="screen" style="padding:14px;border-top:1.5px solid #222;border-radius:16px 16px 0 0;margin-top:-16px;background:#fff">
+    <div class="flex between center"><span class="t" style="font-size:16px">Frame 7 fixed</span><span class="lbl">✕</span></div>
+    <div class="t" style="margin-top:4px">What did you fix?</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+      <div class="btn dk" style="height:40px">Drafting zone</div><div class="btn" style="height:40px">Top rollers</div>
+      <div class="btn" style="height:40px">Spindles</div><div class="btn" style="height:40px">Creel / roving</div>
+      <div class="btn" style="height:40px">Something else</div><div class="btn" style="height:40px">Not the machine</div>
+    </div>
+    <div class="box p10 flex between center" style="border-color:#aaa"><span class="lbl">More details (optional)</span><span class="lbl">›</span></div>
+    <div class="btn dk" style="height:44px;margin-top:auto">Send fix report</div>
+    <div class="lbl" style="text-align:center">Took 3 min to fix · the lab re-tests next</div>
+  </div>
+</div>
+<p class="cap">5 · Fix report<small>One question, then Send. Cause, yarn affected (estimated), note and photo are optional.</small></p>
+</div>
+
+</div></body></html>

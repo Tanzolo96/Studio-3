@@ -1,0 +1,73 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="wf.css"></head><body>
+<h1>QC Alert · dashboard</h1>
+<p class="sub">Lo-fi wireframes · the record and the go-between: nobody decides here, it shows who was told and what happened</p>
+<div class="row" style="flex-wrap:wrap">
+
+<!-- A QC overview -->
+<div>
+<div class="desk">
+  <div class="side"><div class="t" style="font-size:14px;margin-bottom:8px">QC Alert</div>
+    <div class="tl">Alerts</div><div class="nav on"><i></i>Overview</div><div class="nav"><i></i>History</div><div class="nav"><i></i>Messages</div>
+    <div class="tl" style="margin-top:8px">Setup</div><div class="nav"><i></i>Rules</div><div class="nav"><i></i>Monthly report</div><div class="nav"><i></i>Account</div>
+    <div style="margin-top:auto" class="col gap4"><div class="t">Priya Shah</div><div class="lbl">QC manager</div></div></div>
+  <div class="main">
+    <div class="top"><span class="lbl">← →</span><span class="t">Overview</span><div class="search"></div><span class="pill">Live · 3 devices</span></div>
+    <div class="flex between center"><div class="col gap4"><div class="lbl">Thursday 05 Nov · A shift · 09:42</div><div class="t" style="font-size:20px">Good morning, Priya</div></div><span class="pill">1 live alert</span></div>
+    <div class="box p12 col gap8"><div class="tl">Live alerts</div>
+      <div class="box g p10 flex center gap12" style="border-width:2px"><div class="col gap4" style="width:240px"><span class="pill" style="width:max-content">● Critical</span><div class="t" style="font-size:13px">Frame 7 · Too thick</div><div class="lbl">25.0 Ne (limit 39.2–40.8) · Lot 2409</div></div>
+        <div class="col gap4 f1"><div class="steps"><span class="on"></span><span class="on"></span><span></span><span></span></div><div class="lbl">Alert · Fixing · Fixed · Re-test</div></div>
+        <div class="col gap4" style="text-align:right"><div style="font-size:22px;font-weight:700">2:31</div><div class="lbl">Krish is fixing</div></div></div></div>
+    <div class="flex gap12 f1">
+      <div class="box p12 col gap8 f1"><div class="tl">Latest messages</div>
+        <script>[['09:42','← Krish Patel','Fixing it'],['09:40','→ To Krish Patel, supervisor','Count failed on Frame 7'],['09:40','← Rohan Desai, lab','Reported 25.0 Ne']].forEach(m=>document.write(`<div class="flex gap8" style="border-top:1px solid #ddd;padding-top:6px"><span class="lbl" style="width:34px">${m[0]}</span><div class="col gap4"><span class="t">${m[1]}</span><span class="lbl">${m[2]}</span></div></div>`))</script></div>
+      <div class="box p12 col gap8" style="width:250px"><div class="tl">This month</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><script>[['20','alerts'],['3:00','to I’m fixing'],['49 min','fixing time'],['142 kg','yarn before fix']].forEach(m=>document.write(`<div class="g p8" style="border-radius:8px"><div style="font-size:17px;font-weight:700">${m[0]}</div><div class="lbl">${m[1]}</div></div>`))</script></div></div>
+    </div>
+  </div>
+</div>
+<p class="cap">A · Overview (QC manager)<small>Live alerts with their step and who QC Alert is waiting on, the message log, and the month at a glance.</small></p>
+</div>
+
+<!-- B Alert detail -->
+<div>
+<div class="desk" style="width:640px;height:auto;min-height:420px">
+  <div class="main">
+    <div class="top"><span class="lbl">← History</span></div>
+    <div class="flex between center"><div class="col gap4"><div class="t" style="font-size:20px">Frame 7 · Count test failed</div><div class="lbl">25.0 Ne · limit 39.2–40.8 · Lot 2409 · 40s combed, Buyer A</div></div><span class="pill">Closed</span></div>
+    <div class="flex gap6"><script>['Reported','Fixing','Fixed','Re-test passed','Closed'].forEach((s,i)=>document.write(`<div class="f1 col gap4"><div style="height:6px;border-radius:3px;background:${i<5?'#333':'#ccc'}"></div><span class="lbl">${s}</span></div>`))</script></div>
+    <div class="box p12 col gap8"><div class="tl">Fix report</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px"><script>[['Part','Drafting zone'],['Cause','Setting'],['Fixing time','43 min'],['Reported by','Krish Patel']].forEach(m=>document.write(`<div class="col gap4"><span class="lbl">${m[0]}</span><span class="t">${m[1]}</span></div>`))</script></div>
+      <div class="col gap4"><span class="lbl">Yarn made before the fix</span><span class="t">About 179 kg on Lot 2409 · since the last good test at 06:00</span></div></div>
+    <div class="box p12 col gap6"><div class="tl">Messages</div>
+      <script>[['09:40','→','To Krish Patel, supervisor · app alert with sound'],['09:43','←','Krish Patel · fixing it'],['10:26','←','Krish Patel · fixed, report sent'],['10:26','→','To Rohan, lab · re-test Frame 7'],['10:41','←','Rohan · re-test passed, closed']].forEach(m=>document.write(`<div class="flex gap8"><span class="lbl" style="width:34px">${m[0]}</span><span class="lbl">${m[1]}</span><span class="t" style="font-weight:500">${m[2]}</span></div>`))</script></div>
+  </div>
+</div>
+<p class="cap">B · One alert, start to finish<small>Every step, the fix report and every message, kept as the record.</small></p>
+</div>
+
+<!-- C Plant head -->
+<div>
+<div class="desk">
+  <div class="side"><div class="t" style="font-size:14px;margin-bottom:8px">QC Alert</div>
+    <div class="nav on"><i></i>Overview</div><div class="nav"><i></i>History</div><div class="nav"><i></i>Messages</div><div class="nav"><i></i>Rules</div><div class="nav"><i></i>Monthly report</div><div class="nav"><i></i>Account</div>
+    <div style="margin-top:auto" class="col gap4"><div class="t">Mohit Maheshwari</div><div class="lbl">Plant head</div></div></div>
+  <div class="main">
+    <div class="col gap4"><div class="t" style="font-size:20px">Good morning, Mohit</div><div class="lbl">Last 7 days: 6 critical and 0 major alerts</div></div>
+    <div class="flex gap12 f1">
+      <div class="box p12 col gap6" style="width:270px"><div class="tl">Top alerts last week</div>
+        <script>[['Frame 17 · Count test failed','Tue 03 Nov · closed',1],['Frame 12 · Count test failed','Thu 29 Oct · closed',0],['Frame 6 · Count test failed','Wed 04 Nov · closed',0],['Frame 5 · Count test failed','Sat 31 Oct · closed',0],['Frame 23 · Count test failed','Fri 30 Oct · closed',0]].forEach(m=>document.write(`<div class="${m[2]?'g2':''} flex gap8 center" style="padding:7px 8px;border-radius:8px"><span class="dot"></span><div class="col gap4 f1"><span class="t">${m[0]}</span><span class="lbl">${m[1]}</span></div><span class="lbl">›</span></div>`))</script>
+        <div class="lbl" style="margin-top:auto">All past alerts →</div></div>
+      <div class="box p14 col gap10 f1"><div class="tl">What happened</div>
+        <div class="t" style="font-size:15px">● Frame 17 · Count test failed</div>
+        <p style="font-size:12px;line-height:1.6">On Tue 03 Nov at 09:10, the lab found a failed count test on Frame 17: it read <b>19.4 Ne</b>, outside the limit of 19.6–20.4. Rohan Desai did the test.</p>
+        <p style="font-size:12px;line-height:1.6">Farhan Qureshi started fixing it 3 minutes later, <b>within the 5-minute target</b>.</p>
+        <p style="font-size:12px;line-height:1.6">It was fixed in <b>107 minutes</b>. Farhan said: "Wrong roving hank". About 210 kg of yarn was made before the fix.</p>
+        <p style="font-size:12px;line-height:1.6">The lab re-tested at 11:20. It passed, and the alert was <b>closed</b>.</p>
+      </div>
+    </div>
+  </div>
+</div>
+<p class="cap">C · Overview (plant head)<small>Information only. The top alerts of the week as headings; the picked one told in plain sentences.</small></p>
+</div>
+
+</div></body></html>
